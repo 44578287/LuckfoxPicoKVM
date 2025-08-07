@@ -25,9 +25,11 @@ import {
   PointerLockBar,
 } from "./VideoOverlay";
 
+
 export default function WebRTCVideo() {
   // Video and stream related refs and states
   const videoElm = useRef<HTMLVideoElement>(null);
+  const audioElm = useRef<HTMLAudioElement>(null);
   const mediaStream = useRTCStore(state => state.mediaStream);
   const [isPlaying, setIsPlaying] = useState(false);
   const peerConnectionState = useRTCStore(state => state.peerConnectionState);
@@ -517,6 +519,16 @@ export default function WebRTCVideo() {
     [updateVideoSizeStore],
   );
 
+  const addStreamToAudioElm = useCallback(
+    (mediaStream: MediaStream) => {
+      if (!audioElm.current) return;
+      const audioElmRefValue = audioElm.current;
+      audioElmRefValue.srcObject = mediaStream;
+      //audioElm.current.play();
+    },
+    [],
+  );
+   
   useEffect(
     function updateVideoStreamOnNewTrack() {
       if (!peerConnection) return;
@@ -543,6 +555,7 @@ export default function WebRTCVideo() {
       if (!mediaStream) return;
       // We set the as early as possible
       addStreamToVideoElm(mediaStream);
+      addStreamToAudioElm(mediaStream);
     },
     [
       setVideoClientSize,
@@ -550,6 +563,7 @@ export default function WebRTCVideo() {
       updateVideoSizeStore,
       peerConnection,
       addStreamToVideoElm,
+      addStreamToAudioElm,
     ],
   );
 
@@ -670,6 +684,14 @@ export default function WebRTCVideo() {
           </fieldset>
         </div>
       </div>
+
+      <audio 
+        id="global-audio"
+        ref={audioElm}
+        autoPlay
+        muted={true}
+        controls={false}
+      />
 
       <div ref={containerRef} className="h-full overflow-hidden">
         <div className="relative h-full">

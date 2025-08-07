@@ -3,8 +3,10 @@ package kvm
 import (
 	"fmt"
 
-	"github.com/jetkvm/kvm/internal/network"
-	"github.com/jetkvm/kvm/internal/udhcpc"
+	"kvm/internal/network"
+	"kvm/internal/udhcpc"
+
+	"github.com/guregu/null/v6"
 )
 
 const (
@@ -79,7 +81,10 @@ func rpcGetNetworkState() network.RpcNetworkState {
 }
 
 func rpcGetNetworkSettings() network.RpcNetworkSettings {
-	return networkState.RpcGetNetworkSettings()
+	rpcSettings := networkState.RpcGetNetworkSettings()
+	hostname := GetHostname()
+	rpcSettings.Hostname = null.NewString(hostname, hostname != "")
+	return rpcSettings
 }
 
 func rpcSetNetworkSettings(settings network.RpcNetworkSettings) (*network.RpcNetworkSettings, error) {

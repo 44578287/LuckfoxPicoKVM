@@ -9,30 +9,11 @@ import KvmCard from "@components/KvmCard";
 import { LinkButton } from "@components/Button";
 import { User } from "@/hooks/stores";
 import { checkAuth } from "@/main";
-import { CLOUD_API } from "@/ui.config";
 
 interface LoaderData {
   devices: { id: string; name: string; online: boolean; lastSeen: string }[];
   user: User;
 }
-
-const loader = async () => {
-  const user = await checkAuth();
-
-  try {
-    const res = await fetch(`${CLOUD_API}/devices`, {
-      method: "GET",
-      credentials: "include",
-      mode: "cors",
-    });
-
-    const { devices } = await res.json();
-    return { devices, user };
-  } catch (e) {
-    console.error(e);
-    return { devices: [] };
-  }
-};
 
 export default function DevicesRoute() {
   const { devices, user } = useLoaderData() as LoaderData;
@@ -66,10 +47,10 @@ export default function DevicesRoute() {
                 <EmptyCard
                   IconElm={LuMonitorSmartphone}
                   headline="No devices found"
-                  description="You don't have any devices with enabled JetKVM Cloud yet."
+                  description="You don't have any devices with enabled KVM Cloud yet."
                   BtnElm={
                     <LinkButton
-                      to="https://jetkvm.com/docs/networking/remote-access"
+                      to="https://wiki.luckfox.com/intro"
                       size="SM"
                       theme="primary"
                       TrailingIcon={ArrowRightIcon}
@@ -101,5 +82,3 @@ export default function DevicesRoute() {
     </div>
   );
 }
-
-DevicesRoute.loader = loader;

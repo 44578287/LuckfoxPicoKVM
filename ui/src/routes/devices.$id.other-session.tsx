@@ -2,8 +2,7 @@ import { useNavigate, useOutletContext } from "react-router-dom";
 
 import { GridCard } from "@/components/Card";
 import { Button } from "@components/Button";
-import LogoBlue from "@/assets/logo-blue.svg";
-import LogoWhite from "@/assets/logo-white.svg";
+import LogoLuckfox from "@/assets/logo-luckfox.png";
 
 interface ContextType {
   setupPeerConnection: () => Promise<void>;
@@ -24,8 +23,8 @@ export default function OtherSessionRoute() {
       <div className="p-10">
         <div className="flex min-h-[140px] flex-col items-start justify-start space-y-4 text-left">
           <div className="h-[24px]">
-            <img src={LogoBlue} alt="" className="h-full dark:hidden" />
-            <img src={LogoWhite} alt="" className="hidden h-full dark:block" />
+            <img src={LogoLuckfox} alt="" className="h-full dark:hidden" />
+            <img src={LogoLuckfox} alt="" className="hidden h-full dark:block" />
           </div>
 
           <div className="text-left">

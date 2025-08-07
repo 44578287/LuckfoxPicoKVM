@@ -6,9 +6,9 @@ import (
 	"os"
 	"sync"
 
-	"github.com/jetkvm/kvm/internal/logging"
-	"github.com/jetkvm/kvm/internal/network"
-	"github.com/jetkvm/kvm/internal/usbgadget"
+	"kvm/internal/logging"
+	"kvm/internal/network"
+	"kvm/internal/usbgadget"
 )
 
 type WakeOnLanDevice struct {
@@ -75,8 +75,6 @@ func (m *KeyboardMacro) Validate() error {
 }
 
 type Config struct {
-	CloudURL             string                 `json:"cloud_url"`
-	CloudAppURL          string                 `json:"cloud_app_url"`
 	CloudToken           string                 `json:"cloud_token"`
 	GoogleIdentity       string                 `json:"google_identity"`
 	JigglerEnabled       bool                   `json:"jiggler_enabled"`
@@ -100,17 +98,26 @@ type Config struct {
 	UsbDevices           *usbgadget.Devices     `json:"usb_devices"`
 	NetworkConfig        *network.NetworkConfig `json:"network_config"`
 	DefaultLogLevel      string                 `json:"default_log_level"`
+	TailScaleAutoStart   bool                   `json:"tailscale_autostart"`
+	TailScaleXEdge       bool                   `json:"tailscale_xedge"`
+	ZeroTierNetworkID    string                 `json:"zerotier_network_id"`
+	ZeroTierAutoStart    bool                   `json:"zerotier_autostart"`
+	IO0Status            bool                   `json:"io0_status"`
+	IO1Status            bool                   `json:"io1_status"`
+	AudioMode            string                 `json:"audio_mode"`
+	TimeZone             string                 `json:"time_zone"`
+	LEDGreenMode         string                 `json:"led_green_mode"`
+	LEDYellowMode        string                 `json:"led_yellow_mode"`
 }
 
 const configPath = "/userdata/kvm_config.json"
 
 var defaultConfig = &Config{
-	CloudURL:             "https://api.jetkvm.com",
-	CloudAppURL:          "https://app.jetkvm.com",
-	AutoUpdateEnabled:    true, // Set a default value
+	AutoUpdateEnabled:    false, // Set a default value
 	ActiveExtension:      "",
 	KeyboardMacros:       []KeyboardMacro{},
-	DisplayRotation:      "270",
+	DisplayRotation:      "180",
+	TimeZone:             "UTC-8",
 	KeyboardLayout:       "en_US",
 	DisplayMaxBrightness: 64,
 	DisplayDimAfterSec:   120,  // 2 minutes
@@ -120,7 +127,7 @@ var defaultConfig = &Config{
 		VendorId:     "0x1d6b", //The Linux Foundation
 		ProductId:    "0x0104", //Multifunction Composite Gadget
 		SerialNumber: "",
-		Manufacturer: "JetKVM",
+		Manufacturer: "KVM",
 		Product:      "USB Emulation Device",
 	},
 	UsbDevices: &usbgadget.Devices{
@@ -128,9 +135,18 @@ var defaultConfig = &Config{
 		RelativeMouse: true,
 		Keyboard:      true,
 		MassStorage:   true,
+		Audio:         true,
 	},
-	NetworkConfig:   &network.NetworkConfig{},
-	DefaultLogLevel: "INFO",
+	NetworkConfig:      &network.NetworkConfig{},
+	DefaultLogLevel:    "INFO",
+	ZeroTierAutoStart:  false,
+	TailScaleAutoStart: false,
+	TailScaleXEdge:     false,
+	IO0Status:          true,
+	IO1Status:          true,
+	AudioMode:          "disabled",
+	LEDGreenMode:       "network-rx",
+	LEDYellowMode:      "kernel-activity",
 }
 
 var (

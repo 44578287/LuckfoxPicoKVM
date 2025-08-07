@@ -6,12 +6,12 @@ import { LuMonitorSmartphone } from "react-icons/lu";
 
 import Container from "@/components/Container";
 import Card from "@/components/Card";
-import { useHidStore, useRTCStore, useUserStore } from "@/hooks/stores";
-import LogoBlueIcon from "@/assets/logo-blue.svg";
-import LogoWhiteIcon from "@/assets/logo-white.svg";
+import { useHidStore, useRTCStore, useUserStore, useVpnStore } from "@/hooks/stores";
+import LogoLuckfox from "@/assets/logo-luckfox.png";
 import USBStateStatus from "@components/USBStateStatus";
 import PeerConnectionStatusCard from "@components/PeerConnectionStatusCard";
-import { CLOUD_API, DEVICE_API } from "@/ui.config";
+import VpnConnectionStatusCard from "@components/VpnConnectionStatusCard";
+import { DEVICE_API } from "@/ui.config";
 
 import api from "../api";
 import { isOnDevice } from "../main";
@@ -36,10 +36,12 @@ export default function DashboardNavbar({
   kvmName,
 }: NavbarProps) {
   const peerConnectionState = useRTCStore(state => state.peerConnectionState);
+  const tailScaleConnectionState = useVpnStore(state => state.tailScaleConnectionState);
+  const zeroTierConnectionState  = useVpnStore(state => state.zeroTierConnectionState);
   const setUser = useUserStore(state => state.setUser);
   const navigate = useNavigate();
   const onLogout = useCallback(async () => {
-    const logoutUrl = isOnDevice ? `${DEVICE_API}/auth/logout` : `${CLOUD_API}/logout`;
+    const logoutUrl = `${DEVICE_API}/auth/logout`;
     const res = await api.POST(logoutUrl);
     if (!res.ok) return;
 
@@ -60,8 +62,18 @@ export default function DashboardNavbar({
         <div className="flex h-14 items-center justify-between">
           <div className="flex shrink-0 items-center gap-x-8">
             <div className="inline-block shrink-0">
-              <img src={LogoBlueIcon} alt="" className="h-[24px] dark:hidden" />
-              <img src={LogoWhiteIcon} alt="" className="hidden h-[24px] dark:block" />
+              <div className="flex items-center gap-4">
+                <a 
+                  href="https://wiki.luckfox.com/Luckfox-Pico/Download" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-4"
+                >
+                  <img src={LogoLuckfox} alt="" className="h-[24px] dark:hidden" />
+                  <img src={LogoLuckfox} alt="" className="hidden h-[24px] dark:block" />
+                  <b className="navbar__title text--truncate dark:text-white">LUCKFOX</b>
+                </a>
+              </div>
             </div>
 
             <div className="flex gap-x-2">
@@ -94,6 +106,18 @@ export default function DashboardNavbar({
                       <USBStateStatus
                         state={usbState}
                         peerConnectionState={peerConnectionState}
+                      />
+                    </div>
+                    <div className="hidden w-[159px] md:block">
+                      <VpnConnectionStatusCard
+                        state={peerConnectionState === "connected" ? tailScaleConnectionState : "disconnected"}
+                        title="TailScale"
+                      />
+                    </div>
+                    <div className="hidden w-[159px] md:block">
+                      <VpnConnectionStatusCard
+                        state={peerConnectionState === "connected" ? zeroTierConnectionState : "disconnected"}
+                        title="ZeroTier"
                       />
                     </div>
                   </>

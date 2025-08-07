@@ -18,9 +18,8 @@ var massStorageLun0Config = gadgetConfigItem{
 		"ro":        "1",
 		"removable": "1",
 		"file":      "\n",
-		// the additional whitespace is intentional to avoid the "JetKVM V irtual Media" string
-		// https://github.com/jetkvm/rv1106-system/blob/778133a1c153041e73f7de86c9c434a2753ea65d/sysdrv/source/uboot/u-boot/drivers/usb/gadget/f_mass_storage.c#L2556
+		// the additional whitespace is intentional to avoid the "KVM V irtual Media" string
 		// Vendor (8 chars), product (16 chars)
-		"inquiry_string": "JetKVM  Virtual Media",
+		"inquiry_string": "KVM  Virtual Media",
 	},
 }

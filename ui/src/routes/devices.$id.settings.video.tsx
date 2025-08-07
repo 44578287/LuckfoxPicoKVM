@@ -15,7 +15,7 @@ const defaultEdid =
 const edids = [
   {
     value: defaultEdid,
-    label: "JetKVM Default",
+    label: "KVM Default",
   },
   {
     value:
@@ -40,9 +40,16 @@ const streamQualityOptions = [
   { value: "0.1", label: "Low" },
 ];
 
+const audioModeOptions = [
+  { value: "disabled", label: "Disabled"},
+  { value: "usb", label: "USB"},
+  //{ value: "hdmi", label: "HDMI"},
+]
+
 export default function SettingsVideoRoute() {
   const [send] = useJsonRpc();
   const [streamQuality, setStreamQuality] = useState("1");
+  const [audioMode, setAudioMode] = useState("disabled");
   const [customEdidValue, setCustomEdidValue] = useState<string | null>(null);
   const [edid, setEdid] = useState<string | null>(null);
 
@@ -55,6 +62,11 @@ export default function SettingsVideoRoute() {
   const setVideoContrast = useSettingsStore(state => state.setVideoContrast);
 
   useEffect(() => {
+    send("getAudioMode", {}, resp => {
+      if ("error" in resp) return;
+      setAudioMode(String(resp.result));
+    });
+
     send("getStreamQualityFactor", {}, resp => {
       if ("error" in resp) return;
       setStreamQuality(String(resp.result));
@@ -84,6 +96,20 @@ export default function SettingsVideoRoute() {
     });
   }, [send]);
 
+  const handleAudioModeChange = (mode: string) => {
+    send("setAudioMode", { mode }, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to set Audio Mode: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+
+      notifications.success(`Audio Mode set to ${audioModeOptions.find(x => x.value === mode )?.label}.It takes effect after refreshing the page`);
+      setAudioMode(mode);
+    });
+  };
+  
   const handleStreamQualityChange = (factor: string) => {
     send("setStreamQualityFactor", { factor: Number(factor) }, resp => {
       if ("error" in resp) {
@@ -123,6 +149,20 @@ export default function SettingsVideoRoute() {
 
         <div className="space-y-4">
           <div className="space-y-4">
+            <SettingsItem
+              title="Audio Mode"
+              badge="Experimental"
+              description="Set the working mode of the audio"
+            >
+              <SelectMenuBasic
+                size="SM"
+                label=""
+                value={audioMode}
+                options={audioModeOptions}
+                onChange={e => handleAudioModeChange(e.target.value)}
+              />
+            </SettingsItem>
+
             <SettingsItem
               title="Stream Quality"
               description="Adjust the quality of the video stream"
@@ -169,7 +209,7 @@ export default function SettingsVideoRoute() {
                   step="0.1"
                   value={videoBrightness}
                   onChange={e => setVideoBrightness(parseFloat(e.target.value))}
-                  className="w-32 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                  className="w-32 h-2 appearance-none bg-gray-200 dark:bg-gray-700 rounded-lg cursor-pointer"
                 />
               </SettingsItem>
 

@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/jetkvm/kvm/internal/timesync"
+	"kvm/internal/timesync"
 )
 
 var (
@@ -50,4 +50,12 @@ func initTimeSync() {
 			return true, nil
 		},
 	})
+}
+
+func initTimeZone() {
+	LoadConfig()
+	_, err := CallDisplayCtrlAction("set_timezone", map[string]interface{}{"timezone": config.TimeZone})
+	if err != nil {
+		timesyncLogger.Error().Err(err).Msg("failed to set time zone")
+	}
 }

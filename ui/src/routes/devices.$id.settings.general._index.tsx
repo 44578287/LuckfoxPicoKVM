@@ -53,7 +53,7 @@ export default function SettingsGeneralRoute() {
         <div className="space-y-4 pb-2">
           <div className="mt-2 flex items-center justify-between gap-x-2">
             <SettingsItem
-              title="Check for Updates"
+              title="Version"
               description={
                 currentVersions ? (
                   <>
@@ -79,7 +79,7 @@ export default function SettingsGeneralRoute() {
               />
             </div>
           </div>
-          <div className="space-y-4">
+          <div className="hidden space-y-4">
             <SettingsItem
               title="Auto Update"
               description="Automatically update the device to the latest version"

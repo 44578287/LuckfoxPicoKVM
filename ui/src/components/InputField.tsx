@@ -93,7 +93,7 @@ const InputFieldWithLabel = forwardRef<HTMLInputElement, InputFieldWithLabelProp
 InputFieldWithLabel.displayName = "InputFieldWithLabel";
 
 export default InputField;
-export { InputFieldWithLabel };
+export { InputField, InputFieldWithLabel };
 
 export function FieldError({ error }: { error: string | React.ReactNode }) {
   return <div className="mt-[6px] text-[13px] leading-normal text-red-500">{error}</div>;

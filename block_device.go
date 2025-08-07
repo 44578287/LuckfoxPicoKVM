@@ -133,7 +133,7 @@ func (d *NBDDevice) runServerConn() {
 		d.serverConn,
 		[]*server.Export{
 			{
-				Name:        "jetkvm",
+				Name:        "kvm",
 				Description: "",
 				Backend:     &remoteImageBackend{},
 			},

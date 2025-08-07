@@ -39,7 +39,7 @@ import DashboardNavbar from "@components/Header";
 import ConnectionStatsSidebar from "@/components/sidebar/connectionStats";
 import { JsonRpcRequest, useJsonRpc } from "@/hooks/useJsonRpc";
 import Terminal from "@components/Terminal";
-import { CLOUD_API, DEVICE_API } from "@/ui.config";
+import { DEVICE_API } from "@/ui.config";
 
 import UpdateInProgressStatusCard from "../components/UpdateInProgressStatusCard";
 import api from "../api";
@@ -54,7 +54,10 @@ import { FeatureFlagProvider } from "../providers/FeatureFlagProvider";
 import notifications from "../notifications";
 
 import { DeviceStatus } from "./welcome-local";
-import { SystemVersionInfo } from "./devices.$id.settings.general.update";
+import { SystemVersionInfo, LocalVersionInfo } from "./devices.$id.settings.general.update";
+
+import { useVpnStore } from "@/hooks/stores";
+
 
 interface LocalLoaderResp {
   authMode: "password" | "noPassword" | null;
@@ -74,12 +77,25 @@ export interface LocalDevice {
   deviceId: string;
 }
 
+interface TailScaleResponse {
+  state: string;
+  loginUrl: string;
+  ip: string;
+  xEdge: boolean;
+}
+
+interface ZeroTierResponse {
+  state: string;
+  networkID: string;
+  ip: string;
+}
+
 const deviceLoader = async () => {
   const res = await api
     .GET(`${DEVICE_API}/device/status`)
     .then(res => res.json() as Promise<DeviceStatus>);
 
-  if (!res.isSetup) return redirect("/welcome");
+  if (!res.isSetup) return redirect("/mode");
 
   const deviceRes = await api.GET(`${DEVICE_API}/device`);
   if (deviceRes.status === 401) return redirect("/login-local");
@@ -91,31 +107,9 @@ const deviceLoader = async () => {
   throw new Error("Error fetching device");
 };
 
-const cloudLoader = async (params: Params<string>): Promise<CloudLoaderResp> => {
-  const user = await checkAuth();
 
-  const iceResp = await api.POST(`${CLOUD_API}/webrtc/ice_config`);
-  const iceConfig = await iceResp.json();
-
-  const deviceResp = await api.GET(`${CLOUD_API}/devices/${params.id}`);
-
-  if (!deviceResp.ok) {
-    if (deviceResp.status === 404) {
-      throw new Response("Device not found", { status: 404 });
-    }
-
-    throw new Error("Error fetching device");
-  }
-
-  const { device } = (await deviceResp.json()) as {
-    device: { id: string; name: string; user: { googleId: string } };
-  };
-
-  return { user, iceConfig, deviceName: device.name || device.id };
-};
-
-const loader = async ({ params }: LoaderFunctionArgs) => {
-  return import.meta.env.MODE === "device" ? deviceLoader() : cloudLoader(params);
+const loader = async ({}: LoaderFunctionArgs) => {
+  return deviceLoader();
 };
 
 export default function KvmIdRoute() {
@@ -139,6 +133,7 @@ export default function KvmIdRoute() {
   const setDiskChannel = useRTCStore(state => state.setDiskChannel);
   const setRpcDataChannel = useRTCStore(state => state.setRpcDataChannel);
   const setTransceiver = useRTCStore(state => state.setTransceiver);
+  const setAudioTransceiver = useRTCStore(state => state.setAudioTransceiver);
   const location = useLocation();
 
   const isLegacySignalingEnabled = useRef(false);
@@ -238,9 +233,7 @@ export default function KvmIdRoute() {
   const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
   const { sendMessage, getWebSocket } = useWebSocket(
-    isOnDevice
-      ? `${wsProtocol}//${window.location.host}/webrtc/signaling/client`
-      : `${CLOUD_API.replace("http", "ws")}/webrtc/signaling/client?id=${params.id}`,
+    `${wsProtocol}//${window.location.host}/webrtc/signaling/client?id=${params.id}`,
     {
       heartbeat: true,
       retryOnError: true,
@@ -358,42 +351,6 @@ export default function KvmIdRoute() {
     [sendMessage],
   );
 
-  const legacyHTTPSignaling = useCallback(
-    async (pc: RTCPeerConnection) => {
-      const sd = btoa(JSON.stringify(pc.localDescription));
-
-      // Legacy mode == UI in cloud with updated code connecting to older device version.
-      // In device mode, old devices wont server this JS, and on newer devices legacy mode wont be enabled
-      const sessionUrl = `${CLOUD_API}/webrtc/session`;
-
-      console.log("Trying to get remote session description");
-      setLoadingMessage(
-        `Getting remote session description...  ${signalingAttempts.current > 0 ? `(attempt ${signalingAttempts.current + 1})` : ""}`,
-      );
-      const res = await api.POST(sessionUrl, {
-        sd,
-        // When on device, we don't need to specify the device id, as it's already known
-        ...(isOnDevice ? {} : { id: params.id }),
-      });
-
-      const json = await res.json();
-      if (res.status === 401) return navigate(isOnDevice ? "/login-local" : "/login");
-      if (!res.ok) {
-        console.error("Error getting SDP", { status: res.status, json });
-        cleanupAndStopReconnecting();
-        return;
-      }
-
-      console.log("Successfully got Remote Session Description. Setting.");
-      setLoadingMessage("Setting remote session description...");
-
-      const decodedSd = atob(json.sd);
-      const parsedSd = JSON.parse(decodedSd);
-      setRemoteSessionDescription(pc, new RTCSessionDescription(parsedSd));
-    },
-    [cleanupAndStopReconnecting, navigate, params.id, setRemoteSessionDescription],
-  );
-
   const setupPeerConnection = useCallback(async () => {
     console.log("[setupPeerConnection] Setting up peer connection");
     setConnectionFailed(false);
@@ -464,10 +421,6 @@ export default function KvmIdRoute() {
         console.log("ICE Gathering completed");
         setLoadingMessage("ICE Gathering completed");
 
-        if (isLegacySignalingEnabled.current) {
-          // We can now start the https/ws connection to get the remote session description from the KVM device
-          legacyHTTPSignaling(pc);
-        }
       } else if (pc.iceGatheringState === "gathering") {
         console.log("ICE Gathering Started");
         setLoadingMessage("Gathering ICE candidates...");
@@ -479,6 +432,7 @@ export default function KvmIdRoute() {
     };
 
     setTransceiver(pc.addTransceiver("video", { direction: "recvonly" }));
+    pc.addTransceiver("audio", { direction: "recvonly" });
 
     const rpcDataChannel = pc.createDataChannel("rpc");
     rpcDataChannel.onopen = () => {
@@ -494,7 +448,6 @@ export default function KvmIdRoute() {
   }, [
     cleanupAndStopReconnecting,
     iceConfig?.iceServers,
-    legacyHTTPSignaling,
     sendWebRTCSignal,
     setDiskChannel,
     setMediaMediaStream,
@@ -502,6 +455,7 @@ export default function KvmIdRoute() {
     setPeerConnectionState,
     setRpcDataChannel,
     setTransceiver,
+    setAudioTransceiver,
   ]);
 
   useEffect(() => {
@@ -547,40 +501,57 @@ export default function KvmIdRoute() {
 
     setIsTurnServerInUse(localCandidateIsUsingTurn || remoteCandidateIsUsingTurn);
   }, [peerConnectionState, setIsTurnServerInUse]);
+  
+  // Vpn State Update
+  const tailScaleConnectionState = useVpnStore(state => state.tailScaleConnectionState);
+  const setTailScaleConnectionState = useVpnStore(state => state.setTailScaleConnectionState);
+  const tailScaleXEdge = useVpnStore(state => state.tailScaleXEdge);
+  const setTailScaleXEdge = useVpnStore(state => state.setTailScaleXEdge);
+  const setTailScaleLoginUrl = useVpnStore(state => state.setTailScaleLoginUrl); 
+  
+  const setTailScaleIP = useVpnStore(state => state.setTailScaleIP);
 
-  // TURN server usage reporting
-  const isTurnServerInUse = useRTCStore(state => state.isTurnServerInUse);
-  const lastBytesReceived = useRef<number>(0);
-  const lastBytesSent = useRef<number>(0);
+  const zeroTierConnectionState = useVpnStore(state => state.zeroTierConnectionState);
+  const zeroTierNetworkID = useVpnStore(state => state.zeroTierNetworkID);
+  const setZeroTierConnectionState = useVpnStore(state => state.setZeroTierConnectionState); 
+  const setZeroTierNetworkID = useVpnStore(state => state.setZeroTierNetworkID);
+  const setZeroTierIP = useVpnStore(state => state.setZeroTierIP);
+ 
+  const updateVpnStates = () => {
+    // TailScaleState
+    if (tailScaleConnectionState !== "connecting" && tailScaleConnectionState !== "closed") {
+      send("getTailScaleSettings", {}, resp => {
+        if ("error" in resp) return;
+        const result = resp.result as TailScaleResponse;
+        const validState = ["closed", "connecting", "connected", "disconnected", "logined"].includes(result.state)
+          ? result.state as "closed" | "connecting" | "connected" | "disconnected" | "logined"
+          : "closed";
 
-  useInterval(() => {
-    // Don't report usage if we're not using the turn server
-    if (!isTurnServerInUse) return;
-    const { candidatePairStats } = useRTCStore.getState();
-
-    const lastCandidatePair = Array.from(candidatePairStats).pop();
-    const report = lastCandidatePair?.[1];
-    if (!report) return;
-
-    let bytesReceivedDelta = 0;
-    let bytesSentDelta = 0;
-
-    if (report.bytesReceived) {
-      bytesReceivedDelta = report.bytesReceived - lastBytesReceived.current;
-      lastBytesReceived.current = report.bytesReceived;
+        if(tailScaleConnectionState !== "disconnected" ) {
+          setTailScaleXEdge(result.xEdge);
+        }
+        setTailScaleConnectionState(validState);
+        setTailScaleLoginUrl(result.loginUrl);
+        setTailScaleIP(result.ip);
+      });
     }
-
-    if (report.bytesSent) {
-      bytesSentDelta = report.bytesSent - lastBytesSent.current;
-      lastBytesSent.current = report.bytesSent;
+    
+    // ZeroTier
+    if (zeroTierConnectionState !== "connecting" && zeroTierConnectionState !== "closed") { 
+      send("getZeroTierSettings", {}, resp => {
+        if ("error" in resp) return;
+        const result = resp.result as ZeroTierResponse;
+        const validState = ["closed", "connecting", "connected", "disconnected", "logined"].includes(result.state)
+          ? result.state as "closed" | "connecting" | "connected" | "disconnected" | "logined"
+          : "closed";
+        setZeroTierConnectionState(validState);
+        setZeroTierNetworkID(result.networkID);
+        setZeroTierIP(result.ip);
+      });
     }
+  }
 
-    // Fire and forget
-    api.POST(`${CLOUD_API}/webrtc/turn_activity`, {
-      bytesReceived: bytesReceivedDelta,
-      bytesSent: bytesSentDelta,
-    });
-  }, 10000);
+  useInterval(updateVpnStates, 5000);
 
   const setNetworkState = useNetworkStateStore(state => state.setNetworkState);
 
@@ -654,6 +625,7 @@ export default function KvmIdRoute() {
       if ("error" in resp) return;
       setHdmiState(resp.result as Parameters<VideoState["setHdmiState"]>[0]);
     });
+    updateVpnStates();
   }, [rpcDataChannel?.readyState, send, setHdmiState]);
 
   // request keyboard led state from the device
@@ -714,14 +686,20 @@ export default function KvmIdRoute() {
 
   useEffect(() => {
     if (!peerConnection) return;
-    if (!kvmTerminal) {
-      setKvmTerminal(peerConnection.createDataChannel("terminal"));
-    }
+    //if (!kvmTerminal) {
+    //  setKvmTerminal(peerConnection.createDataChannel("terminal"));
+    //}
 
-    if (!serialConsole) {
-      setSerialConsole(peerConnection.createDataChannel("serial"));
-    }
-  }, [kvmTerminal, peerConnection, serialConsole]);
+    //if (!serialConsole) {
+    //  setSerialConsole(peerConnection.createDataChannel("serial"));
+    //}
+    const terminalChannel = peerConnection.createDataChannel("terminal");
+    setKvmTerminal(terminalChannel);
+    const serialChannel = peerConnection.createDataChannel("serial");
+    setSerialConsole(serialChannel);
+
+  //}, [kvmTerminal, peerConnection, serialConsole]);
+  }, [peerConnection]);
 
   const outlet = useOutlet();
   const onModalClose = useCallback(() => {
@@ -735,19 +713,15 @@ export default function KvmIdRoute() {
   useEffect(() => {
     if (appVersion) return;
 
-    send("getUpdateStatus", {}, async resp => {
+    send("getLocalUpdateStatus", {}, async resp => {
       if ("error" in resp) {
         notifications.error(`Failed to get device version: ${resp.error}`);
         return 
       }
 
-      const result = resp.result as SystemVersionInfo;
-      if (result.error) {
-        notifications.error(`Failed to get device version: ${result.error}`);
-      }
-
-      setAppVersion(result.local.appVersion);
-      setSystemVersion(result.local.systemVersion);
+      const result = resp.result as LocalVersionInfo;
+      setAppVersion(result.appVersion);
+      setSystemVersion(result.systemVersion);
     });
   }, [appVersion, send, setAppVersion, setSystemVersion]);
 
@@ -824,7 +798,7 @@ export default function KvmIdRoute() {
             isLoggedIn={authMode === "password" || !!user}
             userEmail={user?.email}
             picture={user?.picture}
-            kvmName={deviceName ?? "JetKVM Device"}
+            kvmName={deviceName ?? "KVM Device"}
           />
 
           <div className="relative flex h-full w-full overflow-hidden">

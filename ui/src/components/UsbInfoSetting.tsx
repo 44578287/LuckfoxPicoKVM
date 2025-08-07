@@ -34,7 +34,7 @@ export interface USBConfig {
 
 const usbConfigs = [
   {
-    label: "JetKVM Default",
+    label: "KVM Default",
     value: "USB Emulation Device",
   },
   {
@@ -65,7 +65,7 @@ export function UsbInfoSetting() {
         vendor_id: "0x1d6b",
         product_id: "0x0104",
         serial_number: deviceId,
-        manufacturer: "JetKVM",
+        manufacturer: "KVM",
         product: "USB Emulation Device",
       },
       "Logitech USB Input Device": {

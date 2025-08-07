@@ -4,12 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/rs/zerolog"
+	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -66,6 +69,36 @@ func (c *DHCPClient) getWatchPaths() []string {
 	return paths
 }
 
+func (c *DHCPClient) watchLink() {
+	ch := make(chan netlink.LinkUpdate)
+	done := make(chan struct{})
+
+	if err := netlink.LinkSubscribe(ch, done); err != nil {
+		c.logger.Error().Err(err).Msg("failed to subscribe to netlink")
+		return
+	}
+
+	for update := range ch {
+		if update.Link.Attrs().Name == c.InterfaceName {
+			if update.IfInfomsg.Flags&unix.IFF_RUNNING != 0 {
+				fmt.Printf("[watchLink]link is up, starting udhcpc")
+				go c.runUDHCPC()
+			} else {
+				c.logger.Info().Msg("link is down")
+			}
+		}
+	}
+}
+
+func (c *DHCPClient) runUDHCPC() {
+	cmd := exec.Command("udhcpc", "-i", c.InterfaceName, "-t", "1")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		c.logger.Error().Err(err).Msg("failed to run udhcpc")
+	}
+}
+
 // Run starts the DHCP client and watches the lease file for changes.
 // this isn't a blocking call, and the lease file is reloaded when a change is detected.
 func (c *DHCPClient) Run() error {
@@ -79,6 +112,8 @@ func (c *DHCPClient) Run() error {
 		return err
 	}
 	defer watcher.Close()
+
+	go c.watchLink()
 
 	go func() {
 		for {

@@ -8,8 +8,7 @@ import Container from "@components/Container";
 import Fieldset from "@components/Fieldset";
 import { InputFieldWithLabel } from "@components/InputField";
 import { Button } from "@components/Button";
-import LogoBlueIcon from "@/assets/logo-blue.png";
-import LogoWhiteIcon from "@/assets/logo-white.svg";
+import LogoLuckfox from "@/assets/logo-luckfox.png";
 import { DEVICE_API } from "@/ui.config";
 
 import api from "../api";
@@ -63,19 +62,19 @@ export default function LoginLocalRoute() {
             <div className="-mt-32 max-w-2xl space-y-8">
               <div className="flex items-center justify-center">
                 <img
-                  src={LogoWhiteIcon}
+                  src={LogoLuckfox}
                   alt=""
                   className="-ml-4 hidden h-[32px] dark:block"
                 />
-                <img src={LogoBlueIcon} alt="" className="-ml-4 h-[32px] dark:hidden" />
+                <img src={LogoLuckfox} alt="" className="-ml-4 h-[32px] dark:hidden" />
               </div>
 
               <div className="space-y-2 text-center">
                 <h1 className="text-4xl font-semibold text-black dark:text-white">
-                  Welcome back to JetKVM
+                  Welcome back to KVM
                 </h1>
                 <p className="font-medium text-slate-600 dark:text-slate-400">
-                  Enter your password to access your JetKVM.
+                  Enter your password to access your KVM.
                 </p>
               </div>
 
@@ -120,7 +119,7 @@ export default function LoginLocalRoute() {
 
                   <div className="mt-4 flex justify-start text-xs text-slate-500 dark:text-slate-400">
                     <ExtLink
-                      href="https://jetkvm.com/docs/networking/local-access#reset-password"
+                      href="https://wiki.luckfox.com/intro"
                       className="hover:underline"
                     >
                       Forgot password?

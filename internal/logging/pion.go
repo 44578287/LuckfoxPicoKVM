@@ -48,10 +48,17 @@ func (c pionLogger) Errorf(format string, args ...interface{}) {
 type pionLoggerFactory struct{}
 
 func (c pionLoggerFactory) NewLogger(subsystem string) logging.LeveledLogger {
-	logger := rootLogger.getLogger(subsystem).With().
+	var logger zerolog.Logger
+
+	base := rootLogger.getLogger(subsystem).With().
 		Str("scope", "pion").
-		Str("component", subsystem).
-		Logger()
+		Str("component", subsystem)
+
+	if subsystem == "mdns" {
+		logger = base.Logger().Level(zerolog.ErrorLevel) // 或 ErrorLevel
+	} else {
+		logger = base.Logger()
+	}
 
 	return pionLogger{logger: &logger}
 }

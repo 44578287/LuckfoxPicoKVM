@@ -87,7 +87,7 @@ export default function SettingsKeyboardRoute() {
           />
         </SettingsItem>
         <p className="text-xs text-slate-600 dark:text-slate-400">
-          Pasting text sends individual key strokes to the target device. The keyboard layout determines which key codes are being sent. Ensure that the keyboard layout in JetKVM matches the settings in the operating system.
+          Pasting text sends individual key strokes to the target device. The keyboard layout determines which key codes are being sent. Ensure that the keyboard layout in KVM matches the settings in the operating system.
         </p>
       </div>
 

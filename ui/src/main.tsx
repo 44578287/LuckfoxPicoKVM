@@ -28,7 +28,7 @@ import LoginLocalRoute from "./routes/login-local";
 import WelcomeLocalModeRoute from "./routes/welcome-local.mode";
 import WelcomeRoute, { DeviceStatus } from "./routes/welcome-local";
 import WelcomeLocalPasswordRoute from "./routes/welcome-local.password";
-import { CLOUD_API, DEVICE_API } from "./ui.config";
+import { DEVICE_API } from "./ui.config";
 import OtherSessionRoute from "./routes/devices.$id.other-session";
 import MountRoute from "./routes/devices.$id.mount";
 import * as SettingsRoute from "./routes/devices.$id.settings";
@@ -49,29 +49,15 @@ import SettingsMacrosRoute from "./routes/devices.$id.settings.macros";
 import SettingsMacrosAddRoute from "./routes/devices.$id.settings.macros.add";
 import SettingsMacrosEditRoute from "./routes/devices.$id.settings.macros.edit";
 
-export const isOnDevice = import.meta.env.MODE === "device";
+export const isOnDevice = true;
 export const isInCloud = !isOnDevice;
-
-export async function checkCloudAuth() {
-  const res = await fetch(`${CLOUD_API}/me`, {
-    mode: "cors",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-  });
-
-  if (res.status === 401) {
-    throw redirect(`/login?returnTo=${window.location.href}`);
-  }
-
-  return await res.json();
-}
 
 export async function checkDeviceAuth() {
   const res = await api
     .GET(`${DEVICE_API}/device/status`)
     .then(res => res.json() as Promise<DeviceStatus>);
 
-  if (!res.isSetup) return redirect("/welcome");
+  if (!res.isSetup) return redirect("/mode");
 
   const deviceRes = await api.GET(`${DEVICE_API}/device`);
   if (deviceRes.status === 401) return redirect("/login-local");
@@ -84,27 +70,25 @@ export async function checkDeviceAuth() {
 }
 
 export async function checkAuth() {
-  return import.meta.env.MODE === "device" ? checkDeviceAuth() : checkCloudAuth();
+  return checkDeviceAuth();
 }
 
-let router;
-if (isOnDevice) {
-  router = createBrowserRouter([
+  let router = createBrowserRouter([
     {
-      path: "/welcome/mode",
+      path: "/mode",
       element: <WelcomeLocalModeRoute />,
       action: WelcomeLocalModeRoute.action,
     },
     {
-      path: "/welcome/password",
+      path: "/mode/password",
       element: <WelcomeLocalPasswordRoute />,
       action: WelcomeLocalPasswordRoute.action,
     },
-    {
-      path: "/welcome",
-      element: <WelcomeRoute />,
-      loader: WelcomeRoute.loader,
-    },
+    //{
+    //  path: "/welcome",
+    //  element: <WelcomeRoute />,
+    //  loader: WelcomeRoute.loader,
+    //},
     {
       path: "/login-local",
       element: <LoginLocalRoute />,
@@ -216,155 +200,6 @@ if (isOnDevice) {
       errorElement: <ErrorBoundary />,
     },
   ]);
-} else {
-  router = createBrowserRouter([
-    {
-      errorElement: <ErrorBoundary />,
-      children: [
-        { path: "signup", element: <SignupRoute /> },
-        { path: "login", element: <LoginRoute /> },
-        {
-          path: "/",
-          element: <Root />,
-          children: [
-            {
-              index: true,
-              loader: async () => {
-                await checkAuth();
-                return redirect(`/devices`);
-              },
-            },
-
-            {
-              path: "devices/:id/setup",
-              element: <SetupRoute />,
-              action: SetupRoute.action,
-              loader: SetupRoute.loader,
-            },
-            {
-              path: "devices/already-adopted",
-              element: <DevicesAlreadyAdopted />,
-            },
-            {
-              path: "devices/:id",
-              element: <DeviceRoute />,
-              loader: DeviceRoute.loader,
-              children: [
-                {
-                  path: "other-session",
-                  element: <OtherSessionRoute />,
-                },
-                {
-                  path: "mount",
-                  element: <MountRoute />,
-                },
-                {
-                  path: "settings",
-                  element: <SettingsRoute.default />,
-                  children: [
-                    {
-                      index: true,
-                      loader: SettingsIndexRoute.loader,
-                    },
-                    {
-                      path: "general",
-                      children: [
-                        {
-                          index: true,
-                          element: <SettingsGeneralIndexRoute.default />,
-                        },
-                        {
-                          path: "update",
-                          element: <SettingsGeneralUpdateRoute />,
-                        },
-                      ],
-                    },
-                    {
-                      path: "mouse",
-                      element: <SettingsMouseRoute />,
-                    },
-                    {
-                      path: "keyboard",
-                      element: <SettingsKeyboardRoute />,
-                    },
-                    {
-                      path: "advanced",
-                      element: <SettingsAdvancedRoute />,
-                    },
-                    {
-                      path: "hardware",
-                      element: <SettingsHardwareRoute />,
-                    },
-                    {
-                      path: "network",
-                      element: <SettingsNetworkRoute />,
-                    },
-                    {
-                      path: "access",
-                      children: [
-                        {
-                          index: true,
-                          element: <SettingsAccessIndexRoute />,
-                          loader: SettingsAccessIndexRoute.loader,
-                        },
-                        {
-                          path: "local-auth",
-                          element: <SecurityAccessLocalAuthRoute />,
-                        },
-                      ],
-                    },
-                    {
-                      path: "video",
-                      element: <SettingsVideoRoute />,
-                    },
-                    {
-                      path: "appearance",
-                      element: <SettingsAppearanceRoute />,
-                    },
-                    {
-                      path: "macros",
-                      children: [
-                        {
-                          index: true,
-                          element: <SettingsMacrosRoute />,
-                        },
-                        {
-                          path: "add",
-                          element: <SettingsMacrosAddRoute />,
-                        },
-                        {
-                          path: ":macroId/edit",
-                          element: <SettingsMacrosEditRoute />,
-                        },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-            {
-              path: "devices/:id/deregister",
-              element: <DevicesIdDeregister />,
-              loader: DevicesIdDeregister.loader,
-              action: DevicesIdDeregister.action,
-            },
-            {
-              path: "devices/:id/rename",
-              element: <DeviceIdRename />,
-              loader: DeviceIdRename.loader,
-              action: DeviceIdRename.action,
-            },
-            {
-              path: "devices",
-              element: <DevicesRoute />,
-              loader: DevicesRoute.loader
-            },
-          ],
-        },
-      ],
-    },
-  ]);
-}
 
 document.addEventListener("DOMContentLoaded", () => {
   ReactDOM.createRoot(document.getElementById("root")!).render(

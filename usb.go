@@ -1,9 +1,10 @@
 package kvm
 
 import (
+	"os"
 	"time"
 
-	"github.com/jetkvm/kvm/internal/usbgadget"
+	"kvm/internal/usbgadget"
 )
 
 var gadget *usbgadget.UsbGadget
@@ -12,7 +13,7 @@ var gadget *usbgadget.UsbGadget
 // call it only after the config is loaded.
 func initUsbGadget() {
 	gadget = usbgadget.NewUsbGadget(
-		"jetkvm",
+		"kvm",
 		config.UsbDevices,
 		config.UsbConfig,
 		usbLogger,
@@ -83,4 +84,12 @@ func checkUSBState() {
 	usbLogger.Info().Str("from", usbState).Str("to", newState).Msg("USB state changed")
 	requestDisplayUpdate(true)
 	triggerUSBStateUpdate()
+}
+
+func rpcSendUsbWakeupSignal() error {
+	err := os.WriteFile("/sys/class/udc/ffb00000.usb/srp", []byte("1"), 0644)
+	if err != nil {
+		return err
+	}
+	return nil
 }

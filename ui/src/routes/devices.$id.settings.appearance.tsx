@@ -32,7 +32,7 @@ export default function SettingsAppearanceRoute() {
     <div className="space-y-4">
       <SettingsPageHeader
         title="Appearance"
-        description="Customize the look and feel of your JetKVM interface"
+        description="Customize the look and feel of your KVM interface"
       />
       <SettingsItem title="Theme" description="Choose your preferred color theme">
         <SelectMenuBasic

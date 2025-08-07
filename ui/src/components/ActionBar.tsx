@@ -2,7 +2,7 @@ import { MdOutlineContentPasteGo } from "react-icons/md";
 import { LuCable, LuHardDrive, LuMaximize, LuSettings, LuSignal } from "react-icons/lu";
 import { FaKeyboard } from "react-icons/fa6";
 import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
-import { Fragment, useCallback, useRef } from "react";
+import { Fragment, useCallback, useRef, useState, useEffect } from "react";
 import { CommandLineIcon } from "@heroicons/react/20/solid";
 
 import { Button } from "@components/Button";
@@ -19,6 +19,8 @@ import WakeOnLanModal from "@/components/popovers/WakeOnLan/Index";
 import MountPopopover from "@/components/popovers/MountPopover";
 import ExtensionPopover from "@/components/popovers/ExtensionPopover";
 import { useDeviceUiNavigation } from "@/hooks/useAppNavigation";
+import VolumeControl from "./VolumeControl";
+import { useJsonRpc } from "@/hooks/useJsonRpc";
 
 export default function Actionbar({
   requestFullscreen,
@@ -38,6 +40,11 @@ export default function Actionbar({
   );
   const developerMode = useSettingsStore(state => state.developerMode);
 
+  // Audio related
+  const [audioMode, setAudioMode] = useState("disabled");
+  const [send] = useJsonRpc();
+
+  
   // This is the only way to get a reliable state change for the popover
   // at time of writing this there is no mount, or unmount event for the popover
   const isOpen = useRef<boolean>(false);
@@ -55,7 +62,14 @@ export default function Actionbar({
     },
     [setDisableFocusTrap],
   );
-
+ 
+  useEffect(() => {
+    send("getAudioMode", {}, resp => {
+      if ("error" in resp) return;
+      setAudioMode(String(resp.result));
+    });
+  }, [send]);
+  
   return (
     <Container className="border-b border-b-slate-800/20 bg-white dark:border-b-slate-300/20 dark:bg-slate-900">
       <div
@@ -64,15 +78,13 @@ export default function Actionbar({
         className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-1.5"
       >
         <div className="relative flex flex-wrap items-center gap-x-2 gap-y-2">
-          {developerMode && (
-            <Button
-              size="XS"
-              theme="light"
-              text="Web Terminal"
-              LeadingIcon={({ className }) => <CommandLineIcon className={className} />}
-              onClick={() => setTerminalType(terminalType === "kvm" ? "none" : "kvm")}
-            />
-          )}
+          <Button
+            size="XS"
+            theme="light"
+            text="Terminal"
+            LeadingIcon={({ className }) => <CommandLineIcon className={className} />}
+            onClick={() => setTerminalType(terminalType === "kvm" ? "none" : "kvm")}
+          />    
           <Popover>
             <PopoverButton as={Fragment}>
               <Button
@@ -152,7 +164,7 @@ export default function Actionbar({
                 <Button
                   size="XS"
                   theme="light"
-                  text="Wake on LAN"
+                  text="Wake"
                   onClick={() => {
                     setDisableFocusTrap(true);
                   }}
@@ -207,6 +219,16 @@ export default function Actionbar({
               onClick={() => setVirtualKeyboard(!virtualKeyboard)}
             />
           </div>
+          
+          {(audioMode !== "disabled") && (
+            <div className="hidden lg:block">
+              <VolumeControl 
+                size="XS"
+                theme="light"
+              />
+            </div>
+          )}
+
         </div>
 
         <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
@@ -250,7 +272,7 @@ export default function Actionbar({
             <Button
               size="XS"
               theme="light"
-              text="Connection Stats"
+              text="Connection State"
               LeadingIcon={({ className }) => (
                 <LuSignal
                   className={cx(className, "mb-0.5 text-green-500")}

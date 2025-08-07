@@ -7,12 +7,10 @@ import Container from "@components/Container";
 import Fieldset from "@components/Fieldset";
 import GridBackground from "@components/GridBackground";
 import StepCounter from "@components/StepCounter";
-import { CLOUD_API } from "@/ui.config";
 
 interface AuthLayoutProps {
   title: string;
   description: string;
-  action: string;
   cta: string;
   ctaHref: string;
   showCounter?: boolean;
@@ -21,7 +19,6 @@ interface AuthLayoutProps {
 export default function AuthLayout({
   title,
   description,
-  action,
   cta,
   ctaHref,
   showCounter,
@@ -60,35 +57,6 @@ export default function AuthLayout({
                 </h1>
                 <p className="text-slate-600 dark:text-slate-400">{description}</p>
               </div>
-
-              <Fieldset className="space-y-12">
-                <div className="mx-auto max-w-sm space-y-4">
-                  <form action={`${CLOUD_API}/oidc/google`} method="POST">
-                    {/*This could be the KVM ID*/}
-                    {deviceId ? (
-                      <input type="hidden" name="deviceId" value={deviceId} />
-                    ) : null}
-                    {returnTo ? (
-                      <input type="hidden" name="returnTo" value={returnTo} />
-                    ) : null}
-                    <Button
-                      size="LG"
-                      theme="light"
-                      fullWidth
-                      text={`${action}`}
-                      LeadingIcon={GoogleIcon}
-                      textAlign="center"
-                      type="submit"
-                      loading={
-                        (navigation.state === "submitting" ||
-                          navigation.state === "loading") &&
-                        navigation.formMethod?.toLowerCase() === "post" &&
-                        navigation.formAction?.includes("auth/google")
-                      }
-                    />
-                  </form>
-                </div>
-              </Fieldset>
             </div>
           </div>
         </Container>

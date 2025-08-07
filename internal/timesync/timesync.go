@@ -7,7 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jetkvm/kvm/internal/network"
+	"kvm/internal/network"
+
 	"github.com/rs/zerolog"
 )
 

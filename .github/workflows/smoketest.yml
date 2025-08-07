@@ -42,13 +42,13 @@ jobs:
           sudo ip r r $CI_HOST via $CI_WG_GATEWAY dev wg-ci
           ping -c1 $CI_HOST || (echo "Failed to ping $CI_HOST" && sudo wg show wg-ci && ip r && exit 1)
         env:
-          CI_HOST: ${{ vars.JETKVM_CI_HOST }}
-          CI_WG_IPS: ${{ vars.JETKVM_CI_WG_IPS }}
-          CI_WG_GATEWAY: ${{ vars.JETKVM_CI_GATEWAY }}
-          CI_WG_ALLOWED_IPS: ${{ vars.JETKVM_CI_WG_ALLOWED_IPS }}
-          CI_WG_PUBLIC: ${{ secrets.JETKVM_CI_WG_PUBLIC }}
-          CI_WG_PRIVATE: ${{ secrets.JETKVM_CI_WG_PRIVATE }}
-          CI_WG_ENDPOINT: ${{ secrets.JETKVM_CI_WG_ENDPOINT }}
+          CI_HOST: ${{ vars.KVM_CI_HOST }}
+          CI_WG_IPS: ${{ vars.KVM_CI_WG_IPS }}
+          CI_WG_GATEWAY: ${{ vars.KVM_CI_GATEWAY }}
+          CI_WG_ALLOWED_IPS: ${{ vars.KVM_CI_WG_ALLOWED_IPS }}
+          CI_WG_PUBLIC: ${{ secrets.KVM_CI_WG_PUBLIC }}
+          CI_WG_PRIVATE: ${{ secrets.KVM_CI_WG_PRIVATE }}
+          CI_WG_ENDPOINT: ${{ secrets.KVM_CI_WG_ENDPOINT }}
       - name: Configure SSH
         run: |
           # Write SSH private key to a file
@@ -66,9 +66,9 @@ jobs:
             IdentityFile $SSH_PRIVATE_KEY
           EOF
         env:
-          CI_USER: ${{ vars.JETKVM_CI_USER }}
-          CI_HOST: ${{ vars.JETKVM_CI_HOST }}
-          CI_SSH_PRIVATE: ${{ secrets.JETKVM_CI_SSH_PRIVATE }}
+          CI_USER: ${{ vars.KVM_CI_USER }}
+          CI_HOST: ${{ vars.KVM_CI_HOST }}
+          CI_SSH_PRIVATE: ${{ secrets.KVM_CI_SSH_PRIVATE }}
       - name: Run tests
         run: |
           set -e
@@ -116,12 +116,12 @@ jobs:
           set -e
           # Copy the binary to the remote host
           echo "+ Copying the application to the remote host"
-          cat bin/jetkvm_app | gzip | ssh jkci "cat > /userdata/jetkvm/jetkvm_app.update.gz"
+          cat bin/kvm_app | gzip | ssh jkci "cat > /userdata/picokvm/kvm_app.update.gz"
           # Deploy and run the application on the remote host
           echo "+ Deploying the application on the remote host"
           ssh jkci ash <<EOF
           # Extract the binary
-          gzip -d /userdata/jetkvm/jetkvm_app.update.gz
+          gzip -d /userdata/picokvm/kvm_app.update.gz
           # Flush filesystem buffers to ensure all data is written to disk
           sync
           # Clear the filesystem caches to force a read from disk
@@ -130,22 +130,22 @@ jobs:
           reboot -d 5 -f &
           EOF
           sleep 10
-          echo "Deployment complete, waiting for JetKVM to come back online "
+          echo "Deployment complete, waiting for KVM to come back online "
           function check_online() {
             for i in {1..60}; do
                 if ping -c1 -w1 -W1 -q $CI_HOST >/dev/null; then
-                    echo "JetKVM is back online"
+                    echo "KVM is back online"
                     return 0
                 fi
                 echo -n "."
                 sleep 1
             done
-            echo "JetKVM did not come back online within 60 seconds"
+            echo "KVM did not come back online within 60 seconds"
             return 1
           }
           check_online
         env:
-          CI_HOST: ${{ vars.JETKVM_CI_HOST }}
+          CI_HOST: ${{ vars.KVM_CI_HOST }}
       - name: Run smoke tests
         run: |
           echo "+ Checking the status of the device"
@@ -157,13 +157,13 @@ jobs:
           ssh jkci ash > $local_log_tar <<'EOF'
           log_path=$(mktemp -d)
           dmesg > $log_path/dmesg.log
-          cp /userdata/jetkvm/last.log $log_path/last.log
+          cp /userdata/picokvm/last.log $log_path/last.log
           tar -czf - -C $log_path .
           EOF
           tar -xf $local_log_tar
           cat dmesg.log last.log
         env:
-          CI_HOST: ${{ vars.JETKVM_CI_HOST }}
+          CI_HOST: ${{ vars.KVM_CI_HOST }}
       - name: Upload logs
         uses: actions/upload-artifact@v4
         with:

@@ -53,12 +53,22 @@ func GetDeviceID() string {
 }
 
 func GetDefaultHostname() string {
-	deviceId := GetDeviceID()
-	if deviceId == "unknown_device_id" {
-		return "jetkvm"
+	//deviceId := GetDeviceID()
+	//if deviceId == "unknown_device_id" {
+	//	return "kvm"
+	//}
+
+	//return fmt.Sprintf("kvm-%s", strings.ToLower(deviceId))
+	return "picokvm"
+}
+
+func GetHostname() string {
+	content, err := os.ReadFile("/etc/hostname")
+	if err != nil {
+		return GetDefaultHostname()
 	}
 
-	return fmt.Sprintf("jetkvm-%s", strings.ToLower(deviceId))
+	return strings.TrimSpace(string(content))
 }
 
 func runWatchdog() {

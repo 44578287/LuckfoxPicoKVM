@@ -165,7 +165,7 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
               </Card>
             </div>
             <h3 className="text-base font-semibold text-black dark:text-white">
-              Mounted from JetKVM Storage
+              Mounted from KVM Storage
             </h3>
             <p className="text-sm text-slate-900 dark:text-slate-100">
               {formatters.truncateMiddle(path, 50)}

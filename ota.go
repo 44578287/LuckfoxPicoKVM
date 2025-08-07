@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -35,10 +34,18 @@ type LocalMetadata struct {
 	SystemVersion string `json:"systemVersion"`
 }
 
+type RemoteMetadata struct {
+	AppVersion    string `json:"appVersion"`
+	AppUrl        string `json:"appUrl"`
+	AppHash       string `json:"appHash"`
+	SystemUrl     string `json:"systemUrl"`
+	SystemVersion string `json:"systemVersion"`
+}
+
 // UpdateStatus represents the current update status
 type UpdateStatus struct {
 	Local                 *LocalMetadata  `json:"local"`
-	Remote                *UpdateMetadata `json:"remote"`
+	Remote                *RemoteMetadata `json:"remote"`
 	SystemUpdateAvailable bool            `json:"systemUpdateAvailable"`
 	AppUpdateAvailable    bool            `json:"appUpdateAvailable"`
 
@@ -46,9 +53,20 @@ type UpdateStatus struct {
 	Error string `json:"error,omitempty"`
 }
 
-const UpdateMetadataUrl = "https://api.jetkvm.com/releases"
+var UpdateMetadataUrls = []string{
+	"https://api.github.com/repos/LuckfoxTECH/PicoKVM/releases/latest",
+	"https://api.github.com/repos/LuckfoxTECH/kvm/releases/latest",
+	"https://api.github.com/repos/luckfox-eng29/kvm/releases/latest",
+}
 
-var builtAppVersion = "0.1.0+dev"
+var builtAppVersion = "0.0.1+dev"
+
+var updateSource = "github"
+
+func rpcSetUpdateSource(source string) error {
+	updateSource = source
+	return nil
+}
 
 func GetLocalVersion() (systemVersion *semver.Version, appVersion *semver.Version, err error) {
 	appVersion, err = semver.NewVersion(builtAppVersion)
@@ -69,50 +87,81 @@ func GetLocalVersion() (systemVersion *semver.Version, appVersion *semver.Versio
 	return systemVersion, appVersion, nil
 }
 
-func fetchUpdateMetadata(ctx context.Context, deviceId string, includePreRelease bool) (*UpdateMetadata, error) {
-	metadata := &UpdateMetadata{}
+func fetchUpdateMetadata(ctx context.Context, deviceId string, includePreRelease bool) (*RemoteMetadata, error) {
+	//cmd := exec.Command("curl", "-s", UpdateMetadataUrl)
+	//output, err := cmd.Output()
+	//if err != nil {
+	//	return nil, fmt.Errorf("failed to fetch GitHub releases: %w", err)
+	//}
+	//_ = cmd.Process.Release()
+	var lastErr error
 
-	updateUrl, err := url.Parse(UpdateMetadataUrl)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing update metadata URL: %w", err)
+	for _, url := range UpdateMetadataUrls {
+		resp, err := http.Get(url)
+		if err != nil {
+			lastErr = fmt.Errorf("failed to fetch GitHub releases from %s: %w", url, err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		output, err := io.ReadAll(resp.Body)
+		if err != nil {
+			lastErr = fmt.Errorf("failed to read GitHub releases from %s: %w", url, err)
+			continue
+		}
+
+		if strings.Contains(string(output), "404") {
+			lastErr = fmt.Errorf("failed to find release from %s: %w", url, err)
+			continue
+		}
+
+		var release struct {
+			TagName string `json:"tag_name"`
+			Assets  []struct {
+				BrowserDownloadURL string `json:"browser_download_url"`
+				Digest             string `json:"digest"`
+			} `json:"assets"`
+		}
+		if err := json.Unmarshal(output, &release); err != nil {
+			lastErr = fmt.Errorf("failed to parse GitHub releases JSON from %s: %w", url, err)
+			continue
+		}
+
+		appVersionRemote := release.TagName
+
+		var updateUrl string
+		var appSha256 string
+		if len(release.Assets) > 0 {
+			updateUrl = release.Assets[0].BrowserDownloadURL
+			appSha256 = release.Assets[0].Digest
+		}
+
+		// add sha256 prefix
+		if strings.HasPrefix(appSha256, "sha256:") {
+			// delete "sha256:"
+			appSha256 = appSha256[7:]
+		}
+
+		remoteMetadata := &RemoteMetadata{
+			AppUrl:        updateUrl,
+			AppVersion:    appVersionRemote,
+			AppHash:       appSha256,
+			SystemUrl:     "",
+			SystemVersion: "0.1.0",
+		}
+
+		return remoteMetadata, nil
 	}
 
-	query := updateUrl.Query()
-	query.Set("deviceId", deviceId)
-	query.Set("prerelease", fmt.Sprintf("%v", includePreRelease))
-	updateUrl.RawQuery = query.Encode()
-
-	logger.Info().Str("url", updateUrl.String()).Msg("Checking for updates")
-
-	req, err := http.NewRequestWithContext(ctx, "GET", updateUrl.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error sending request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	err = json.NewDecoder(resp.Body).Decode(metadata)
-	if err != nil {
-		return nil, fmt.Errorf("error decoding response: %w", err)
-	}
-
-	return metadata, nil
+	return nil, lastErr
 }
 
 func downloadFile(ctx context.Context, path string, url string, downloadProgress *float32) error {
-	if _, err := os.Stat(path); err == nil {
-		if err := os.Remove(path); err != nil {
-			return fmt.Errorf("error removing existing file: %w", err)
-		}
-	}
+	//if _, err := os.Stat(path); err == nil {
+	//	if err := os.Remove(path); err != nil {
+	//		return fmt.Errorf("error removing existing file: %w", err)
+	//	}
+	//}
 
 	unverifiedPath := path + ".unverified"
 	if _, err := os.Stat(unverifiedPath); err == nil {
@@ -126,6 +175,10 @@ func downloadFile(ctx context.Context, path string, url string, downloadProgress
 		return fmt.Errorf("error creating file: %w", err)
 	}
 	defer file.Close()
+
+	if updateSource == "gitee" {
+		url = strings.Replace(url, "github", "gitee", 1)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -197,6 +250,15 @@ func downloadFile(ctx context.Context, path string, url string, downloadProgress
 	if err != nil {
 		return fmt.Errorf("error clearing filesystem caches: %w", err)
 	}
+
+	// without check
+	//if err := os.Rename(unverifiedPath, path); err != nil {
+	//	return fmt.Errorf("error renaming file: %w", err)
+	//}
+
+	//if err := os.Chmod(path, 0755); err != nil {
+	//	return fmt.Errorf("error making file executable: %w", err)
+	//}
 
 	return nil
 }
@@ -345,7 +407,7 @@ func TryUpdate(ctx context.Context, deviceId string, includePreRelease bool) err
 			Str("remote", remote.AppVersion).
 			Msg("App update available")
 
-		err := downloadFile(ctx, "/userdata/jetkvm/jetkvm_app.update", remote.AppUrl, &otaState.AppDownloadProgress)
+		err := downloadFile(ctx, "/userdata/picokvm/bin/kvm_app", remote.AppUrl, &otaState.AppDownloadProgress)
 		if err != nil {
 			otaState.Error = fmt.Sprintf("Error downloading app update: %v", err)
 			scopedLogger.Error().Err(err).Msg("Error downloading app update")
@@ -358,7 +420,7 @@ func TryUpdate(ctx context.Context, deviceId string, includePreRelease bool) err
 		triggerOTAStateUpdate()
 
 		err = verifyFile(
-			"/userdata/jetkvm/jetkvm_app.update",
+			"/userdata/picokvm/bin/kvm_app",
 			remote.AppHash,
 			&otaState.AppVerificationProgress,
 			&scopedLogger,
@@ -388,7 +450,7 @@ func TryUpdate(ctx context.Context, deviceId string, includePreRelease bool) err
 			Str("remote", remote.SystemVersion).
 			Msg("System update available")
 
-		err := downloadFile(ctx, "/userdata/jetkvm/update_system.tar", remote.SystemUrl, &otaState.SystemDownloadProgress)
+		err := downloadFile(ctx, "/userdata/picokvm/update_system.tar", remote.SystemUrl, &otaState.SystemDownloadProgress)
 		if err != nil {
 			otaState.Error = fmt.Sprintf("Error downloading system update: %v", err)
 			scopedLogger.Error().Err(err).Msg("Error downloading system update")
@@ -400,18 +462,6 @@ func TryUpdate(ctx context.Context, deviceId string, includePreRelease bool) err
 		otaState.SystemDownloadProgress = 1
 		triggerOTAStateUpdate()
 
-		err = verifyFile(
-			"/userdata/jetkvm/update_system.tar",
-			remote.SystemHash,
-			&otaState.SystemVerificationProgress,
-			&scopedLogger,
-		)
-		if err != nil {
-			otaState.Error = fmt.Sprintf("Error verifying system update hash: %v", err)
-			scopedLogger.Error().Err(err).Msg("Error verifying system update hash")
-			triggerOTAStateUpdate()
-			return err
-		}
 		scopedLogger.Info().Msg("System update downloaded")
 		verifyFinished := time.Now()
 		otaState.SystemVerifiedAt = &verifyFinished
@@ -419,7 +469,7 @@ func TryUpdate(ctx context.Context, deviceId string, includePreRelease bool) err
 		triggerOTAStateUpdate()
 
 		scopedLogger.Info().Msg("Starting rk_ota command")
-		cmd := exec.Command("rk_ota", "--misc=update", "--tar_path=/userdata/jetkvm/update_system.tar", "--save_dir=/userdata/jetkvm/ota_save", "--partition=all")
+		cmd := exec.Command("rk_ota", "--misc=update", "--tar_path=/userdata/picokvm/update_system.tar", "--save_dir=/userdata/picokvm/ota_save", "--partition=all")
 		var b bytes.Buffer
 		cmd.Stdout = &b
 		cmd.Stderr = &b

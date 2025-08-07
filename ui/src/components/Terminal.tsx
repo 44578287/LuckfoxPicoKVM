@@ -1,6 +1,6 @@
 import "react-simple-keyboard/build/css/index.css";
-import { ChevronDownIcon } from "@heroicons/react/16/solid";
-import { useEffect } from "react";
+import { LuPin, LuPinOff } from 'react-icons/lu'
+import { useEffect, useRef, useState } from "react";
 import { useXTerm } from "react-xtermjs";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -70,6 +70,25 @@ function Terminal({
   const setDisableKeyboardFocusTrap = useUiStore(state => state.setDisableVideoFocusTrap);
 
   const { instance, ref } = useXTerm({ options: TERMINAL_CONFIG });
+
+  const [pinned, setPinned] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!enableTerminal) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (pinned) return;
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setTerminalType("none");
+        setDisableKeyboardFocusTrap(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [enableTerminal, pinned, setTerminalType, setDisableKeyboardFocusTrap]);
 
   useEffect(() => {
     setTimeout(() => {
@@ -155,13 +174,18 @@ function Terminal({
 
     // Handle resize event
     window.addEventListener("resize", handleResize);
+    if (enableTerminal) {
+      setTimeout(handleResize, 50);
+    }
+
     return () => {
       window.removeEventListener("resize", handleResize);
     };
-  }, [ref, instance]);
+  }, [ref, instance, enableTerminal]);
 
   return (
     <div
+      ref={containerRef}
       onKeyDown={e => e.stopPropagation()}
       onKeyUp={e => e.stopPropagation()}
     >
@@ -190,9 +214,8 @@ function Terminal({
                 <Button
                   size="XS"
                   theme="light"
-                  text="Hide"
-                  LeadingIcon={ChevronDownIcon}
-                  onClick={() => setTerminalType("none")}
+                  LeadingIcon={pinned ? LuPinOff : LuPin}
+                  onClick={() => setPinned(p => !p)}
                 />
               </div>
             </div>

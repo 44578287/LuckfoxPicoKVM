@@ -128,7 +128,7 @@ export function ConnectionFailedOverlay({
                   </div>
                   <div className="flex items-center gap-x-2">
                     <LinkButton
-                      to={"https://jetkvm.com/docs/getting-started/troubleshooting"}
+                      to={"https://wiki.luckfox.com/intro"}
                       theme="primary"
                       text="Troubleshooting Guide"
                       TrailingIcon={ArrowRightIcon}
@@ -249,7 +249,7 @@ export function HDMIErrorOverlay({ show, hdmiState }: HDMIErrorOverlayProps) {
                     </div>
                     <div>
                       <LinkButton
-                        to={"https://jetkvm.com/docs/getting-started/troubleshooting"}
+                        to={"https://wiki.luckfox.com/intro"}
                         theme="light"
                         text="Learn more"
                         TrailingIcon={ArrowRightIcon}
@@ -291,7 +291,7 @@ export function HDMIErrorOverlay({ show, hdmiState }: HDMIErrorOverlayProps) {
                     </div>
                     <div>
                       <LinkButton
-                        to={"https://jetkvm.com/docs/getting-started/troubleshooting"}
+                        to={"https://wiki.luckfox.com/intro"}
                         theme="light"
                         text="Learn more"
                         TrailingIcon={ArrowRightIcon}

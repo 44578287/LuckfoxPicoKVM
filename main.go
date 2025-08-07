@@ -28,10 +28,10 @@ func Main() {
 	logger.Info().
 		Interface("system_version", systemVersionLocal).
 		Interface("app_version", appVersionLocal).
-		Msg("starting JetKVM")
+		Msg("starting KVM")
 
 	go runWatchdog()
-	go confirmCurrentSystem()
+	go confirmCurrentSystem() //A/B system
 
 	http.DefaultClient.Timeout = 1 * time.Minute
 
@@ -58,25 +58,62 @@ func Main() {
 		logger.Error().Err(err).Msg("failed to initialize mDNS")
 		os.Exit(1)
 	}
+	//if mDNS != nil {
+	//	_ = mDNS.SetListenOptions(config.NetworkConfig.GetMDNSMode())
+	//	_ = mDNS.SetLocalNames([]string{
+	//		networkState.GetHostname(),
+	//		networkState.GetFQDN(),
+	//	}, true)
+	//}
 
 	// Initialize native ctrl socket server
-	StartNativeCtrlSocketServer()
+	StartVideoCtrlSocketServer()
 
 	// Initialize native video socket server
-	StartNativeVideoSocketServer()
+	StartVideoDataSocketServer()
+
+	// Initialize native audio socket server
+	StartAudioCtrlSocketServer()
+
+	StartVpnCtrlSocketServer()
+
+	StartDisplayCtrlSocketServer()
 
 	initPrometheus()
 
 	go func() {
-		err = ExtractAndRunNativeBin()
+		err = ExtractAndRunVideoBin()
 		if err != nil {
-			logger.Warn().Err(err).Msg("failed to extract and run native bin")
+			logger.Warn().Err(err).Msg("failed to extract and run video bin")
 			//TODO: prepare an error message screen buffer to show on kvm screen
 		}
+
+		err = ExtractAndRunDisplayBin()
+		if err != nil {
+			logger.Warn().Err(err).Msg("failed to extract and run display bin")
+			//TODO: prepare an error message screen buffer to show on kvm screen
+		}
+
+		err = ExtractAndRunAudioBin()
+		if err != nil {
+			logger.Warn().Err(err).Msg("failed to extract and run audio bin")
+			//TODO: prepare an error message screen buffer to show on kvm screen
+		}
+
+		err = ExtractAndRunVpnBin()
+		if err != nil {
+			logger.Warn().Err(err).Msg("failed to extract and run vpn bin")
+			//TODO: prepare an error message screen buffer to show on kvm screen
+		}
+
 	}()
 
 	// initialize usb gadget
 	initUsbGadget()
+
+	// initialize GPIO
+	initGPIO()
+
 	if err := setInitialVirtualMediaState(); err != nil {
 		logger.Warn().Err(err).Msg("failed to set initial virtual media state")
 	}
@@ -89,26 +126,30 @@ func Main() {
 	// initialize display
 	initDisplay()
 
-	go func() {
-		time.Sleep(15 * time.Minute)
-		for {
-			logger.Debug().Bool("auto_update_enabled", config.AutoUpdateEnabled).Msg("UPDATING")
-			if !config.AutoUpdateEnabled {
-				return
-			}
-			if currentSession != nil {
-				logger.Debug().Msg("skipping update since a session is active")
-				time.Sleep(1 * time.Minute)
-				continue
-			}
-			includePreRelease := config.IncludePreRelease
-			err = TryUpdate(context.Background(), GetDeviceID(), includePreRelease)
-			if err != nil {
-				logger.Warn().Err(err).Msg("failed to auto update")
-			}
-			time.Sleep(1 * time.Hour)
-		}
-	}()
+	// Initialize VPN
+	initVPN()
+
+	//Auto update
+	//go func() {
+	//	time.Sleep(15 * time.Minute)
+	//	for {
+	//		logger.Debug().Bool("auto_update_enabled", config.AutoUpdateEnabled).Msg("UPDATING")
+	//		if !config.AutoUpdateEnabled {
+	//			return
+	//		}
+	//		if currentSession != nil {
+	//			logger.Debug().Msg("skipping update since a session is active")
+	//			time.Sleep(1 * time.Minute)
+	//			continue
+	//		}
+	//		includePreRelease := config.IncludePreRelease
+	//		err = TryUpdate(context.Background(), GetDeviceID(), includePreRelease)
+	//		if err != nil {
+	//			logger.Warn().Err(err).Msg("failed to auto update")
+	//		}
+	//		time.Sleep(1 * time.Hour)
+	//	}
+	//}()
 	//go RunFuseServer()
 	go RunWebServer()
 
@@ -118,14 +159,11 @@ func Main() {
 		startWebSecureServer()
 	}
 
-	// As websocket client already checks if the cloud token is set, we can start it here.
-	go RunWebsocketClient()
-
 	initSerialPort()
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs
-	logger.Info().Msg("JetKVM Shutting Down")
+	logger.Info().Msg("KVM Shutting Down")
 	//if fuseServer != nil {
 	//	err := setMassStorageImage(" ")
 	//	if err != nil {

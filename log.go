@@ -1,7 +1,8 @@
 package kvm
 
 import (
-	"github.com/jetkvm/kvm/internal/logging"
+	"kvm/internal/logging"
+
 	"github.com/rs/zerolog"
 )
 
@@ -10,12 +11,14 @@ func ErrorfL(l *zerolog.Logger, format string, err error, args ...interface{}) e
 }
 
 var (
-	logger          = logging.GetSubsystemLogger("jetkvm")
+	logger          = logging.GetSubsystemLogger("kvm")
 	networkLogger   = logging.GetSubsystemLogger("network")
+	vpnLogger       = logging.GetSubsystemLogger("vpn")
 	cloudLogger     = logging.GetSubsystemLogger("cloud")
 	websocketLogger = logging.GetSubsystemLogger("websocket")
 	webrtcLogger    = logging.GetSubsystemLogger("webrtc")
-	nativeLogger    = logging.GetSubsystemLogger("native")
+	videoLogger     = logging.GetSubsystemLogger("video")
+	audioLogger     = logging.GetSubsystemLogger("audio")
 	nbdLogger       = logging.GetSubsystemLogger("nbd")
 	timesyncLogger  = logging.GetSubsystemLogger("timesync")
 	jsonRpcLogger   = logging.GetSubsystemLogger("jsonrpc")

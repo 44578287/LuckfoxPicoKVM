@@ -4,20 +4,22 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"net"
 	"strings"
+
+	"kvm/internal/logging"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 	"github.com/gin-gonic/gin"
-	"github.com/jetkvm/kvm/internal/logging"
 	"github.com/pion/webrtc/v4"
 	"github.com/rs/zerolog"
 )
 
 type Session struct {
-	peerConnection           *webrtc.PeerConnection
-	VideoTrack               *webrtc.TrackLocalStaticSample
+	peerConnection *webrtc.PeerConnection
+	VideoTrack     *webrtc.TrackLocalStaticSample
+	AudioTrack     *webrtc.TrackLocalStaticRTP
+	//AudioTrack               *webrtc.TrackLocalStaticSample
 	ControlChannel           *webrtc.DataChannel
 	RPCChannel               *webrtc.DataChannel
 	HidChannel               *webrtc.DataChannel
@@ -28,7 +30,6 @@ type Session struct {
 type SessionConfig struct {
 	ICEServers []string
 	LocalIP    string
-	IsCloud    bool
 	ws         *websocket.Conn
 	Logger     *zerolog.Logger
 }
@@ -81,22 +82,6 @@ func newSession(config SessionConfig) (*Session, error) {
 		scopedLogger = webrtcLogger
 	}
 
-	if config.IsCloud {
-		if config.ICEServers == nil {
-			scopedLogger.Info().Msg("ICE Servers not provided by cloud")
-		} else {
-			iceServer.URLs = config.ICEServers
-			scopedLogger.Info().Interface("iceServers", iceServer.URLs).Msg("Using ICE Servers provided by cloud")
-		}
-
-		if config.LocalIP == "" || net.ParseIP(config.LocalIP) == nil {
-			scopedLogger.Info().Str("localIP", config.LocalIP).Msg("Local IP address not provided or invalid, won't set NAT1To1IPs")
-		} else {
-			webrtcSettingEngine.SetNAT1To1IPs([]string{config.LocalIP}, webrtc.ICECandidateTypeSrflx)
-			scopedLogger.Info().Str("localIP", config.LocalIP).Msg("Setting NAT1To1IPs")
-		}
-	}
-
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(webrtcSettingEngine))
 	peerConnection, err := api.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{iceServer},
@@ -136,7 +121,17 @@ func newSession(config SessionConfig) (*Session, error) {
 		return nil, err
 	}
 
+	session.AudioTrack, err = webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio", "kvm")
+	if err != nil {
+		return nil, err
+	}
+
 	rtpSender, err := peerConnection.AddTrack(session.VideoTrack)
+	if err != nil {
+		return nil, err
+	}
+
+	audioRtpSender, err := peerConnection.AddTrack(session.AudioTrack)
 	if err != nil {
 		return nil, err
 	}
@@ -152,6 +147,16 @@ func newSession(config SessionConfig) (*Session, error) {
 			}
 		}
 	}()
+
+	go func() {
+		audioRtcpBuf := make([]byte, 1500)
+		for {
+			if _, _, rtcpErr := audioRtpSender.Read(audioRtcpBuf); rtcpErr != nil {
+				return
+			}
+		}
+	}()
+
 	var isConnected bool
 
 	peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
@@ -211,8 +216,12 @@ func onActiveSessionsChanged() {
 
 func onFirstSessionConnected() {
 	_ = writeCtrlAction("start_video")
+	if config.AudioMode != "disabled" {
+		StartNtpAudioServer(handleAudioClient)
+	}
 }
 
 func onLastSessionDisconnected() {
 	_ = writeCtrlAction("stop_video")
+	StopNtpAudioServer()
 }

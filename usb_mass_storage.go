@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -19,7 +20,7 @@ import (
 	"github.com/pion/webrtc/v4"
 	"github.com/psanford/httpreadat"
 
-	"github.com/jetkvm/kvm/resource"
+	"kvm/resource"
 )
 
 func writeFile(path string, data string) error {
@@ -92,7 +93,8 @@ func mountImage(imagePath string) error {
 
 var nbdDevice *NBDDevice
 
-const imagesFolder = "/userdata/jetkvm/images"
+const imagesFolder = "/userdata/picokvm/images"
+const SDImagesFolder = "/mnt/sdcard"
 
 func initImagesFolder() error {
 	err := os.MkdirAll(imagesFolder, 0755)
@@ -248,7 +250,7 @@ func getInitialVirtualMediaState() (*VirtualMediaState, error) {
 		logger.Info().Str("diskPath", diskPath).Msg("getting file size")
 		info, err := os.Stat(diskPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get file info: %w", err)
+			return nil, fmt.Errorf("[rpcGetInitialVirtualMediaState]failed to get file info: %w", err)
 		}
 		initialState.Size = info.Size()
 	}
@@ -365,7 +367,42 @@ func rpcMountWithStorage(filename string, mode VirtualMediaMode) error {
 	fullPath := filepath.Join(imagesFolder, filename)
 	fileInfo, err := os.Stat(fullPath)
 	if err != nil {
-		return fmt.Errorf("failed to get file info: %w", err)
+		return fmt.Errorf("[rpcMountWithStorage]failed to get file info: %w", err)
+	}
+
+	if err := setMassStorageMode(mode == CDROM); err != nil {
+		return fmt.Errorf("failed to set mass storage mode: %w", err)
+	}
+
+	err = setMassStorageImage(fullPath)
+	if err != nil {
+		return fmt.Errorf("failed to set mass storage image: %w", err)
+	}
+	currentVirtualMediaState = &VirtualMediaState{
+		Source:   Storage,
+		Mode:     mode,
+		Filename: filename,
+		Size:     fileInfo.Size(),
+	}
+	return nil
+}
+
+func rpcMountWithSDStorage(filename string, mode VirtualMediaMode) error {
+	filename, err := sanitizeFilename(filename)
+	if err != nil {
+		return err
+	}
+
+	virtualMediaStateMutex.Lock()
+	defer virtualMediaStateMutex.Unlock()
+	if currentVirtualMediaState != nil {
+		return fmt.Errorf("another virtual media is already mounted")
+	}
+
+	fullPath := filepath.Join(SDImagesFolder, filename)
+	fileInfo, err := os.Stat(fullPath)
+	if err != nil {
+		return fmt.Errorf("[rpcMountWithStorage]failed to get file info: %w", err)
 	}
 
 	if err := setMassStorageMode(mode == CDROM); err != nil {
@@ -655,4 +692,172 @@ func handleUploadHttp(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Upload completed"})
+}
+
+// SD Card
+func rpcGetSDStorageSpace() (*StorageSpace, error) {
+	var stat syscall.Statfs_t
+	err := syscall.Statfs(SDImagesFolder, &stat)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get SD storage stats: %v", err)
+	}
+
+	totalSpace := stat.Blocks * uint64(stat.Bsize)
+	freeSpace := stat.Bfree * uint64(stat.Bsize)
+	usedSpace := totalSpace - freeSpace
+
+	return &StorageSpace{
+		BytesUsed: int64(usedSpace),
+		BytesFree: int64(freeSpace),
+	}, nil
+}
+
+func rpcResetSDStorage() error {
+	err := os.WriteFile("/sys/bus/platform/drivers/dwmmc_rockchip/unbind", []byte("ffaa0000.mmc"), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write to file: %v", err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	err = os.WriteFile("/sys/bus/platform/drivers/dwmmc_rockchip/bind", []byte("ffaa0000.mmc"), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write to file: %v", err)
+	}
+	return nil
+}
+
+func rpcListSDStorageFiles() (*StorageFiles, error) {
+	files, err := os.ReadDir(SDImagesFolder)
+	if err != nil {
+		time.Sleep(500 * time.Millisecond)
+		files, err = os.ReadDir(SDImagesFolder)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read directory: %v", err)
+		}
+	}
+
+	storageFiles := make([]StorageFile, 0)
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		info, err := file.Info()
+		if err != nil {
+			return nil, fmt.Errorf("[rpcListSDStorageFiles]failed to get file info: %v", err)
+		}
+
+		storageFiles = append(storageFiles, StorageFile{
+			Filename:  file.Name(),
+			Size:      info.Size(),
+			CreatedAt: info.ModTime(),
+		})
+	}
+
+	return &StorageFiles{Files: storageFiles}, nil
+}
+
+func rpcDeleteSDStorageFile(filename string) error {
+	sanitizedFilename, err := sanitizeFilename(filename)
+	if err != nil {
+		return err
+	}
+
+	fullPath := filepath.Join(SDImagesFolder, sanitizedFilename)
+
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		return fmt.Errorf("file does not exist: %s", filename)
+	}
+
+	err = os.Remove(fullPath)
+	if err != nil {
+		return fmt.Errorf("failed to delete file: %v", err)
+	}
+
+	return nil
+}
+
+type SDMountStatus string
+
+const (
+	SDMountOK   SDMountStatus = "ok"
+	SDMountNone SDMountStatus = "none"
+	SDMountFail SDMountStatus = "fail"
+)
+
+type SDMountStatusResponse struct {
+	Status SDMountStatus `json:"status"`
+}
+
+func rpcGetSDMountStatus() (*SDMountStatusResponse, error) {
+	if _, err := os.Stat("/dev/mmcblk1"); os.IsNotExist(err) {
+		return &SDMountStatusResponse{Status: SDMountNone}, nil
+	}
+
+	output, err := exec.Command("mount").Output()
+	if err != nil {
+		return &SDMountStatusResponse{Status: SDMountFail}, fmt.Errorf("failed to check mount status: %v", err)
+	}
+
+	if strings.Contains(string(output), "/dev/mmcblk1p1 on /mnt/sdcard") {
+		return &SDMountStatusResponse{Status: SDMountOK}, nil
+	}
+
+	err = exec.Command("mount", "/dev/mmcblk1p1", "/mnt/sdcard").Run()
+	if err != nil {
+		return &SDMountStatusResponse{Status: SDMountFail}, fmt.Errorf("failed to mount SD card: %v", err)
+	}
+
+	output, err = exec.Command("mount").Output()
+	if err != nil {
+		return &SDMountStatusResponse{Status: SDMountFail}, fmt.Errorf("failed to check mount status after mounting: %v", err)
+	}
+
+	if strings.Contains(string(output), "/dev/mmcblk1p1 on /mnt/sdcard") {
+		return &SDMountStatusResponse{Status: SDMountOK}, nil
+	}
+
+	return &SDMountStatusResponse{Status: SDMountFail}, nil
+}
+
+type SDStorageFileUpload struct {
+	AlreadyUploadedBytes int64  `json:"alreadyUploadedBytes"`
+	DataChannel          string `json:"dataChannel"`
+}
+
+const SDUploadIdPrefix = "upload_"
+
+func rpcStartSDStorageFileUpload(filename string, size int64) (*SDStorageFileUpload, error) {
+	sanitizedFilename, err := sanitizeFilename(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	filePath := path.Join(SDImagesFolder, sanitizedFilename)
+	uploadPath := filePath + ".incomplete"
+
+	if _, err := os.Stat(filePath); err == nil {
+		return nil, fmt.Errorf("file already exists: %s", sanitizedFilename)
+	}
+
+	var alreadyUploadedBytes int64 = 0
+	if stat, err := os.Stat(uploadPath); err == nil {
+		alreadyUploadedBytes = stat.Size()
+	}
+
+	uploadId := SDUploadIdPrefix + uuid.New().String()
+	file, err := os.OpenFile(uploadPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file for upload: %v", err)
+	}
+	pendingUploadsMutex.Lock()
+	pendingUploads[uploadId] = pendingUpload{
+		File:                 file,
+		Size:                 size,
+		AlreadyUploadedBytes: alreadyUploadedBytes,
+	}
+	pendingUploadsMutex.Unlock()
+	return &SDStorageFileUpload{
+		AlreadyUploadedBytes: alreadyUploadedBytes,
+		DataChannel:          uploadId,
+	}, nil
 }

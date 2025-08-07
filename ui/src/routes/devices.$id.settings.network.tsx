@@ -86,7 +86,7 @@ export default function SettingsNetworkRoute() {
   const [networkSettingsLoaded, setNetworkSettingsLoaded] = useState(false);
 
   const [customDomain, setCustomDomain] = useState<string>("");
-  const [selectedDomainOption, setSelectedDomainOption] = useState<string>("dhcp");
+  const [selectedDomainOption, setSelectedDomainOption] = useState<string>("local");
 
   useEffect(() => {
     if (networkSettings.domain && networkSettingsLoaded) {
@@ -243,7 +243,8 @@ export default function SettingsNetworkRoute() {
                 <InputField
                   size="SM"
                   type="text"
-                  placeholder="jetkvm"
+                  value={networkSettings.hostname}
+                  placeholder={networkSettings.hostname}
                   defaultValue={networkSettings.hostname}
                   onChange={e => {
                     handleHostnameChange(e.target.value);

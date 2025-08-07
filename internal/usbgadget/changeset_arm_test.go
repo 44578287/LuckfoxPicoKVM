@@ -15,7 +15,7 @@ var (
 		VendorId:     "0x1d6b", //The Linux Foundation
 		ProductId:    "0x0104", //Multifunction Composite Gadget
 		SerialNumber: "",
-		Manufacturer: "JetKVM",
+		Manufacturer: "KVM",
 		Product:      "USB Emulation Device",
 		strictMode:   true,
 	}
@@ -25,7 +25,7 @@ var (
 		Keyboard:      true,
 		MassStorage:   true,
 	}
-	usbGadgetName = "jetkvm"
+	usbGadgetName = "kvm"
 	usbGadget     *UsbGadget
 )
 
@@ -109,7 +109,7 @@ func TestUsbGadgetUDCNotBoundAfterReportDescrChanged(t *testing.T) {
 	udc := udcs[0]
 	assert.NotNil(udc, "UDC should exist")
 
-	udcStr, err := os.ReadFile("/sys/kernel/config/usb_gadget/jetkvm/UDC")
+	udcStr, err := os.ReadFile("/sys/kernel/config/usb_gadget/kvm/UDC")
 	assert.Nil(err, "usb_gadget/UDC should exist")
 	assert.Equal(strings.TrimSpace(udc), strings.TrimSpace(string(udcStr)), "UDC should be the same")
 }

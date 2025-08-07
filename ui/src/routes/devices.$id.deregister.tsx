@@ -15,56 +15,11 @@ import DashboardNavbar from "@components/Header";
 import { User } from "@/hooks/stores";
 import { checkAuth } from "@/main";
 import Fieldset from "@components/Fieldset";
-import { CLOUD_API } from "@/ui.config";
 
 interface LoaderData {
   device: { id: string; name: string; user: { googleId: string } };
   user: User;
 }
-
-const action = async ({ request }: ActionFunctionArgs) => {
-  const { deviceId } = Object.fromEntries(await request.formData());
-
-  try {
-    const res = await fetch(`${CLOUD_API}/devices/${deviceId}`, {
-      method: "DELETE",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      mode: "cors",
-    });
-
-    if (!res.ok) {
-      return { message: "There was an error renaming your device. Please try again." };
-    }
-  } catch (e) {
-    console.error(e);
-    return { message: "There was an error renaming your device. Please try again." };
-  }
-
-  return redirect("/devices");
-};
-
-const loader = async ({ params }: LoaderFunctionArgs) => {
-  const user = await checkAuth();
-  const { id } = params;
-
-  try {
-    const res = await fetch(`${CLOUD_API}/devices/${id}`, {
-      method: "GET",
-      credentials: "include",
-      mode: "cors",
-    });
-
-    const { device } = (await res.json()) as {
-      device: { id: string; name: string; user: { googleId: string } };
-    };
-
-    return { device, user };
-  } catch (e) {
-    console.error(e);
-    return { devices: [] };
-  }
-};
 
 export default function DevicesIdDeregister() {
   const { device, user } = useLoaderData() as LoaderData;
@@ -140,6 +95,3 @@ export default function DevicesIdDeregister() {
     </div>
   );
 }
-
-DevicesIdDeregister.loader = loader;
-DevicesIdDeregister.action = action;

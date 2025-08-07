@@ -2,5 +2,6 @@ bin/*
 static/*
 .idea
 .DS_Store
+.vscode
 
 device-tests.tar.gz

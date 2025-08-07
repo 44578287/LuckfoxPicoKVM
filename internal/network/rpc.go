@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jetkvm/kvm/internal/confparser"
-	"github.com/jetkvm/kvm/internal/udhcpc"
+	"kvm/internal/confparser"
+	"kvm/internal/udhcpc"
 )
 
 type RpcIPv6Address struct {

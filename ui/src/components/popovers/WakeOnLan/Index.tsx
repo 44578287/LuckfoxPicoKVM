@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useClose } from "@headlessui/react";
 
+import { Button } from "@/components/Button";
 import { GridCard } from "@components/Card";
 import { SettingsPageHeader } from "@components/SettingsPageheader";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
@@ -27,6 +28,17 @@ export default function WakeOnLanModal() {
     close();
     setDisableFocusTrap(false);
   }, [close, setDisableFocusTrap]);
+
+  const onSendUsbWakeupSignal = useCallback(() => {
+    send("sendUsbWakeupSignal", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to send USB wakeup signal: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+    });
+  }, [send]);
 
   const onSendMagicPacket = useCallback(
     (macAddress: string) => {
@@ -104,6 +116,26 @@ export default function WakeOnLanModal() {
       <div className="space-y-4 p-4 py-3">
         <div className="grid h-full grid-rows-(--grid-headerBody)">
           <div className="space-y-4">
+            <SettingsPageHeader
+              title="Wake On USB"
+              description="Send a Signal to wake up the device connected via USB."
+            />
+ 
+            <div
+              className="flex animate-fadeIn opacity-0 items-center justify-end space-x-2"
+              style={{
+                animationDuration: "0.7s",
+                animationDelay: "0.2s",
+              }}
+            >
+              <Button
+                size="SM"
+                theme="primary"
+                text="Wake"
+                onClick={onSendUsbWakeupSignal}
+              />
+            </div>
+
             <SettingsPageHeader
               title="Wake On LAN"
               description="Send a Magic Packet to wake up a remote device."

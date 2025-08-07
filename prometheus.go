@@ -9,5 +9,5 @@ import (
 func initPrometheus() {
 	// A Prometheus metrics endpoint.
 	version.Version = builtAppVersion
-	prometheus.MustRegister(versioncollector.NewCollector("jetkvm"))
+	prometheus.MustRegister(versioncollector.NewCollector("kvm"))
 }

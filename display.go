@@ -2,7 +2,6 @@ package kvm
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"strconv"
 	"sync"
@@ -18,12 +17,12 @@ var (
 )
 
 const (
-	touchscreenDevice     string = "/dev/input/event1"
+	touchscreenDevice     string = "/dev/input/event0"
 	backlightControlClass string = "/sys/class/backlight/backlight/brightness"
 )
 
 func switchToScreen(screen string) {
-	_, err := CallCtrlAction("lv_scr_load", map[string]interface{}{"obj": screen})
+	_, err := CallDisplayCtrlAction("lv_scr_load", map[string]interface{}{"obj": screen})
 	if err != nil {
 		displayLogger.Warn().Err(err).Str("screen", screen).Msg("failed to switch to screen")
 		return
@@ -34,15 +33,15 @@ func switchToScreen(screen string) {
 var displayedTexts = make(map[string]string)
 
 func lvObjSetState(objName string, state string) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_obj_set_state", map[string]interface{}{"obj": objName, "state": state})
+	return CallDisplayCtrlAction("lv_obj_set_state", map[string]interface{}{"obj": objName, "state": state})
 }
 
 func lvObjAddFlag(objName string, flag string) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_obj_add_flag", map[string]interface{}{"obj": objName, "flag": flag})
+	return CallDisplayCtrlAction("lv_obj_add_flag", map[string]interface{}{"obj": objName, "flag": flag})
 }
 
 func lvObjClearFlag(objName string, flag string) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_obj_clear_flag", map[string]interface{}{"obj": objName, "flag": flag})
+	return CallDisplayCtrlAction("lv_obj_clear_flag", map[string]interface{}{"obj": objName, "flag": flag})
 }
 
 func lvObjHide(objName string) (*CtrlResponse, error) {
@@ -54,27 +53,31 @@ func lvObjShow(objName string) (*CtrlResponse, error) {
 }
 
 func lvObjSetOpacity(objName string, opacity int) (*CtrlResponse, error) { // nolint:unused
-	return CallCtrlAction("lv_obj_set_style_opa_layered", map[string]interface{}{"obj": objName, "opa": opacity})
+	return CallDisplayCtrlAction("lv_obj_set_style_opa_layered", map[string]interface{}{"obj": objName, "opa": opacity})
 }
 
 func lvObjFadeIn(objName string, duration uint32) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_obj_fade_in", map[string]interface{}{"obj": objName, "time": duration})
+	return CallDisplayCtrlAction("lv_obj_fade_in", map[string]interface{}{"obj": objName, "time": duration})
 }
 
 func lvObjFadeOut(objName string, duration uint32) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_obj_fade_out", map[string]interface{}{"obj": objName, "time": duration})
+	return CallDisplayCtrlAction("lv_obj_fade_out", map[string]interface{}{"obj": objName, "time": duration})
 }
 
 func lvLabelSetText(objName string, text string) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_label_set_text", map[string]interface{}{"obj": objName, "text": text})
+	return CallDisplayCtrlAction("lv_label_set_text", map[string]interface{}{"obj": objName, "text": text})
 }
 
 func lvImgSetSrc(objName string, src string) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_img_set_src", map[string]interface{}{"obj": objName, "src": src})
+	return CallDisplayCtrlAction("lv_img_set_src", map[string]interface{}{"obj": objName, "src": src})
 }
 
 func lvDispSetRotation(rotation string) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_disp_set_rotation", map[string]interface{}{"rotation": rotation})
+	return CallDisplayCtrlAction("lv_disp_set_rotation", map[string]interface{}{"rotation": rotation})
+}
+
+func lvObjSetStyleBgColor(objName string, color string) (*CtrlResponse, error) {
+	return CallDisplayCtrlAction("lv_obj_set_style_bg_color", map[string]interface{}{"obj": objName, "color": color})
 }
 
 func updateLabelIfChanged(objName string, newText string) {
@@ -98,83 +101,26 @@ var (
 )
 
 func updateDisplay() {
-	updateLabelIfChanged("ui_Home_Content_Ip", networkState.IPv4String())
+	updateLabelIfChanged("Network_Address_IP_Label", networkState.IPv4String())
+	updateLabelIfChanged("Version_Hostname_Label", GetHostname())
+
 	if usbState == "configured" {
-		updateLabelIfChanged("ui_Home_Footer_Usb_Status_Label", "Connected")
-		_, _ = lvObjSetState("ui_Home_Footer_Usb_Status_Label", "LV_STATE_DEFAULT")
+		_, _ = lvObjSetState("Main", "USB_CONNECTED")
 	} else {
-		updateLabelIfChanged("ui_Home_Footer_Usb_Status_Label", "Disconnected")
-		_, _ = lvObjSetState("ui_Home_Footer_Usb_Status_Label", "LV_STATE_USER_2")
+		_, _ = lvObjSetState("Main", "USB_DISCONNECTED")
 	}
 	if lastVideoState.Ready {
-		updateLabelIfChanged("ui_Home_Footer_Hdmi_Status_Label", "Connected")
-		_, _ = lvObjSetState("ui_Home_Footer_Hdmi_Status_Label", "LV_STATE_DEFAULT")
+		_, _ = lvObjSetState("Main", "HDMI_CONNECTED")
 	} else {
-		updateLabelIfChanged("ui_Home_Footer_Hdmi_Status_Label", "Disconnected")
-		_, _ = lvObjSetState("ui_Home_Footer_Hdmi_Status_Label", "LV_STATE_USER_2")
+		_, _ = lvObjSetState("Main", "HDMI_DISCONNECTED")
 	}
-	updateLabelIfChanged("ui_Home_Header_Cloud_Status_Label", fmt.Sprintf("%d active", actionSessions))
 
 	if networkState.IsUp() {
-		switchToScreenIfDifferent("ui_Home_Screen")
+		_, _ = lvObjSetState("Network", "NETWORK")
 	} else {
-		switchToScreenIfDifferent("ui_No_Network_Screen")
+		_, _ = lvObjSetState("Network", "NO_NETWORK")
 	}
 
-	if cloudConnectionState == CloudConnectionStateNotConfigured {
-		_, _ = lvObjHide("ui_Home_Header_Cloud_Status_Icon")
-	} else {
-		_, _ = lvObjShow("ui_Home_Header_Cloud_Status_Icon")
-	}
-
-	switch cloudConnectionState {
-	case CloudConnectionStateDisconnected:
-		_, _ = lvImgSetSrc("ui_Home_Header_Cloud_Status_Icon", "cloud_disconnected.png")
-		stopCloudBlink()
-	case CloudConnectionStateConnecting:
-		_, _ = lvImgSetSrc("ui_Home_Header_Cloud_Status_Icon", "cloud.png")
-		startCloudBlink()
-	case CloudConnectionStateConnected:
-		_, _ = lvImgSetSrc("ui_Home_Header_Cloud_Status_Icon", "cloud.png")
-		stopCloudBlink()
-	}
-}
-
-func startCloudBlink() {
-	if cloudBlinkTicker == nil {
-		cloudBlinkTicker = time.NewTicker(2 * time.Second)
-	} else {
-		// do nothing if the blink isn't stopped
-		if cloudBlinkStopped {
-			cloudBlinkLock.Lock()
-			defer cloudBlinkLock.Unlock()
-
-			cloudBlinkStopped = false
-			cloudBlinkTicker.Reset(2 * time.Second)
-		}
-	}
-
-	go func() {
-		for range cloudBlinkTicker.C {
-			if cloudConnectionState != CloudConnectionStateConnecting {
-				continue
-			}
-			_, _ = lvObjFadeOut("ui_Home_Header_Cloud_Status_Icon", 1000)
-			time.Sleep(1000 * time.Millisecond)
-			_, _ = lvObjFadeIn("ui_Home_Header_Cloud_Status_Icon", 1000)
-			time.Sleep(1000 * time.Millisecond)
-		}
-	}()
-}
-
-func stopCloudBlink() {
-	if cloudBlinkTicker != nil {
-		cloudBlinkTicker.Stop()
-	}
-
-	cloudBlinkLock.Lock()
-	defer cloudBlinkLock.Unlock()
-	cloudBlinkStopped = true
 }
 
 var (
@@ -205,34 +151,31 @@ func waitCtrlAndRequestDisplayUpdate(shouldWakeDisplay bool) {
 	waitDisplayUpdate.Lock()
 	defer waitDisplayUpdate.Unlock()
 
-	waitCtrlClientConnected()
+	waitDisplayCtrlClientConnected()
 	requestDisplayUpdate(shouldWakeDisplay)
 }
 
 func updateStaticContents() {
 	//contents that never change
-	updateLabelIfChanged("ui_Home_Content_Mac", networkState.MACString())
-	systemVersion, appVersion, err := GetLocalVersion()
+	updateLabelIfChanged("Network_Address_Mac_Label", networkState.MACString())
+	_, appVersion, err := GetLocalVersion()
 	if err == nil {
-		updateLabelIfChanged("ui_About_Content_Operating_System_Version_ContentLabel", systemVersion.String())
-		updateLabelIfChanged("ui_About_Content_App_Version_Content_Label", appVersion.String())
+		updateLabelIfChanged("Version_App_Version_Label", appVersion.String())
 	}
-
-	updateLabelIfChanged("ui_Status_Content_Device_Id_Content_Label", GetDeviceID())
 }
 
 // setDisplayBrightness sets /sys/class/backlight/backlight/brightness to alter
-// the backlight brightness of the JetKVM hardware's display.
+// the backlight brightness of the KVM hardware's display.
 func setDisplayBrightness(brightness int) error {
 	// NOTE: The actual maximum value for this is 255, but out-of-the-box, the value is set to 64.
 	// The maximum set here is set to 100 to reduce the risk of drawing too much power (and besides, 255 is very bright!).
-	if brightness > 100 || brightness < 0 {
+	if brightness > 200 || brightness < 0 {
 		return errors.New("brightness value out of bounds, must be between 0 and 100")
 	}
 
 	// Check the display backlight class is available
 	if _, err := os.Stat(backlightControlClass); errors.Is(err, os.ErrNotExist) {
-		return errors.New("brightness value cannot be set, possibly not running on JetKVM hardware")
+		return errors.New("brightness value cannot be set, possibly not running on KVM hardware")
 	}
 
 	// Set the value
@@ -302,8 +245,6 @@ func wakeDisplay(force bool) {
 
 // watchTsEvents monitors the touchscreen for events and simply calls wakeDisplay() to ensure the
 // touchscreen interface still works even with LCD dimming/off.
-// TODO: This is quite a hack, really we should be getting an event from jetkvm_native, or the whole display backlight
-// control should be hoisted up to jetkvm_native.
 func watchTsEvents() {
 	ts, err := os.OpenFile(touchscreenDevice, os.O_RDONLY, 0666)
 	if err != nil {
@@ -379,11 +320,12 @@ func startBacklightTickers() {
 
 func initDisplay() {
 	go func() {
-		waitCtrlClientConnected()
+		waitDisplayCtrlClientConnected()
 		displayLogger.Info().Msg("setting initial display contents")
 		time.Sleep(500 * time.Millisecond)
 		_, _ = lvDispSetRotation(config.DisplayRotation)
 		updateStaticContents()
+		initTimeZone()
 		displayInited = true
 		displayLogger.Info().Msg("display inited")
 		startBacklightTickers()

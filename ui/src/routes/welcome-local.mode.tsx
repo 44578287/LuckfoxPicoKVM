@@ -4,8 +4,7 @@ import { useState } from "react";
 import GridBackground from "@components/GridBackground";
 import Container from "@components/Container";
 import { Button } from "@components/Button";
-import LogoBlueIcon from "@/assets/logo-blue.png";
-import LogoWhiteIcon from "@/assets/logo-white.svg";
+import LogoLuckfox from "@/assets/logo-luckfox.png";
 import { DEVICE_API } from "@/ui.config";
 
 import { GridCard } from "../components/Card";
@@ -29,7 +28,7 @@ const action = async ({ request }: ActionFunctionArgs) => {
   if (!localAuthMode) return { error: "Please select an authentication mode" };
 
   if (localAuthMode === "password") {
-    return redirect("/welcome/password");
+    return redirect("/mode/password");
   }
 
   if (localAuthMode === "noPassword") {
@@ -62,11 +61,11 @@ export default function WelcomeLocalModeRoute() {
             <div className="max-w-xl space-y-8">
               <div className="animate-fadeIn flex items-center justify-center opacity-0">
                 <img
-                  src={LogoWhiteIcon}
+                  src={LogoLuckfox}
                   alt=""
                   className="-ml-4 hidden h-[32px] dark:block"
                 />
-                <img src={LogoBlueIcon} alt="" className="-ml-4 h-[32px] dark:hidden" />
+                <img src={LogoLuckfox} alt="" className="-ml-4 h-[32px] dark:hidden" />
               </div>
 
               <div
@@ -77,7 +76,7 @@ export default function WelcomeLocalModeRoute() {
                   Local Authentication Method
                 </h1>
                 <p className="font-medium text-slate-600 dark:text-slate-400">
-                  Select how you{"'"}d like to secure your JetKVM device locally.
+                  Select how you{"'"}d like to secure your KVM device locally.
                 </p>
               </div>
 

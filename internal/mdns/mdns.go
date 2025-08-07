@@ -7,7 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jetkvm/kvm/internal/logging"
+	"kvm/internal/logging"
+
 	pion_mdns "github.com/pion/mdns/v2"
 	"github.com/rs/zerolog"
 	"golang.org/x/net/ipv4"

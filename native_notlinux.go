@@ -7,6 +7,18 @@ import (
 	"os/exec"
 )
 
-func startNativeBinary(binaryPath string) (*exec.Cmd, error) {
+func startVideoBinary(binaryPath string) (*exec.Cmd, error) {
+	return nil, fmt.Errorf("not supported")
+}
+
+func startAudioBinary(binaryPath string) (*exec.Cmd, error) {
+	return nil, fmt.Errorf("not supported")
+}
+
+func startVpnBinary(binaryPath string) (*exec.Cmd, error) {
+	return nil, fmt.Errorf("not supported")
+}
+
+func startDisplayBinary(binaryPath string) (*exec.Cmd, error) {
 	return nil, fmt.Errorf("not supported")
 }

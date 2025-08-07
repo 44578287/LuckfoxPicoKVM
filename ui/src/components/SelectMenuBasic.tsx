@@ -88,6 +88,7 @@ export const SelectMenuBasic = React.forwardRef<HTMLSelectElement, SelectMenuPro
 
               // Disabled
               "disabled:pointer-events-none disabled:select-none disabled:bg-slate-50 disabled:text-slate-500/80 dark:disabled:bg-slate-800 dark:disabled:text-slate-400/80",
+        
             )}
             value={value}
             id={id}

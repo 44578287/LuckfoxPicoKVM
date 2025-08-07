@@ -8,7 +8,7 @@ import (
 
 func (d *NBDDevice) runClientConn() {
 	err := client.Connect(d.clientConn, d.dev, &client.Options{
-		ExportName: "jetkvm",
+		ExportName: "kvm",
 		BlockSize:  uint32(4 * 1024),
 	})
 	d.l.Info().Err(err).Msg("nbd client exited")

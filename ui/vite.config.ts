@@ -6,7 +6,7 @@ import basicSsl from "@vitejs/plugin-basic-ssl";
 
 declare const process: {
   env: {
-    JETKVM_PROXY_URL: string;
+    KVM_PROXY_URL: string;
     USE_SSL: string;
   };
 };
@@ -14,7 +14,7 @@ declare const process: {
 export default defineConfig(({ mode, command }) => {
   const isCloud = mode.indexOf("cloud") !== -1;
   const onDevice = mode === "device";
-  const { JETKVM_PROXY_URL, USE_SSL } = process.env;
+  const { KVM_PROXY_URL, USE_SSL } = process.env;
   const useSSL = USE_SSL === "true";
 
   const plugins = [
@@ -32,15 +32,15 @@ export default defineConfig(({ mode, command }) => {
     server: {
       host: "0.0.0.0",
       https: useSSL,
-      proxy: JETKVM_PROXY_URL
+      proxy: KVM_PROXY_URL
         ? {
-            "/me": JETKVM_PROXY_URL,
-            "/device": JETKVM_PROXY_URL,
-            "/webrtc": JETKVM_PROXY_URL,
-            "/auth": JETKVM_PROXY_URL,
-            "/storage": JETKVM_PROXY_URL,
-            "/cloud": JETKVM_PROXY_URL,
-            "/developer": JETKVM_PROXY_URL,
+            "/me": KVM_PROXY_URL,
+            "/device": KVM_PROXY_URL,
+            "/webrtc": KVM_PROXY_URL,
+            "/auth": KVM_PROXY_URL,
+            "/storage": KVM_PROXY_URL,
+            "/cloud": KVM_PROXY_URL,
+            "/developer": KVM_PROXY_URL,
           }
         : undefined,
     },

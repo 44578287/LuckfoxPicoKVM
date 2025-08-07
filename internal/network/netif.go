@@ -5,9 +5,10 @@ import (
 	"net"
 	"sync"
 
-	"github.com/jetkvm/kvm/internal/confparser"
-	"github.com/jetkvm/kvm/internal/logging"
-	"github.com/jetkvm/kvm/internal/udhcpc"
+	"kvm/internal/confparser"
+	"kvm/internal/logging"
+	"kvm/internal/udhcpc"
+
 	"github.com/rs/zerolog"
 
 	"github.com/vishvananda/netlink"
@@ -58,7 +59,7 @@ func NewNetworkInterfaceState(opts *NetworkInterfaceOptions) (*NetworkInterfaceS
 	}
 
 	if opts.DefaultHostname == "" {
-		opts.DefaultHostname = "jetkvm"
+		opts.DefaultHostname = "picokvm"
 	}
 
 	err := confparser.SetDefaultsAndValidate(opts.NetworkConfig)

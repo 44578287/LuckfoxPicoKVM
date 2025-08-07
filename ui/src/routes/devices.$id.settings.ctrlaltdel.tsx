@@ -13,7 +13,7 @@ export default function SettingsCtrlAltDelRoute() {
     <div className="space-y-4">
       <SettingsPageHeader
         title="Action Bar"
-        description="Customize the action bar of your JetKVM interface"
+        description="Customize the action bar of your KVM interface"
       />
       <div className="space-y-4">
         <SettingsItem title="Enable Ctrl-Alt-Del" description="Enable the Ctrl-Alt-Del key on the virtual keyboard">

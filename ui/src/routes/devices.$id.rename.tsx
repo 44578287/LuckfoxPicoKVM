@@ -16,7 +16,6 @@ import DashboardNavbar from "@components/Header";
 import { User } from "@/hooks/stores";
 import { checkAuth } from "@/main";
 import Fieldset from "@components/Fieldset";
-import { CLOUD_API } from "@/ui.config";
 
 import api from "../api";
 
@@ -33,41 +32,7 @@ const action = async ({ params, request }: ActionFunctionArgs) => {
     return { message: "Please specify a name" };
   }
 
-  try {
-    const res = await api.PUT(`${CLOUD_API}/devices/${id}`, {
-      name,
-    });
-    if (!res.ok) {
-      return { message: "There was an error renaming your device. Please try again." };
-    }
-  } catch (e) {
-    console.error(e);
-    return { message: "There was an error renaming your device. Please try again." };
-  }
-
   return redirect("/devices");
-};
-
-const loader = async ({ params }: LoaderFunctionArgs) => {
-  const user = await checkAuth();
-  const { id } = params;
-
-  try {
-    const res = await fetch(`${CLOUD_API}/devices/${id}`, {
-      method: "GET",
-      credentials: "include",
-      mode: "cors",
-    });
-
-    const { device } = (await res.json()) as {
-      device: { id: string; name: string; user: { googleId: string } };
-    };
-
-    return { device, user };
-  } catch (e) {
-    console.error(e);
-    return { devices: [] };
-  }
 };
 
 export default function DeviceIdRename() {
@@ -135,5 +100,4 @@ export default function DeviceIdRename() {
   );
 }
 
-DeviceIdRename.loader = loader;
 DeviceIdRename.action = action;

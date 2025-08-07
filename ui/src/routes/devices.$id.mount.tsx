@@ -6,6 +6,7 @@ import {
   LuHardDrive,
   LuCheck,
   LuUpload,
+  LuRefreshCw,
 } from "react-icons/lu";
 import { PlusCircleIcon, ExclamationTriangleIcon } from "@heroicons/react/20/solid";
 import { TrashIcon } from "@heroicons/react/16/solid";
@@ -13,8 +14,7 @@ import { useNavigate } from "react-router-dom";
 
 import Card, { GridCard } from "@/components/Card";
 import { Button } from "@components/Button";
-import LogoBlueIcon from "@/assets/logo-blue.svg";
-import LogoWhiteIcon from "@/assets/logo-white.svg";
+import LogoLuckfox from "@/assets/logo-luckfox.png";
 import { formatters } from "@/utils";
 import AutoHeight from "@components/AutoHeight";
 import { InputFieldWithLabel } from "@/components/InputField";
@@ -37,6 +37,8 @@ import {
   useMountMediaStore,
   useRTCStore,
 } from "../hooks/stores";
+import { UploadDialog } from "@/components/UploadDialog";
+import { ConfirmDialog } from "@components/ConfirmDialog";
 
 export default function MountRoute() {
   const navigate = useNavigate();
@@ -131,6 +133,33 @@ export function Dialog({ onClose }: { onClose: () => void }) {
     clearMountMediaState();
   }
 
+  function handleSDStorageMount(fileName: string, mode: RemoteVirtualMediaState["mode"]) {
+    console.log(`Mounting ${fileName} as ${mode}`);
+
+    setMountInProgress(true);
+    send("mountWithSDStorage", { filename: fileName, mode }, async resp => {
+      if ("error" in resp) triggerError(resp.error.message);
+
+      clearMountMediaState();
+      syncRemoteVirtualMediaState()
+        .then(() => {
+          navigate("..");
+        })
+        .catch(err => {
+          triggerError(err instanceof Error ? err.message : String(err));
+        })
+        .finally(() => {
+          // We do this because the mounting is too fast and the UI gets choppy
+          // and the modal exit animation for like 500ms
+          setTimeout(() => {
+            setMountInProgress(false);
+          }, 500);
+        });
+    });
+
+    clearMountMediaState();
+  }
+  
   function handleBrowserMount(file: File, mode: RemoteVirtualMediaState["mode"]) {
     console.log(`Mounting ${file.name} as ${mode}`);
 
@@ -159,13 +188,15 @@ export function Dialog({ onClose }: { onClose: () => void }) {
     );
   }
 
-  const [selectedMode, setSelectedMode] = useState<"browser" | "url" | "device">("url");
+  const [selectedMode, setSelectedMode] = useState<"browser" | "url" | "device" | "sd">("device");
   return (
     <AutoHeight>
       <div
         className={cx("mx-auto max-w-4xl px-4 transition-all duration-300 ease-in-out", {
           "max-w-4xl": modalView === "mode",
-          "max-w-2xl": modalView === "device",
+          "max-w-2xl": 
+            modalView === "device" ||
+            modalView === "sd",
           "max-w-xl":
             modalView === "browser" ||
             modalView === "url" ||
@@ -177,13 +208,13 @@ export function Dialog({ onClose }: { onClose: () => void }) {
           <div className="p-10">
             <div className="flex flex-col items-start justify-start space-y-4 text-left">
               <img
-                src={LogoBlueIcon}
-                alt="JetKVM Logo"
+                src={LogoLuckfox}
+                alt="KVM Logo"
                 className="block h-[24px] dark:hidden"
               />
               <img
-                src={LogoWhiteIcon}
-                alt="JetKVM Logo"
+                src={LogoLuckfox}
+                alt="KVM Logo"
                 className="hidden h-[24px] dark:mt-0! dark:block"
               />
               {modalView === "mode" && (
@@ -237,6 +268,23 @@ export function Dialog({ onClose }: { onClose: () => void }) {
                 />
               )}
 
+              {modalView === "sd" && (
+                <SDFileView
+                  onBack={() => {
+                    setMountInProgress(false);
+                    setModalView("mode");
+                  }}
+                  mountInProgress={mountInProgress}
+                  onMountStorageFile={(fileName, mode) => {
+                    handleSDStorageMount(fileName, mode);
+                  }}
+                  onNewImageClick={incompleteFile => {
+                    setIncompleteFileName(incompleteFile || null);
+                    setModalView("upload_sd");
+                  }}
+                />
+              )}
+
               {modalView === "upload" && (
                 <UploadFileView
                   onBack={() => setModalView("device")}
@@ -245,9 +293,22 @@ export function Dialog({ onClose }: { onClose: () => void }) {
                     // Implement cancel upload logic here
                   }}
                   incompleteFileName={incompleteFileName || undefined}
+                  media="local"
                 />
               )}
 
+              {modalView === "upload_sd" && (
+                <UploadFileView
+                  onBack={() => setModalView("sd")}
+                  onCancelUpload={() => {
+                    setModalView("sd");
+                    // Implement cancel upload logic here
+                  }}
+                  incompleteFileName={incompleteFileName || undefined}
+                  media="sd"
+                />
+              )}
+              
               {modalView === "error" && (
                 <ErrorView
                   errorMessage={errorMessage}
@@ -275,8 +336,8 @@ function ModeSelectionView({
   setSelectedMode,
 }: {
   onClose: () => void;
-  selectedMode: "browser" | "url" | "device";
-  setSelectedMode: (mode: "browser" | "url" | "device") => void;
+  selectedMode: "browser" | "url" | "device" | "sd";
+  setSelectedMode: (mode: "browser" | "url" | "device" | "sd") => void;
 }) {
   const { setModalView } = useMountMediaStore();
 
@@ -290,28 +351,36 @@ function ModeSelectionView({
           Choose how you want to mount your virtual media
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         {[
+          //{
+          //  label: "Browser Mount",
+          //  value: "browser",
+          //  description: "Stream files directly from your browser",
+          //  icon: LuGlobe,
+          //  tag: "Coming Soon",
+          //  disabled: true,
+          //},
+          //{
+          //  label: "URL Mount",
+          //  value: "url",
+          //  description: "Mount files from any public web address",
+          //  icon: LuLink,
+          //  tag: "Experimental",
+          //  disabled: false,
+          //},
           {
-            label: "Browser Mount",
-            value: "browser",
-            description: "Stream files directly from your browser",
-            icon: LuGlobe,
-            tag: "Coming Soon",
-            disabled: true,
-          },
-          {
-            label: "URL Mount",
-            value: "url",
-            description: "Mount files from any public web address",
-            icon: LuLink,
-            tag: "Experimental",
+            label: "KVM Storage Mount",
+            value: "device",
+            description: "Mount previously uploaded files from the KVM storage",
+            icon: LuRadioReceiver,
+            tag: null,
             disabled: false,
           },
           {
-            label: "JetKVM Storage Mount",
-            value: "device",
-            description: "Mount previously uploaded files from the JetKVM storage",
+            label: "KVM MicroSD Mount",
+            value: "sd",
+            description: "Mount previously uploaded files from the KVM MicroSD",
             icon: LuRadioReceiver,
             tag: null,
             disabled: false,
@@ -792,8 +861,8 @@ function DeviceFileView({
   return (
     <div className="w-full space-y-4">
       <ViewHeader
-        title="Mount from JetKVM Storage"
-        description="Select an image to mount from the JetKVM storage"
+        title="Mount from KVM Storage"
+        description="Select an image to mount from the KVM storage"
       />
       <div
         className="w-full animate-fadeIn opacity-0"
@@ -977,14 +1046,393 @@ function DeviceFileView({
   );
 }
 
+function SDFileView({
+  onMountStorageFile,
+  mountInProgress,
+  onBack,
+  onNewImageClick,
+}: {
+  onMountStorageFile: (name: string, mode: RemoteVirtualMediaState["mode"]) => void;
+  mountInProgress: boolean;
+  onBack: () => void;
+  onNewImageClick: (incompleteFileName?: string) => void;
+}) {
+  const [onStorageFiles, setOnStorageFiles] = useState<
+    {
+      name: string;
+      size: string;
+      createdAt: string;
+    }[]
+  >([]);
+
+  const [sdMountStatus, setSDMountStatus] = useState<"ok" | "none" | "fail" | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [usbMode, setUsbMode] = useState<RemoteVirtualMediaState["mode"]>("CDROM");
+  const [currentPage, setCurrentPage] = useState(1);
+  const filesPerPage = 5;
+
+  const [send] = useJsonRpc();
+
+  interface StorageSpace {
+    bytesUsed: number;
+    bytesFree: number;
+  }
+  const [storageSpace, setStorageSpace] = useState<StorageSpace | null>(null);
+
+  const percentageUsed = useMemo(() => {
+    if (!storageSpace) return 0;
+    return Number(
+      (
+        (storageSpace.bytesUsed / (storageSpace.bytesUsed + storageSpace.bytesFree)) *
+        100
+      ).toFixed(1),
+    );
+  }, [storageSpace]);
+
+  const bytesUsed = useMemo(() => {
+    if (!storageSpace) return 0;
+    return storageSpace.bytesUsed;
+  }, [storageSpace]);
+
+  const bytesFree = useMemo(() => {
+    if (!storageSpace) return 0;
+    return storageSpace.bytesFree;
+  }, [storageSpace]);
+
+  const syncStorage = useCallback(() => {
+    send("getSDMountStatus", {}, res => {
+      if ("error" in res) {
+        notifications.error(`Failed to check SD card status: ${res.error}`);
+        setSDMountStatus(null);
+        return;
+      }
+
+      const { status } = res.result as { status: "ok" | "none" | "fail" }; 
+      setSDMountStatus(status);
+
+      if (status === "none") {
+        notifications.error("No SD card detected, please insert an SD card");
+        return;
+      }
+
+      if (status === "fail") {
+        notifications.error("SD card mount failed, please format the SD card");
+        return;
+      }
+
+      send("listSDStorageFiles", {}, res => {
+        if ("error" in res) {
+          notifications.error(`Error listing SD storage files: ${res.error}`);
+          return;
+        }
+        const { files } = res.result as StorageFiles;
+        const formattedFiles = files.map(file => ({
+          name: file.filename,
+          size: formatters.bytes(file.size),
+          createdAt: formatters.date(new Date(file?.createdAt)),
+        }));
+        setOnStorageFiles(formattedFiles);
+        console.log("SD storage files:", formattedFiles);
+      });
+
+      send("getSDStorageSpace", {}, res => {
+        if ("error" in res) {
+          notifications.error(`Error getting SD storage space: ${res.error}`);
+          return;
+        }
+        const space = res.result as StorageSpace;
+        setStorageSpace(space);
+      });
+    });
+  }, [send]);
+
+  useEffect(() => {
+    syncStorage();
+  }, [syncStorage]);
+
+  interface StorageFiles {
+    files: {
+      filename: string;
+      size: number;
+      createdAt: string;
+    }[];
+  }
+
+  useEffect(() => {
+    syncStorage();
+  }, [syncStorage]);
+
+  function handleSDDeleteFile(file: { name: string; size: string; createdAt: string }) {
+    console.log("Deleting file:", file);
+    send("deleteSDStorageFile", { filename: file.name }, res => {
+      if ("error" in res) {
+        notifications.error(`Error deleting file: ${res.error}`);
+        return;
+      }
+
+      syncStorage();
+    });
+  }
+
+  function handleOnSelectFile(file: { name: string; size: string; createdAt: string }) {
+    setSelected(file.name);
+    if (file.name.endsWith(".iso")) {
+      setUsbMode("CDROM");
+    } else if (file.name.endsWith(".img")) {
+      setUsbMode("CDROM");
+    }
+  }
+
+  const indexOfLastFile = currentPage * filesPerPage;
+  const indexOfFirstFile = indexOfLastFile - filesPerPage;
+  const currentFiles = onStorageFiles.slice(indexOfFirstFile, indexOfLastFile);
+  const totalPages = Math.ceil(onStorageFiles.length / filesPerPage);
+
+  const handlePreviousPage = () => {
+    setCurrentPage(prev => Math.max(prev - 1, 1));
+  };
+
+  const handleNextPage = () => {
+    setCurrentPage(prev => Math.min(prev + 1, totalPages));
+  };
+
+  function handleResetSDStorage() { 
+    send("resetSDStorage", {}, res => {
+      console.log("Reset SD storage response:", res);
+      if ("error" in res) {
+        notifications.error(`Failed to reset SD card`);
+        return;
+      }
+    }); 
+    syncStorage();
+  }
+  
+  if (sdMountStatus && sdMountStatus !== "ok") {
+    return (
+      <div className="w-full space-y-4">
+        <ViewHeader
+          title="Mount from KVM MicroSD Card"
+          description="Select an image to mount from the KVM storage"
+        />
+        <div className="flex items-center justify-center py-8 text-center">
+          <div className="space-y-3">
+            <ExclamationTriangleIcon className="mx-auto h-6 w-6 text-red-500" />
+            <h3 className="text-sm font-semibold leading-none text-black dark:text-white">
+              {sdMountStatus === "none"
+                ? "No SD card detected"
+                : "SD card mount failed"}  
+              <Button
+                size="XS"
+                theme="light"
+                LeadingIcon={LuRefreshCw}
+                onClick={handleResetSDStorage}
+              />
+            </h3>
+            <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
+              {sdMountStatus === "none"
+                ? "Please insert an SD card and try again."
+                : "Please format the SD card and try again."}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full space-y-4">
+      <ViewHeader
+        title="Mount from KVM MicroSD Card"
+        description="Select an image to mount from the KVM storage"
+      />
+      <div
+        className="w-full animate-fadeIn opacity-0"
+        style={{
+          animationDuration: "0.7s",
+          animationDelay: "0.1s",
+        }}
+      >
+        <Card>
+          {onStorageFiles.length === 0 ? (
+            <div className="flex items-center justify-center py-8 text-center">
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <PlusCircleIcon className="mx-auto h-6 w-6 text-blue-700 dark:text-blue-500" />
+                  <h3 className="text-sm font-semibold leading-none text-black dark:text-white">
+                    No images available
+                  </h3>
+                  <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
+                    Upload an image to start virtual media mounting.
+                  </p>
+                </div>
+                <div>
+                  <Button
+                    size="SM"
+                    theme="primary"
+                    text="Upload a new image"
+                    onClick={() => onNewImageClick()}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="divide-y-slate-800/30 w-full divide-y dark:divide-slate-300/20">
+              {currentFiles.map((file, index) => (
+                <PreUploadedImageItem
+                  key={index}
+                  name={file.name}
+                  size={file.size}
+                  uploadedAt={file.createdAt}
+                  isIncomplete={file.name.endsWith(".incomplete")}
+                  isSelected={selected === file.name}
+                  onDelete={() => {
+                    const selectedFile = onStorageFiles.find(f => f.name === file.name);
+                    if (!selectedFile) return;
+                    if (window.confirm("Are you sure you want to delete " + selectedFile.name + "?")) {
+                      handleSDDeleteFile(selectedFile);
+                    }
+                  }}
+                  onSelect={() => handleOnSelectFile(file)}
+                  onContinueUpload={() => onNewImageClick(file.name)}
+                />
+              ))}
+
+              {onStorageFiles.length > filesPerPage && (
+                <div className="flex items-center justify-between px-3 py-2">
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                    Showing <span className="font-bold">{indexOfFirstFile + 1}</span> to{" "}
+                    <span className="font-bold">
+                      {Math.min(indexOfLastFile, onStorageFiles.length)}
+                    </span>{" "}
+                    of <span className="font-bold">{onStorageFiles.length}</span> results
+                  </p>
+                  <div className="flex items-center gap-x-2">
+                    <Button
+                      size="XS"
+                      theme="light"
+                      text="Previous"
+                      onClick={handlePreviousPage}
+                      disabled={currentPage === 1}
+                    />
+                    <Button
+                      size="XS"
+                      theme="light"
+                      text="Next"
+                      onClick={handleNextPage}
+                      disabled={currentPage === totalPages}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {onStorageFiles.length > 0 ? (
+        <div
+          className="flex animate-fadeIn items-end justify-between opacity-0"
+          style={{
+            animationDuration: "0.7s",
+            animationDelay: "0.15s",
+          }}
+        >
+          <Fieldset disabled={selected === null}>
+            <UsbModeSelector usbMode={usbMode} setUsbMode={setUsbMode} />
+          </Fieldset>
+          <div className="flex items-center gap-x-2">
+            <Button size="MD" theme="blank" text="Back" onClick={() => onBack()} />
+            <Button
+              size="MD"
+              disabled={selected === null || mountInProgress}
+              theme="primary"
+              text="Mount File"
+              loading={mountInProgress}
+              onClick={() =>
+                onMountStorageFile(
+                  onStorageFiles.find(f => f.name === selected)?.name || "",
+                  usbMode,
+                )
+              }
+            />
+          </div>
+        </div>
+      ) : (
+        <div
+          className="flex animate-fadeIn items-end justify-end opacity-0"
+          style={{
+            animationDuration: "0.7s",
+            animationDelay: "0.15s",
+          }}
+        >
+          <div className="flex items-center gap-x-2">
+            <Button size="MD" theme="light" text="Back" onClick={() => onBack()} />
+          </div>
+        </div>
+      )}
+      <hr className="border-slate-800/20 dark:border-slate-300/20" />
+      <div
+        className="animate-fadeIn space-y-2 opacity-0"
+        style={{
+          animationDuration: "0.7s",
+          animationDelay: "0.20s",
+        }}
+      >
+        <div className="flex justify-between text-sm">
+          <span className="font-medium text-black dark:text-white">
+            Available Storage
+          </span>
+          <span className="text-slate-700 dark:text-slate-300">
+            {percentageUsed}% used
+          </span>
+        </div>
+        <div className="h-3.5 w-full overflow-hidden rounded-sm bg-slate-200 dark:bg-slate-700">
+          <div
+            className="h-full rounded-sm bg-blue-700 transition-all duration-300 ease-in-out dark:bg-blue-500"
+            style={{ width: `${percentageUsed}%` }}
+          ></div>
+        </div>
+        <div className="flex justify-between text-sm text-slate-600">
+          <span className="text-slate-700 dark:text-slate-300">
+            {formatters.bytes(bytesUsed)} used
+          </span>
+          <span className="text-slate-700 dark:text-slate-300">
+            {formatters.bytes(bytesFree)} free
+          </span>
+        </div>
+      </div>
+
+      {onStorageFiles.length > 0 && (
+        <div
+          className="w-full animate-fadeIn opacity-0"
+          style={{
+            animationDuration: "0.7s",
+            animationDelay: "0.25s",
+          }}
+        >
+          <Button
+            size="MD"
+            theme="light"
+            fullWidth
+            text="Upload a new image"
+            onClick={() => onNewImageClick()}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UploadFileView({
   onBack,
   onCancelUpload,
   incompleteFileName,
+  media,
 }: {
   onBack: () => void;
   onCancelUpload: () => void;
   incompleteFileName?: string;
+  media?: string;
 }) {
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "success">(
     "idle",
@@ -1211,198 +1659,229 @@ function UploadFileView({
       setUploadState("uploading");
       console.log("Upload state set to 'uploading'");
 
-      send("startStorageFileUpload", { filename: file.name, size: file.size }, resp => {
-        console.log("startStorageFileUpload response:", resp);
-        if ("error" in resp) {
-          console.error("Upload error:", resp.error.message);
-          setUploadError(resp.error.data || resp.error.message);
-          setUploadState("idle");
-          console.log("Upload state set to 'idle'");
-          return;
-        }
+      if ( media === "sd" ) {
+        send("startSDStorageFileUpload", { filename: file.name, size: file.size }, resp => {
+          console.log("startSDStorageFileUpload response:", resp);
+          if ("error" in resp) {
+            console.error("Upload error:", resp.error.message);
+            setUploadError(resp.error.data || resp.error.message);
+            setUploadState("idle");
+            console.log("Upload state set to 'idle'");
+            return;
+          }
 
-        const { alreadyUploadedBytes, dataChannel } = resp.result as {
-          alreadyUploadedBytes: number;
-          dataChannel: string;
-        };
+          const { alreadyUploadedBytes, dataChannel } = resp.result as {
+            alreadyUploadedBytes: number;
+            dataChannel: string;
+          };
 
-        console.log(
-          `Already uploaded bytes: ${alreadyUploadedBytes}, Data channel: ${dataChannel}`,
-        );
+          console.log(
+            `Already uploaded bytes: ${alreadyUploadedBytes}, Data channel: ${dataChannel}`,
+          );
 
-        if (isOnDevice) {
-          handleHttpUpload(file, alreadyUploadedBytes, dataChannel);
-        } else {
-          handleWebRTCUpload(file, alreadyUploadedBytes, dataChannel);
-        }
-      });
+          if (isOnDevice) {
+            handleHttpUpload(file, alreadyUploadedBytes, dataChannel);
+          } else {
+            handleWebRTCUpload(file, alreadyUploadedBytes, dataChannel);
+          }
+        });
+      }
+      else {
+        send("startStorageFileUpload", { filename: file.name, size: file.size }, resp => {
+          console.log("startStorageFileUpload response:", resp);
+          if ("error" in resp) {
+            console.error("Upload error:", resp.error.message);
+            setUploadError(resp.error.data || resp.error.message);
+            setUploadState("idle");
+            console.log("Upload state set to 'idle'");
+            return;
+          }
+
+          const { alreadyUploadedBytes, dataChannel } = resp.result as {
+            alreadyUploadedBytes: number;
+            dataChannel: string;
+          };
+
+          console.log(
+            `Already uploaded bytes: ${alreadyUploadedBytes}, Data channel: ${dataChannel}`,
+          );
+
+          if (isOnDevice) {
+            handleHttpUpload(file, alreadyUploadedBytes, dataChannel);
+          } else {
+            handleWebRTCUpload(file, alreadyUploadedBytes, dataChannel);
+          }
+        });        
+      }
     }
   };
-
+  
   return (
     <div className="w-full space-y-4">
-      <ViewHeader
+      <UploadDialog
+        open={true}
         title="Upload New Image"
         description={
           incompleteFileName
             ? `Continue uploading "${incompleteFileName}"`
-            : "Select an image file to upload to JetKVM storage"
+            : "Select an image file to upload to KVM storage"
         }
-      />
-      <div
-        className="animate-fadeIn space-y-2 opacity-0"
-        style={{
-          animationDuration: "0.7s",
-        }}
       >
         <div
-          onClick={() => {
-            if (uploadState === "idle") {
-              document.getElementById("file-upload")?.click();
-            }
+          className="animate-fadeIn space-y-2 opacity-0"
+          style={{
+            animationDuration: "0.7s",
           }}
-          className="block select-none"
         >
-          <div className="group">
-            <Card
-              className={cx("transition-all duration-300", {
-                "cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-900/50":
-                  uploadState === "idle",
-              })}
-            >
-              <div className="h-[186px] w-full px-4">
-                <div className="flex h-full flex-col items-center justify-center text-center">
-                  {uploadState === "idle" && (
-                    <div className="space-y-1">
-                      <div className="inline-block">
-                        <Card>
-                          <div className="p-1">
-                            <PlusCircleIcon className="h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" />
-                          </div>
-                        </Card>
-                      </div>
-                      <h3 className="text-sm leading-none font-semibold text-black dark:text-white">
-                        {incompleteFileName
-                          ? `Click to select "${incompleteFileName.replace(".incomplete", "")}"`
-                          : "Click to select a file"}
-                      </h3>
-                      <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-                        Supported formats: ISO, IMG
-                      </p>
-                    </div>
-                  )}
-
-                  {uploadState === "uploading" && (
-                    <div className="w-full max-w-sm space-y-2 text-left">
-                      <div className="inline-block">
-                        <Card>
-                          <div className="p-1">
-                            <LuUpload className="h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" />
-                          </div>
-                        </Card>
-                      </div>
-                      <h3 className="leading-non text-lg font-semibold text-black dark:text-white">
-                        Uploading {formatters.truncateMiddle(uploadedFileName, 30)}
-                      </h3>
-                      <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-                        {formatters.bytes(uploadedFileSize || 0)}
-                      </p>
-                      <div className="w-full space-y-2">
-                        <div className="h-3.5 w-full overflow-hidden rounded-full bg-slate-300 dark:bg-slate-700">
-                          <div
-                            className="h-3.5 rounded-full bg-blue-700 transition-all duration-500 ease-linear dark:bg-blue-500"
-                            style={{ width: `${uploadProgress}%` }}
-                          ></div>
+          <div
+            onClick={() => {
+              if (uploadState === "idle") {
+                document.getElementById("file-upload")?.click();
+              }
+            }}
+            className="block select-none"
+          >
+            <div className="group">
+              <Card
+                className={cx("transition-all duration-300", {
+                  "cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-900/50":
+                    uploadState === "idle",
+                })}
+              >
+                <div className="h-[186px] w-full px-4">
+                  <div className="flex h-full flex-col items-center justify-center text-center">
+                    {uploadState === "idle" && (
+                      <div className="space-y-1">
+                        <div className="inline-block">
+                          <Card>
+                            <div className="p-1">
+                              <PlusCircleIcon className="h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" />
+                            </div>
+                          </Card>
                         </div>
-                        <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
-                          <span>Uploading...</span>
-                          <span>
-                            {uploadSpeed !== null
-                              ? `${formatters.bytes(uploadSpeed)}/s`
-                              : "Calculating..."}
-                          </span>
+                        <h3 className="text-sm leading-none font-semibold text-black dark:text-white">
+                          {incompleteFileName
+                            ? `Click to select "${incompleteFileName.replace(".incomplete", "")}"`
+                            : "Click to select a file"}
+                        </h3>
+                        <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
+                          Supported formats: ISO, IMG
+                        </p>
+                      </div>
+                    )}
+
+                    {uploadState === "uploading" && (
+                      <div className="w-full max-w-sm space-y-2 text-left">
+                        <div className="inline-block">
+                          <Card>
+                            <div className="p-1">
+                              <LuUpload className="h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" />
+                            </div>
+                          </Card>
+                        </div>
+                        <h3 className="leading-non text-lg font-semibold text-black dark:text-white">
+                          Uploading {formatters.truncateMiddle(uploadedFileName, 30)}
+                        </h3>
+                        <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
+                          {formatters.bytes(uploadedFileSize || 0)}
+                        </p>
+                        <div className="w-full space-y-2">
+                          <div className="h-3.5 w-full overflow-hidden rounded-full bg-slate-300 dark:bg-slate-700">
+                            <div
+                              className="h-3.5 rounded-full bg-blue-700 transition-all duration-500 ease-linear dark:bg-blue-500"
+                              style={{ width: `${uploadProgress}%` }}
+                            ></div>
+                          </div>
+                          <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                            <span>Uploading...</span>
+                            <span>
+                              {uploadSpeed !== null
+                                ? `${formatters.bytes(uploadSpeed)}/s`
+                                : "Calculating..."}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {uploadState === "success" && (
-                    <div className="space-y-1">
-                      <div className="inline-block">
-                        <Card>
-                          <div className="p-1">
-                            <LuCheck className="h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" />
-                          </div>
-                        </Card>
+                    {uploadState === "success" && (
+                      <div className="space-y-1">
+                        <div className="inline-block">
+                          <Card>
+                            <div className="p-1">
+                              <LuCheck className="h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" />
+                            </div>
+                          </Card>
+                        </div>
+                        <h3 className="text-sm leading-none font-semibold text-black dark:text-white">
+                          Upload successful
+                        </h3>
+                        <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
+                          {formatters.truncateMiddle(uploadedFileName, 40)} has been
+                          uploaded
+                        </p>
                       </div>
-                      <h3 className="text-sm leading-none font-semibold text-black dark:text-white">
-                        Upload successful
-                      </h3>
-                      <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-                        {formatters.truncateMiddle(uploadedFileName, 40)} has been
-                        uploaded
-                      </p>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            </div>
           </div>
-        </div>
-        <input
-          id="file-upload"
-          type="file"
-          onChange={handleFileChange}
-          className="hidden"
-          accept=".iso, .img"
-        />
-        {fileError && (
-          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{fileError}</p>
-        )}
-      </div>
-
-      {/* Display upload error if present */}
-      {uploadError && (
-        <div
-          className="mt-2 animate-fadeIn truncate text-sm text-red-600 dark:text-red-400 opacity-0"
-          style={{ animationDuration: "0.7s" }}
-        >
-          Error: {uploadError}
-        </div>
-      )}
-
-      <div
-        className="flex w-full animate-fadeIn items-end opacity-0"
-        style={{
-          animationDuration: "0.7s",
-          animationDelay: "0.1s",
-        }}
-      >
-        <div className="flex w-full justify-end space-x-2">
-          {uploadState === "uploading" ? (
-            <Button
-              size="MD"
-              theme="light"
-              text="Cancel Upload"
-              onClick={() => {
-                onCancelUpload();
-                setUploadState("idle");
-                setUploadProgress(0);
-                setUploadedFileName(null);
-                setUploadedFileSize(null);
-                setUploadSpeed(null);
-              }}
-            />
-          ) : (
-            <Button
-              size="MD"
-              theme={uploadState === "success" ? "primary" : "light"}
-              text="Back to Overview"
-              onClick={onBack}
-            />
+          <input
+            id="file-upload"
+            type="file"
+            onChange={handleFileChange}
+            className="hidden"
+            accept=".iso, .img"
+          />
+          {fileError && (
+            <p className="mt-2 text-sm text-red-600 dark:text-red-400">{fileError}</p>
           )}
         </div>
-      </div>
+
+        {/* Display upload error if present */}
+        {uploadError && (
+          <div
+            className="mt-2 animate-fadeIn truncate text-sm text-red-600 dark:text-red-400 opacity-0"
+            style={{ animationDuration: "0.7s" }}
+          >
+            Error: {uploadError}
+          </div>
+        )}
+
+        <div
+          className="flex w-full animate-fadeIn items-end opacity-0"
+          style={{
+            animationDuration: "0.7s",
+            animationDelay: "0.1s",
+          }}
+        >
+          <div className="flex w-full justify-end space-x-2">
+            {uploadState === "uploading" ? (
+              <Button
+                size="MD"
+                theme="light"
+                text="Cancel Upload"
+                onClick={() => {
+                  onCancelUpload();
+                  setUploadState("idle");
+                  setUploadProgress(0);
+                  setUploadedFileName(null);
+                  setUploadedFileSize(null);
+                  setUploadSpeed(null);
+                }}
+              />
+            ) : (
+              <Button
+                size="MD"
+                theme={uploadState === "success" ? "primary" : "light"}
+                text="Back to Overview"
+                onClick={onBack}
+              />
+            )}
+          </div>
+        </div>
+      </UploadDialog>
     </div>
   );
 }

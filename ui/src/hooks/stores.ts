@@ -114,12 +114,19 @@ interface RTCState {
   transceiver: RTCRtpTransceiver | null;
   setTransceiver: (transceiver: RTCRtpTransceiver) => void;
 
+  audioTransceiver: RTCRtpTransceiver | null;
+  setAudioTransceiver: (transceiver: RTCRtpTransceiver) => void;
+
   mediaStream: MediaStream | null;
   setMediaStream: (stream: MediaStream) => void;
 
   videoStreamStats: RTCInboundRtpStreamStats | null;
   appendVideoStreamStats: (state: RTCInboundRtpStreamStats) => void;
   videoStreamStatsHistory: Map<number, RTCInboundRtpStreamStats>;
+
+  audioStreamStats: RTCInboundRtpStreamStats | null;
+  appendAudioStreamStats: (state: RTCInboundRtpStreamStats) => void;
+  audioStreamStatsHistory: Map<number, RTCInboundRtpStreamStats>;
 
   isTurnServerInUse: boolean;
   setTurnServerInUse: (inUse: boolean) => void;
@@ -157,6 +164,9 @@ export const useRTCStore = create<RTCState>(set => ({
   transceiver: null,
   setTransceiver: transceiver => set({ transceiver }),
 
+  audioTransceiver: null,
+  setAudioTransceiver: audioTransceiver => set({ audioTransceiver }),
+  
   peerConnectionState: null,
   setPeerConnectionState: state => set({ peerConnectionState: state }),
 
@@ -170,6 +180,10 @@ export const useRTCStore = create<RTCState>(set => ({
   appendVideoStreamStats: stats => set({ videoStreamStats: stats }),
   videoStreamStatsHistory: new Map(),
 
+  audioStreamStats: null,
+  appendAudioStreamStats: stats => set({ audioStreamStats: stats }),
+  audioStreamStatsHistory: new Map(),
+  
   isTurnServerInUse: false,
   setTurnServerInUse: inUse => set({ isTurnServerInUse: inUse }),
 
@@ -304,6 +318,15 @@ interface SettingsState {
 
   backlightSettings: BacklightSettings;
   setBacklightSettings: (settings: BacklightSettings) => void;
+  
+  timeZone: string;
+  setTimeZone: (timezone: string) => void;
+
+  ledGreenMode: string;
+  setLedGreenMode: (mode: string) => void;
+
+  ledYellowMode: string;
+  setLedYellowMode: (mode: string) => void;
 
   keyboardLayout: string;
   setKeyboardLayout: (layout: string) => void;
@@ -345,7 +368,7 @@ export const useSettingsStore = create(
       developerMode: false,
       setDeveloperMode: enabled => set({ developerMode: enabled }),
 
-      displayRotation: "270",
+      displayRotation: "180",
       setDisplayRotation: (rotation: string) => set({ displayRotation: rotation }),
 
       backlightSettings: {
@@ -355,6 +378,15 @@ export const useSettingsStore = create(
       },
       setBacklightSettings: (settings: BacklightSettings) =>
         set({ backlightSettings: settings }),
+
+      timeZone: "CST-8",
+      setTimeZone: (timezone: string) => set({ timeZone: timezone }),
+
+      ledGreenMode: "network-rx",
+      setLedGreenMode: (mode: string) => set({ ledGreenMode: mode }),
+
+      ledYellowMode: "activity",
+      setLedYellowMode: (mode: string) => set({ ledYellowMode: mode }),
 
       keyboardLayout: "en-US",
       setKeyboardLayout: layout => set({ keyboardLayout: layout }),
@@ -402,7 +434,7 @@ export interface MountMediaState {
   remoteVirtualMediaState: RemoteVirtualMediaState | null;
   setRemoteVirtualMediaState: (state: MountMediaState["remoteVirtualMediaState"]) => void;
 
-  modalView: "mode" | "browser" | "url" | "device" | "upload" | "error" | null;
+  modalView: "mode" | "browser" | "url" | "device" | "sd" | "upload" | "upload_sd" | "error" | null;
   setModalView: (view: MountMediaState["modalView"]) => void;
 
   isMountMediaDialogOpen: boolean;
@@ -943,3 +975,45 @@ export const useMacrosStore = create<MacrosState>((set, get) => ({
     }
   },
 }));
+
+export interface VpnState {
+  tailScaleConnectionState: "connecting" | "connected" | "disconnected" | "closed" | "logined";
+  setTailScaleConnectionState: (state: VpnState["tailScaleConnectionState"]) => void;
+  
+  tailScaleLoginUrl: string | null;
+  setTailScaleLoginUrl: (url: string) => void;
+  
+  tailScaleXEdge: boolean;
+  setTailScaleXEdge: (xEdge: boolean) => void;
+
+  tailScaleIP: string | null;
+  setTailScaleIP: (ip: string) => void;
+  
+  zeroTierConnectionState: "connecting" | "connected" | "disconnected" | "closed" | "logined";
+  setZeroTierConnectionState: (state: VpnState["zeroTierConnectionState"]) => void;
+ 
+  zeroTierNetworkID: string | null;
+  setZeroTierNetworkID: (networkID: string) => void;
+  
+  zeroTierIP: string | null;
+  setZeroTierIP: (ip: string) => void;
+};
+
+export const useVpnStore = create<VpnState>(set => ({
+  tailScaleConnectionState: "disconnected",
+  setTailScaleConnectionState: state => set({ tailScaleConnectionState: state }),
+  tailScaleLoginUrl: null,
+  setTailScaleLoginUrl: url => set({ tailScaleLoginUrl: url }),
+  tailScaleXEdge: false,
+  setTailScaleXEdge: xEdge => set({ tailScaleXEdge: xEdge }),
+  tailScaleIP: null,
+  setTailScaleIP: url => set({ tailScaleIP: url }),
+  
+  zeroTierConnectionState: "disconnected",
+  setZeroTierConnectionState: state => set({ zeroTierConnectionState: state }),
+  zeroTierNetworkID: null,
+  setZeroTierNetworkID: networkID => set({ zeroTierNetworkID: networkID }),
+  zeroTierIP: null,
+  setZeroTierIP: networkID => set({ zeroTierIP: networkID }),
+}));
+

@@ -4,7 +4,7 @@ import "github.com/rs/zerolog"
 
 var (
 	rootZerologLogger = zerolog.New(defaultLogOutput).With().
-				Str("scope", "jetkvm").
+				Str("scope", "kvm").
 				Timestamp().
 				Stack().
 				Logger()

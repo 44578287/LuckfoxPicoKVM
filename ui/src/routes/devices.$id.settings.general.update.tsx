@@ -9,6 +9,13 @@ import { UpdateState, useDeviceStore, useUpdateStore } from "@/hooks/stores";
 import notifications from "@/notifications";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { useDeviceUiNavigation } from "@/hooks/useAppNavigation";
+import { SelectMenuBasic } from "../components/SelectMenuBasic";
+import { SettingsItem } from "./devices.$id.settings";
+
+const updateSourceOptions = [
+  { value: "github", label:"github"},
+  { value: "gitee", label:"gitee"},
+];
 
 export default function SettingsGeneralUpdateRoute() {
   const navigate = useNavigate();
@@ -48,6 +55,12 @@ export interface SystemVersionInfo {
   appUpdateAvailable: boolean;
   error?: string;
 }
+
+export interface LocalVersionInfo {
+  appVersion: string; 
+  systemVersion: string;
+}
+
 
 export function Dialog({
   onClose,
@@ -435,6 +448,23 @@ function UpdateAvailableState({
   onConfirmUpdate: () => void;
   onClose: () => void;
 }) {
+  
+  const [send] = useJsonRpc();
+  const [updateSource, setUpdateSource] = useState("github");
+  const handleUpdateSourceChange = (source: string) => {
+    send("setUpdateSource", { source: source }, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to set stream quality: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+      
+      notifications.success(`Update source set to ${updateSourceOptions.find(x => x.value === source)?.label}`);
+      setUpdateSource(source);
+    }); 
+  };
+  
   return (
     <div className="flex flex-col items-start justify-start space-y-4 text-left">
       <div className="text-left">
@@ -460,9 +490,27 @@ function UpdateAvailableState({
             </>
           ) : null}
         </p>
-        <div className="flex items-center justify-start gap-x-2">
-          <Button size="SM" theme="primary" text="Update Now" onClick={onConfirmUpdate} />
-          <Button size="SM" theme="light" text="Do it later" onClick={onClose} />
+          
+        <div className="space-y-4">
+            <SettingsItem
+              title="Update Source"
+              description="Select the update source"
+            >
+              <SelectMenuBasic
+                size="SM"
+                label=""
+                value={updateSource}
+                options={updateSourceOptions}
+                onChange={e => handleUpdateSourceChange(e.target.value)}
+              />
+            </SettingsItem>  
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-start gap-x-2">
+            <Button size="SM" theme="primary" text="Update Now" onClick={onConfirmUpdate} />
+            <Button size="SM" theme="light" text="Do it later" onClick={onClose} />
+          </div>
         </div>
       </div>
     </div>

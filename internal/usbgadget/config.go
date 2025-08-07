@@ -34,7 +34,8 @@ var defaultGadgetConfig = map[string]gadgetConfigItem{
 			"bcdDevice": "0100",
 		},
 		configAttrs: gadgetAttributes{
-			"MaxPower": "250", // in unit of 2mA
+			"MaxPower":     "250",  // in unit of 2mA
+			"bmAttributes": "0xa0", // 0x80 = bus-powered, 0xa0 = bus-powered + remote wakeup
 		},
 	},
 	"base_info": {
@@ -43,8 +44,8 @@ var defaultGadgetConfig = map[string]gadgetConfigItem{
 		configPath: []string{"strings", "0x409"},
 		attrs: gadgetAttributes{
 			"serialnumber": "",
-			"manufacturer": "JetKVM",
-			"product":      "JetKVM USB Emulation Device",
+			"manufacturer": "KVM",
+			"product":      "KVM USB Emulation Device",
 		},
 		configAttrs: gadgetAttributes{
 			"configuration": "Config 1: HID",
@@ -59,6 +60,23 @@ var defaultGadgetConfig = map[string]gadgetConfigItem{
 	// mass storage
 	"mass_storage_base": massStorageBaseConfig,
 	"mass_storage_lun0": massStorageLun0Config,
+	// audio
+	"audio": {
+		order:      4000,
+		device:     "uac1.usb0",
+		path:       []string{"functions", "uac1.usb0"},
+		configPath: []string{"uac1.usb0"},
+		attrs: gadgetAttributes{
+			"p_chmask":         "3",
+			"p_srate":          "48000",
+			"p_ssize":          "2",
+			"p_volume_present": "0",
+			"c_chmask":         "3",
+			"c_srate":          "48000",
+			"c_ssize":          "2",
+			"c_volume_present": "0",
+		},
+	},
 }
 
 func (u *UsbGadget) isGadgetConfigItemEnabled(itemKey string) bool {
@@ -73,6 +91,8 @@ func (u *UsbGadget) isGadgetConfigItemEnabled(itemKey string) bool {
 		return u.enabledDevices.MassStorage
 	case "mass_storage_lun0":
 		return u.enabledDevices.MassStorage
+	case "audio":
+		return u.enabledDevices.Audio
 	default:
 		return true
 	}

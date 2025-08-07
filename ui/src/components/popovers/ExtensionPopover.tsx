@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { LuPower, LuTerminal, LuPlugZap } from "react-icons/lu";
+import { LuPower, LuTerminal } from "react-icons/lu";
 
 import { useJsonRpc } from "@/hooks/useJsonRpc";
 import Card, { GridCard } from "@components/Card";
 import { SettingsPageHeader } from "@components/SettingsPageheader";
-import { ATXPowerControl } from "@components/extensions/ATXPowerControl";
-import { DCPowerControl } from "@components/extensions/DCPowerControl";
 import { SerialConsole } from "@components/extensions/SerialConsole";
+import { IOControl } from "@components/extensions/IOControl";
 import { Button } from "@components/Button";
 import notifications from "@/notifications";
 
@@ -19,23 +18,17 @@ interface Extension {
 
 const AVAILABLE_EXTENSIONS: Extension[] = [
   {
-    id: "atx-power",
-    name: "ATX Power Control",
-    description: "Control your ATX Power extension",
-    icon: LuPower,
-  },
-  {
-    id: "dc-power",
-    name: "DC Power Control",
-    description: "Control your DC Power extension",
-    icon: LuPlugZap,
-  },
-  {
     id: "serial-console",
     name: "Serial Console",
     description: "Access your serial console extension",
     icon: LuTerminal,
   },
+  {
+    id: "io-console",
+    name: "IO Control",
+    description: "Control IO port high and low level output",
+    icon: LuPower,
+  }
 ];
 
 export default function ExtensionPopover() {
@@ -70,12 +63,10 @@ export default function ExtensionPopover() {
 
   const renderActiveExtension = () => {
     switch (activeExtension?.id) {
-      case "atx-power":
-        return <ATXPowerControl />;
-      case "dc-power":
-        return <DCPowerControl />;
       case "serial-console":
         return <SerialConsole />;
+      case "io-console":
+        return <IOControl />;
       default:
         return null;
     }
@@ -101,7 +92,7 @@ export default function ExtensionPopover() {
                   <Button
                     size="SM"
                     theme="light"
-                    text="Unload Extension"
+                    text="Quit"
                     onClick={() => handleSetActiveExtension(null)}
                   />
                 </div>

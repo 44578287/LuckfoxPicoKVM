@@ -5,8 +5,9 @@ import (
 	"net"
 	"time"
 
+	"kvm/internal/mdns"
+
 	"github.com/guregu/null/v6"
-	"github.com/jetkvm/kvm/internal/mdns"
 	"golang.org/x/net/idna"
 )
 

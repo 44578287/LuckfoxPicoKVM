@@ -7,8 +7,7 @@ import Container from "@components/Container";
 import Fieldset from "@components/Fieldset";
 import { InputFieldWithLabel } from "@components/InputField";
 import { Button } from "@components/Button";
-import LogoBlueIcon from "@/assets/logo-blue.png";
-import LogoWhiteIcon from "@/assets/logo-white.svg";
+import LogoLuckfox from "@/assets/logo-luckfox.png";
 import { DEVICE_API } from "@/ui.config";
 
 import api from "../api";
@@ -73,11 +72,11 @@ export default function WelcomeLocalPasswordRoute() {
             <div className="max-w-2xl space-y-8">
               <div className="animate-fadeIn flex items-center justify-center opacity-0">
                 <img
-                  src={LogoWhiteIcon}
+                  src={LogoLuckfox}
                   alt=""
                   className="-ml-4 hidden h-[32px] dark:block"
                 />
-                <img src={LogoBlueIcon} alt="" className="-ml-4 h-[32px] dark:hidden" />
+                <img src={LogoLuckfox} alt="" className="-ml-4 h-[32px] dark:hidden" />
               </div>
 
               <div
@@ -88,7 +87,7 @@ export default function WelcomeLocalPasswordRoute() {
                   Set a Password
                 </h1>
                 <p className="font-medium text-slate-600 dark:text-slate-400">
-                  Create a strong password to secure your JetKVM device locally.
+                  Create a strong password to secure your KVM device locally.
                 </p>
               </div>
 

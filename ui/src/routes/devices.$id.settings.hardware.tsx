@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 
 import { SettingsPageHeader } from "@components/SettingsPageheader";
 import { SettingsItem } from "@routes/devices.$id.settings";
@@ -6,6 +6,8 @@ import { BacklightSettings, useSettingsStore } from "@/hooks/stores";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
 import { SelectMenuBasic } from "@components/SelectMenuBasic";
 import { UsbDeviceSetting } from "@components/UsbDeviceSetting";
+import { InputField } from "@/components/InputField";
+import { Button, LinkButton } from "@/components/Button";
 
 import notifications from "../notifications";
 import { UsbInfoSetting } from "../components/UsbInfoSetting";
@@ -71,11 +73,96 @@ export default function SettingsHardwareRoute() {
     });
   }, [send, setBacklightSettings]);
 
+  const setTimeZone = useSettingsStore(state => state.setTimeZone);
+
+  const handleTimeZoneSave = () => {
+    send("setTimeZone", { timeZone: settings.timeZone }, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to set time zone: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+      notifications.success("Time zone updated successfully");
+    });
+  };
+  
+  const handleTimeZoneChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.trim();
+    setTimeZone(value);
+  }, []);
+
+  useEffect(() => {
+    send("getTimeZone", {}, resp => {
+      if ("error" in resp) {
+        return notifications.error(
+          `Failed to get time zone: ${resp.error.data || "Unknown error"}`,
+        );
+      }
+      console.log("Time zone:", resp.result);
+      const result = resp.result as string;
+      setTimeZone(result);
+    });
+  }, [send, setTimeZone]);
+  
+  const setLedGreenMode = useSettingsStore(state => state.setLedGreenMode);
+  const setLedYellowMode = useSettingsStore(state => state.setLedYellowMode);
+
+  const handleLedGreenModeChange = (mode: string) => {
+    setLedGreenMode(mode);
+    send("setLedGreenMode", { mode }, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to set LED-Green mode: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+      notifications.success("LED-Green mode updated successfully");
+    });
+  };
+
+  const handleLedYellowModeChange = (mode: string) => {
+    setLedYellowMode(mode);
+    send("setLedYellowMode", { mode }, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to set LED-Yellow mode: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+      notifications.success("LED-Yellow mode updated successfully");
+    });
+  };
+  
+  useEffect(() => {
+    send("getLedGreenMode", {}, resp => {
+      if ("error" in resp) {
+        return notifications.error(
+          `Failed to get LED-Green mode: ${resp.error.data || "Unknown error"}`,
+        );
+      }
+      console.log("LED-Green mode:", resp.result);
+      const result = resp.result as string;
+      setLedGreenMode(result);
+    });    
+
+    send("getLedYellowMode", {}, resp => {
+      if ("error" in resp) {
+        return notifications.error(
+          `Failed to get LED-Yellow mode: ${resp.error.data || "Unknown error"}`,
+        );
+      }
+      console.log("LED-Yellow mode:", resp.result);
+      const result = resp.result as string;
+      setLedYellowMode(result);
+    });    
+  }, [send, setLedGreenMode, setLedYellowMode]);
+  
   return (
     <div className="space-y-4">
       <SettingsPageHeader
         title="Hardware"
-        description="Configure display settings and hardware options for your JetKVM device"
+        description="Configure display settings and hardware options for your KVM device"
       />
       <div className="space-y-4">
         <SettingsItem
@@ -87,8 +174,10 @@ export default function SettingsHardwareRoute() {
             label=""
             value={settings.displayRotation.toString()}
             options={[
-              { value: "270", label: "Normal" },
-              { value: "90", label: "Inverted" },
+              { value: "180", label: "Normal" },
+              { value: "90", label: "90" },
+              { value: "0", label: "180" },
+              { value: "270", label: "270" },
             ]}
             onChange={e => {
               settings.displayRotation = e.target.value;
@@ -106,9 +195,9 @@ export default function SettingsHardwareRoute() {
             value={settings.backlightSettings.max_brightness.toString()}
             options={[
               { value: "0", label: "Off" },
-              { value: "10", label: "Low" },
-              { value: "35", label: "Medium" },
-              { value: "64", label: "High" },
+              { value: "64", label: "Low" },
+              { value: "128", label: "Medium" },
+              { value: "200", label: "High" },
             ]}
             onChange={e => {
               settings.backlightSettings.max_brightness = parseInt(e.target.value);
@@ -170,11 +259,78 @@ export default function SettingsHardwareRoute() {
                 }}
               />
             </SettingsItem>
+          
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              The display will wake up when the connection state changes, or when touched.
+            </p>
+
           </>
         )}
-        <p className="text-xs text-slate-600 dark:text-slate-400">
-          The display will wake up when the connection state changes, or when touched.
-        </p>
+
+        <SettingsItem
+          title="Time Zone"
+          description="Set the time zone for the clock"
+        >
+        </SettingsItem>
+        <div className="space-y-4">  
+          <div className="flex items-end gap-x-2">
+            <InputField
+              size="SM"
+              value={settings.timeZone.toString()}
+              onChange={handleTimeZoneChange}
+              placeholder="Enter Time Zone"
+            /> 
+            <Button
+              size="SM"
+              theme="light"
+              text="Set"
+              onClick={handleTimeZoneSave}
+            />
+          </div> 
+        </div>
+
+        <SettingsItem
+          title="LED-Green Type"
+          description="Set the type of system status indicated by the LED-Green"
+        >
+          <SelectMenuBasic
+            size="SM"
+            label=""
+            value={settings.ledGreenMode.toString()}
+            options={[
+              { value: "network-link", label: "network-link" },
+              { value: "network-tx", label: "network-tx" },
+              { value: "network-rx", label: "network-rx" },
+              { value: "kernel-activity", label: "kernel-activity" },
+            ]}
+            onChange={e => {
+              settings.ledGreenMode = e.target.value;
+              handleLedGreenModeChange(settings.ledGreenMode);
+            }}
+          />
+        </SettingsItem>
+
+        <SettingsItem
+          title="LED-Yellow Type"
+          description="Set the type of system status indicated by the LED-Yellow"
+        >
+          <SelectMenuBasic
+            size="SM"
+            label=""
+            value={settings.ledYellowMode.toString()}
+            options={[
+              { value: "network-link", label: "network-link" },
+              { value: "network-tx", label: "network-tx" },
+              { value: "network-rx", label: "network-rx" },
+              { value: "kernel-activity", label: "kernel-activity" },
+            ]}
+            onChange={e => {
+              settings.ledYellowMode = e.target.value;
+              handleLedYellowModeChange(settings.ledYellowMode);
+            }}
+          />
+        </SettingsItem>
+
       </div>
 
       <FeatureFlag minAppVersion="0.3.8">

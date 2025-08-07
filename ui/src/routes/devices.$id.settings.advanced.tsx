@@ -27,12 +27,6 @@ export default function SettingsAdvancedRoute() {
   const settings = useSettingsStore();
 
   useEffect(() => {
-    send("getDevModeState", {}, resp => {
-      if ("error" in resp) return;
-      const result = resp.result as { enabled: boolean };
-      setDeveloperMode(result.enabled);
-    });
-
     send("getSSHKeyState", {}, resp => {
       if ("error" in resp) return;
       setSSHKey(resp.result as string);
@@ -41,11 +35,6 @@ export default function SettingsAdvancedRoute() {
     send("getUsbEmulationState", {}, resp => {
       if ("error" in resp) return;
       setUsbEmulationEnabled(resp.result as boolean);
-    });
-
-    send("getDevChannelState", {}, resp => {
-      if ("error" in resp) return;
-      setDevChannel(resp.result as boolean);
     });
 
     send("getLocalLoopbackOnly", {}, resp => {
@@ -101,36 +90,6 @@ export default function SettingsAdvancedRoute() {
     });
   }, [send, sshKey]);
 
-  const handleDevModeChange = useCallback(
-    (developerMode: boolean) => {
-      send("setDevModeState", { enabled: developerMode }, resp => {
-        if ("error" in resp) {
-          notifications.error(
-            `Failed to set dev mode: ${resp.error.data || "Unknown error"}`,
-          );
-          return;
-        }
-        setDeveloperMode(developerMode);
-      });
-    },
-    [send, setDeveloperMode],
-  );
-
-  const handleDevChannelChange = useCallback(
-    (enabled: boolean) => {
-      send("setDevChannelState", { enabled }, resp => {
-        if ("error" in resp) {
-          notifications.error(
-            `Failed to set dev channel state: ${resp.error.data || "Unknown error"}`,
-          );
-          return;
-        }
-        setDevChannel(enabled);
-      });
-    },
-    [send, setDevChannel],
-  );
-
   const applyLoopbackOnlyMode = useCallback(
     (enabled: boolean) => {
       send("setLocalLoopbackOnly", { enabled }, resp => {
@@ -182,63 +141,6 @@ export default function SettingsAdvancedRoute() {
 
       <div className="space-y-4">
         <SettingsItem
-          title="Dev Channel Updates"
-          description="Receive early updates from the development channel"
-        >
-          <Checkbox
-            checked={devChannel}
-            onChange={e => {
-              handleDevChannelChange(e.target.checked);
-            }}
-          />
-        </SettingsItem>
-        <SettingsItem
-          title="Developer Mode"
-          description="Enable advanced features for developers"
-        >
-          <Checkbox
-            checked={settings.developerMode}
-            onChange={e => handleDevModeChange(e.target.checked)}
-          />
-        </SettingsItem>
-
-        {settings.developerMode && (
-          <GridCard>
-            <div className="flex items-start gap-x-4 p-4 select-none">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="mt-1 h-8 w-8 shrink-0 text-amber-600 dark:text-amber-500"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                    Developer Mode Enabled
-                  </h3>
-                  <div>
-                    <ul className="list-disc space-y-1 pl-5 text-xs text-slate-700 dark:text-slate-300">
-                      <li>Security is weakened while active</li>
-                      <li>Only use if you understand the risks</li>
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="text-xs text-slate-700 dark:text-slate-300">
-                  For advanced users only. Not for production use.
-                </div>
-              </div>
-            </div>
-          </GridCard>
-        )}
-
-        <SettingsItem
           title="Loopback-Only Mode"
           description="Restrict web interface access to localhost only (127.0.0.1)"
         >
@@ -248,7 +150,7 @@ export default function SettingsAdvancedRoute() {
           />
         </SettingsItem>
 
-        {isOnDevice && settings.developerMode && (
+        {isOnDevice && (
           <div className="space-y-4">
             <SettingsItem
               title="SSH Access"

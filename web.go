@@ -14,12 +14,13 @@ import (
 	"strings"
 	"time"
 
+	"kvm/internal/logging"
+
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 	gin_logger "github.com/gin-contrib/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/jetkvm/kvm/internal/logging"
 	"github.com/pion/webrtc/v4"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -77,6 +78,8 @@ func setupRouter() *gin.Engine {
 	))
 	staticFS, _ := fs.Sub(staticFiles, "static")
 
+	r.Any("/debug/pprof/*any", gin.WrapH(http.DefaultServeMux))
+
 	// Add a custom middleware to set cache headers for images
 	// This is crucial for optimizing the initial welcome screen load time
 	// By enabling caching, we ensure that pre-loaded images are stored in the browser cache
@@ -98,7 +101,7 @@ func setupRouter() *gin.Engine {
 	r.GET("/device/status", handleDeviceStatus)
 
 	// We use this to provide the UI with the device configuration
-	r.GET("/device/ui-config.js", handleDeviceUIConfig)
+	//r.GET("/device/ui-config.js", handleDeviceUIConfig)
 
 	// We use this to setup the device in the welcome page
 	r.POST("/device/setup", handleSetup)
@@ -148,8 +151,6 @@ func setupRouter() *gin.Engine {
 		 */
 		protected.POST("/webrtc/session", handleWebRTCSession)
 		protected.GET("/webrtc/signaling/client", handleLocalWebRTCSignal)
-		protected.POST("/cloud/register", handleCloudRegister)
-		protected.GET("/cloud/state", handleCloudState)
 		protected.GET("/device", handleDevice)
 		protected.POST("/auth/logout", handleLogout)
 
@@ -251,7 +252,7 @@ func handleLocalWebRTCSignal(c *gin.Context) {
 		return
 	}
 
-	err = handleWebRTCSignalWsMessages(wsCon, false, source, connectionID, &scopedLogger)
+	err = handleWebRTCSignalWsMessages(wsCon, source, connectionID, &scopedLogger)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -260,26 +261,18 @@ func handleLocalWebRTCSignal(c *gin.Context) {
 
 func handleWebRTCSignalWsMessages(
 	wsCon *websocket.Conn,
-	isCloudConnection bool,
 	source string,
 	connectionID string,
 	scopedLogger *zerolog.Logger,
 ) error {
 	runCtx, cancelRun := context.WithCancel(context.Background())
 	defer func() {
-		if isCloudConnection {
-			setCloudConnectionState(CloudConnectionStateDisconnected)
-		}
 		cancelRun()
 	}()
 
 	// connection type
 	var sourceType string
-	if isCloudConnection {
-		sourceType = "cloud"
-	} else {
-		sourceType = "local"
-	}
+	sourceType = "local"
 
 	l := scopedLogger.With().
 		Str("source", source).
@@ -326,24 +319,6 @@ func handleWebRTCSignalWsMessages(
 			l.Trace().Str("duration", duration.String()).Msg("received pong frame")
 		}
 	}()
-
-	if isCloudConnection {
-		// create a channel to receive the disconnect event, once received, we cancelRun
-		cloudDisconnectChan = make(chan error)
-		defer func() {
-			close(cloudDisconnectChan)
-			cloudDisconnectChan = nil
-		}()
-		go func() {
-			for err := range cloudDisconnectChan {
-				if err == nil {
-					continue
-				}
-				cloudLogger.Info().Err(err).Msg("disconnecting from cloud due to")
-				cancelRun()
-			}
-		}()
-	}
 
 	for {
 		typ, msg, err := wsCon.Read(runCtx)
@@ -396,7 +371,7 @@ func handleWebRTCSignalWsMessages(
 
 			metricConnectionSessionRequestCount.WithLabelValues(sourceType, source).Inc()
 			metricConnectionLastSessionRequestTimestamp.WithLabelValues(sourceType, source).SetToCurrentTime()
-			err = handleSessionRequest(runCtx, wsCon, req, isCloudConnection, source, &l)
+			err = handleSessionRequest(runCtx, wsCon, req, source, &l)
 			if err != nil {
 				l.Warn().Str("error", err.Error()).Msg("error starting new session")
 				continue
@@ -516,7 +491,7 @@ func basicAuthProtectedMiddleware(requireDeveloperMode bool) gin.HandlerFunc {
 		// calculate basic auth credentials
 		_, password, ok := c.Request.BasicAuth()
 		if !ok {
-			c.Header("WWW-Authenticate", "Basic realm=\"JetKVM\"")
+			c.Header("WWW-Authenticate", "Basic realm=\"KVM\"")
 			sendErrorJsonThenAbort(c, http.StatusUnauthorized, "Basic auth is required")
 			return
 		}
@@ -684,19 +659,8 @@ func handleDeviceStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func handleCloudState(c *gin.Context) {
-	response := CloudState{
-		Connected: config.CloudToken != "",
-		URL:       config.CloudURL,
-		AppURL:    config.CloudAppURL,
-	}
-
-	c.JSON(http.StatusOK, response)
-}
-
 func handleDeviceUIConfig(c *gin.Context) {
 	config, _ := json.Marshal(gin.H{
-		"CLOUD_API":      config.CloudURL,
 		"DEVICE_VERSION": builtAppVersion,
 	})
 	if config == nil {
@@ -704,7 +668,7 @@ func handleDeviceUIConfig(c *gin.Context) {
 		return
 	}
 
-	response := fmt.Sprintf("window.JETKVM_CONFIG = %s;", config)
+	response := fmt.Sprintf("window.KVM_CONFIG = %s;", config)
 
 	c.Data(http.StatusOK, "text/javascript; charset=utf-8", []byte(response))
 }

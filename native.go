@@ -1,18 +1,14 @@
 package kvm
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"os/exec"
 	"sync"
 	"time"
-
-	"github.com/jetkvm/kvm/resource"
 
 	"github.com/pion/webrtc/v4/pkg/media"
 )
@@ -43,8 +39,8 @@ var ongoingRequests = make(map[int32]chan *CtrlResponse)
 var lock = &sync.Mutex{}
 
 var (
-	nativeCmd     *exec.Cmd
-	nativeCmdLock = &sync.Mutex{}
+	videoCmd     *exec.Cmd
+	videoCmdLock = &sync.Mutex{}
 )
 
 func CallCtrlAction(action string, params map[string]interface{}) (*CtrlResponse, error) {
@@ -66,7 +62,7 @@ func CallCtrlAction(action string, params map[string]interface{}) (*CtrlResponse
 		return nil, fmt.Errorf("error marshaling ctrl action: %w", err)
 	}
 
-	scopedLogger := nativeLogger.With().
+	scopedLogger := videoLogger.With().
 		Str("action", ctrlAction.Action).
 		Interface("params", ctrlAction.Params).Logger()
 
@@ -104,8 +100,8 @@ func WriteCtrlMessage(message []byte) error {
 	return err
 }
 
-var nativeCtrlSocketListener net.Listener  //nolint:unused
-var nativeVideoSocketListener net.Listener //nolint:unused
+var videoCtrlSocketListener net.Listener //nolint:unused
+var videoSocketListener net.Listener     //nolint:unused
 
 var ctrlClientConnected = make(chan struct{})
 
@@ -113,8 +109,8 @@ func waitCtrlClientConnected() {
 	<-ctrlClientConnected
 }
 
-func StartNativeSocketServer(socketPath string, handleClient func(net.Conn), isCtrl bool) net.Listener {
-	scopedLogger := nativeLogger.With().
+func StartVideoSocketServer(socketPath string, handleClient func(net.Conn), isCtrl bool) net.Listener {
+	scopedLogger := videoLogger.With().
 		Str("socket_path", socketPath).
 		Logger()
 
@@ -160,20 +156,20 @@ func StartNativeSocketServer(socketPath string, handleClient func(net.Conn), isC
 	return listener
 }
 
-func StartNativeCtrlSocketServer() {
-	nativeCtrlSocketListener = StartNativeSocketServer("/var/run/jetkvm_ctrl.sock", handleCtrlClient, true)
-	nativeLogger.Debug().Msg("native app ctrl sock started")
+func StartVideoCtrlSocketServer() {
+	videoCtrlSocketListener = StartVideoSocketServer("/var/run/kvm_ctrl.sock", handleCtrlClient, true)
+	videoLogger.Debug().Msg("native app ctrl sock started")
 }
 
-func StartNativeVideoSocketServer() {
-	nativeVideoSocketListener = StartNativeSocketServer("/var/run/jetkvm_video.sock", handleVideoClient, false)
-	nativeLogger.Debug().Msg("native app video sock started")
+func StartVideoDataSocketServer() {
+	videoSocketListener = StartVideoSocketServer("/var/run/kvm_video.sock", handleVideoClient, false)
+	videoLogger.Debug().Msg("native app video sock started")
 }
 
 func handleCtrlClient(conn net.Conn) {
 	defer conn.Close()
 
-	scopedLogger := nativeLogger.With().
+	scopedLogger := videoLogger.With().
 		Str("addr", conn.RemoteAddr().String()).
 		Str("type", "ctrl").
 		Logger()
@@ -224,7 +220,7 @@ func handleCtrlClient(conn net.Conn) {
 func handleVideoClient(conn net.Conn) {
 	defer conn.Close()
 
-	scopedLogger := nativeLogger.With().
+	scopedLogger := videoLogger.With().
 		Str("addr", conn.RemoteAddr().String()).
 		Str("type", "video").
 		Logger()
@@ -251,63 +247,60 @@ func handleVideoClient(conn net.Conn) {
 	}
 }
 
-func startNativeBinaryWithLock(binaryPath string) (*exec.Cmd, error) {
-	nativeCmdLock.Lock()
-	defer nativeCmdLock.Unlock()
+func startVideoBinaryWithLock(binaryPath string) (*exec.Cmd, error) {
+	videoCmdLock.Lock()
+	defer videoCmdLock.Unlock()
 
-	cmd, err := startNativeBinary(binaryPath)
+	cmd, err := startVideoBinary(binaryPath)
 	if err != nil {
 		return nil, err
 	}
-	nativeCmd = cmd
+	videoCmd = cmd
 	return cmd, nil
 }
 
-func restartNativeBinary(binaryPath string) error {
+func restartVideoBinary(binaryPath string) error {
 	time.Sleep(10 * time.Second)
 	// restart the binary
-	nativeLogger.Info().Msg("restarting jetkvm_native binary")
-	cmd, err := startNativeBinary(binaryPath)
+	videoLogger.Info().Msg("restarting kvm_video binary")
+	cmd, err := startVideoBinary(binaryPath)
 	if err != nil {
-		nativeLogger.Warn().Err(err).Msg("failed to restart binary")
+		videoLogger.Warn().Err(err).Msg("failed to restart binary")
 	}
-	nativeCmd = cmd
+	videoCmd = cmd
 	return err
 }
 
-func superviseNativeBinary(binaryPath string) error {
-	nativeCmdLock.Lock()
-	defer nativeCmdLock.Unlock()
+func superviseVideoBinary(binaryPath string) error {
+	videoCmdLock.Lock()
+	defer videoCmdLock.Unlock()
 
-	if nativeCmd == nil || nativeCmd.Process == nil {
-		return restartNativeBinary(binaryPath)
+	if videoCmd == nil || videoCmd.Process == nil {
+		return restartVideoBinary(binaryPath)
 	}
 
-	err := nativeCmd.Wait()
+	err := videoCmd.Wait()
 
 	if err == nil {
-		nativeLogger.Info().Err(err).Msg("jetkvm_native binary exited with no error")
+		videoLogger.Info().Err(err).Msg("kvm_video binary exited with no error")
 	} else if exiterr, ok := err.(*exec.ExitError); ok {
-		nativeLogger.Warn().Int("exit_code", exiterr.ExitCode()).Msg("jetkvm_native binary exited with error")
+		videoLogger.Warn().Int("exit_code", exiterr.ExitCode()).Msg("kvm_video binary exited with error")
 	} else {
-		nativeLogger.Warn().Err(err).Msg("jetkvm_native binary exited with unknown error")
+		videoLogger.Warn().Err(err).Msg("kvm_video binary exited with unknown error")
 	}
 
-	return restartNativeBinary(binaryPath)
+	return restartVideoBinary(binaryPath)
 }
 
-func ExtractAndRunNativeBin() error {
-	binaryPath := "/userdata/jetkvm/bin/jetkvm_native"
-	if err := ensureBinaryUpdated(binaryPath); err != nil {
-		return fmt.Errorf("failed to extract binary: %w", err)
-	}
+func ExtractAndRunVideoBin() error {
+	binaryPath := "/userdata/picokvm/bin/kvm_video"
 
 	// Make the binary executable
 	if err := os.Chmod(binaryPath, 0755); err != nil {
 		return fmt.Errorf("failed to make binary executable: %w", err)
 	}
 	// Run the binary in the background
-	cmd, err := startNativeBinaryWithLock(binaryPath)
+	cmd, err := startVideoBinaryWithLock(binaryPath)
 	if err != nil {
 		return fmt.Errorf("failed to start binary: %w", err)
 	}
@@ -317,12 +310,12 @@ func ExtractAndRunNativeBin() error {
 		for {
 			select {
 			case <-appCtx.Done():
-				nativeLogger.Info().Msg("stopping native binary supervisor")
+				videoLogger.Info().Msg("stopping native binary supervisor")
 				return
 			default:
-				err := superviseNativeBinary(binaryPath)
+				err := superviseVideoBinary(binaryPath)
 				if err != nil {
-					nativeLogger.Warn().Err(err).Msg("failed to supervise native binary")
+					videoLogger.Warn().Err(err).Msg("failed to supervise native binary")
 					time.Sleep(1 * time.Second) // Add a short delay to prevent rapid successive calls
 				}
 			}
@@ -331,83 +324,26 @@ func ExtractAndRunNativeBin() error {
 
 	go func() {
 		<-appCtx.Done()
-		nativeLogger.Info().Int("pid", cmd.Process.Pid).Msg("killing process")
+		videoLogger.Info().Int("pid", cmd.Process.Pid).Msg("killing process")
 		err := cmd.Process.Kill()
 		if err != nil {
-			nativeLogger.Warn().Err(err).Msg("failed to kill process")
+			videoLogger.Warn().Err(err).Msg("failed to kill process")
 			return
 		}
 	}()
 
-	nativeLogger.Info().Int("pid", cmd.Process.Pid).Msg("jetkvm_native binary started")
-
-	return nil
-}
-
-func shouldOverwrite(destPath string, srcHash []byte) bool {
-	if srcHash == nil {
-		nativeLogger.Debug().Msg("error reading embedded jetkvm_native.sha256, doing overwriting")
-		return true
-	}
-
-	dstHash, err := os.ReadFile(destPath + ".sha256")
-	if err != nil {
-		nativeLogger.Debug().Msg("error reading existing jetkvm_native.sha256, doing overwriting")
-		return true
-	}
-
-	return !bytes.Equal(srcHash, dstHash)
-}
-
-func ensureBinaryUpdated(destPath string) error {
-	srcFile, err := resource.ResourceFS.Open("jetkvm_native")
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	srcHash, err := resource.ResourceFS.ReadFile("jetkvm_native.sha256")
-	if err != nil {
-		nativeLogger.Debug().Msg("error reading embedded jetkvm_native.sha256, proceeding with update")
-		srcHash = nil
-	}
-
-	_, err = os.Stat(destPath)
-	if shouldOverwrite(destPath, srcHash) || err != nil {
-		nativeLogger.Info().
-			Interface("hash", srcHash).
-			Msg("writing jetkvm_native")
-
-		_ = os.Remove(destPath)
-		destFile, err := os.OpenFile(destPath, os.O_CREATE|os.O_RDWR, 0755)
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(destFile, srcFile)
-		destFile.Close()
-		if err != nil {
-			return err
-		}
-		if srcHash != nil {
-			err = os.WriteFile(destPath+".sha256", srcHash, 0644)
-			if err != nil {
-				return err
-			}
-		}
-		nativeLogger.Info().Msg("jetkvm_native updated")
-	}
+	videoLogger.Info().Int("pid", cmd.Process.Pid).Msg("kvm_video binary started")
 
 	return nil
 }
 
 // Restore the HDMI EDID value from the config.
-// Called after successful connection to jetkvm_native.
 func restoreHdmiEdid() {
 	if config.EdidString != "" {
-		nativeLogger.Info().Str("edid", config.EdidString).Msg("Restoring HDMI EDID")
+		videoLogger.Info().Str("edid", config.EdidString).Msg("Restoring HDMI EDID")
 		_, err := CallCtrlAction("set_edid", map[string]interface{}{"edid": config.EdidString})
 		if err != nil {
-			nativeLogger.Warn().Err(err).Msg("Failed to restore HDMI EDID")
+			videoLogger.Warn().Err(err).Msg("Failed to restore HDMI EDID")
 		}
 	}
 }
