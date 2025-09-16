@@ -7,6 +7,7 @@ import {
   LuCheck,
   LuUpload,
   LuRefreshCw,
+  LuDownload,
 } from "react-icons/lu";
 import { PlusCircleIcon, ExclamationTriangleIcon } from "@heroicons/react/20/solid";
 import { TrashIcon } from "@heroicons/react/16/solid";
@@ -17,14 +18,6 @@ import { Button } from "@components/Button";
 import LogoLuckfox from "@/assets/logo-luckfox.png";
 import { formatters } from "@/utils";
 import AutoHeight from "@components/AutoHeight";
-import { InputFieldWithLabel } from "@/components/InputField";
-import DebianIcon from "@/assets/debian-icon.png";
-import UbuntuIcon from "@/assets/ubuntu-icon.png";
-import FedoraIcon from "@/assets/fedora-icon.png";
-import OpenSUSEIcon from "@/assets/opensuse-icon.png";
-import ArchIcon from "@/assets/arch-icon.png";
-import NetBootIcon from "@/assets/netboot-icon.svg";
-import Fieldset from "@/components/Fieldset";
 import { DEVICE_API } from "@/ui.config";
 
 import { useJsonRpc } from "../hooks/useJsonRpc";
@@ -32,15 +25,15 @@ import notifications from "../notifications";
 import { isOnDevice } from "../main";
 import { cx } from "../cva.config";
 import {
-  MountMediaState,
-  RemoteVirtualMediaState,
   useMountMediaStore,
   useRTCStore,
 } from "../hooks/stores";
 import { UploadDialog } from "@/components/UploadDialog";
-import { ConfirmDialog } from "@components/ConfirmDialog";
+import { sync } from "framer-motion";
+import Fieldset from "@/components/Fieldset";
 
-export default function MountRoute() {
+
+export default function MtpRoute() {
   const navigate = useNavigate();
   {
     /* TODO: Migrate to using URLs instead of the global state. To simplify the refactoring, we'll keep the global state for now. */
@@ -52,164 +45,24 @@ export function Dialog({ onClose }: { onClose: () => void }) {
   const {
     modalView,
     setModalView,
-    setLocalFile,
-    setRemoteVirtualMediaState,
     errorMessage,
     setErrorMessage,
   } = useMountMediaStore();
   const navigate = useNavigate();
 
   const [incompleteFileName, setIncompleteFileName] = useState<string | null>(null);
-  const [mountInProgress, setMountInProgress] = useState(false);
-  function clearMountMediaState() {
-    setLocalFile(null);
-    setRemoteVirtualMediaState(null);
-  }
-
   const [send] = useJsonRpc();
-  async function syncRemoteVirtualMediaState() {
-    return new Promise((resolve, reject) => {
-      send("getVirtualMediaState", {}, resp => {
-        if ("error" in resp) {
-          reject(new Error(resp.error.message));
-        } else {
-          setRemoteVirtualMediaState(
-            resp as unknown as MountMediaState["remoteVirtualMediaState"],
-          );
-          resolve(null);
-        }
-      });
-    });
-  }
-
-  function triggerError(message: string) {
-    setErrorMessage(message);
-    setModalView("error");
-  }
-
-  function handleUrlMount(url: string, mode: RemoteVirtualMediaState["mode"]) {
-    console.log(`Mounting ${url} as ${mode}`);
-
-    setMountInProgress(true);
-    send("mountWithHTTP", { url, mode }, async resp => {
-      if ("error" in resp) triggerError(resp.error.message);
-
-      clearMountMediaState();
-      syncRemoteVirtualMediaState()
-        .then(() => navigate(".."))
-        .catch(err => {
-          triggerError(err instanceof Error ? err.message : String(err));
-        })
-        .finally(() => {
-          setMountInProgress(false);
-        });
-    });
-  }
-
-  function handleStorageMount(fileName: string, mode: RemoteVirtualMediaState["mode"]) {
-    console.log(`Mounting ${fileName} as ${mode}`);
-
-    if (!fileName.endsWith(".iso") && !fileName.endsWith(".img")) {
-      triggerError("Only ISO and IMG files are supported");
-      return;
-    }
-
-    setMountInProgress(true);
-    send("mountWithStorage", { filename: fileName, mode }, async resp => {
-      if ("error" in resp) triggerError(resp.error.message);
-
-      clearMountMediaState();
-      syncRemoteVirtualMediaState()
-        .then(() => {
-          navigate("..");
-        })
-        .catch(err => {
-          triggerError(err instanceof Error ? err.message : String(err));
-        })
-        .finally(() => {
-          // We do this because the mounting is too fast and the UI gets choppy
-          // and the modal exit animation for like 500ms
-          setTimeout(() => {
-            setMountInProgress(false);
-          }, 500);
-        });
-    });
-
-    clearMountMediaState();
-  }
-
-  function handleSDStorageMount(fileName: string, mode: RemoteVirtualMediaState["mode"]) {
-    console.log(`Mounting ${fileName} as ${mode}`);
-
-    if (!fileName.endsWith(".iso") && !fileName.endsWith(".img")) {
-      triggerError("Only ISO and IMG files are supported");
-      return;
-    }
  
-    setMountInProgress(true);
-    send("mountWithSDStorage", { filename: fileName, mode }, async resp => {
-      if ("error" in resp) triggerError(resp.error.message);
-
-      clearMountMediaState();
-      syncRemoteVirtualMediaState()
-        .then(() => {
-          navigate("..");
-        })
-        .catch(err => {
-          triggerError(err instanceof Error ? err.message : String(err));
-        })
-        .finally(() => {
-          // We do this because the mounting is too fast and the UI gets choppy
-          // and the modal exit animation for like 500ms
-          setTimeout(() => {
-            setMountInProgress(false);
-          }, 500);
-        });
-    });
-
-    clearMountMediaState();
-  }
-  
-  function handleBrowserMount(file: File, mode: RemoteVirtualMediaState["mode"]) {
-    console.log(`Mounting ${file.name} as ${mode}`);
-
-    setMountInProgress(true);
-    send(
-      "mountWithWebRTC",
-      { filename: file.name, size: file.size, mode },
-      async resp => {
-        if ("error" in resp) triggerError(resp.error.message);
-
-        clearMountMediaState();
-        syncRemoteVirtualMediaState()
-          .then(() => {
-            // We need to keep the local file in the store so that the browser can
-            // continue to stream the file to the device
-            setLocalFile(file);
-            navigate("..");
-          })
-          .catch(err => {
-            triggerError(err instanceof Error ? err.message : String(err));
-          })
-          .finally(() => {
-            setMountInProgress(false);
-          });
-      },
-    );
-  }
-
-  const [selectedMode, setSelectedMode] = useState<"browser" | "url" | "device" | "sd">("device");
+  const [selectedMode, setSelectedMode] = useState< "mtp_device" | "mtp_sd" >("mtp_device");
   return (
     <AutoHeight>
       <div
         className={cx("mx-auto max-w-4xl px-4 transition-all duration-300 ease-in-out", {
           "max-w-4xl": modalView === "mode",
           "max-w-2xl": 
-            modalView === "device" ||
-            modalView === "sd",
+            modalView === "mtp_device" ||
+            modalView === "mtp_sd",
           "max-w-xl":
-            modalView === "browser" ||
-            modalView === "url" ||
             modalView === "upload" ||
             modalView === "error",
         })}
@@ -228,48 +81,17 @@ export function Dialog({ onClose }: { onClose: () => void }) {
                 className="hidden h-[24px] dark:mt-0! dark:block"
               />
               {modalView === "mode" && (
-                <ModeSelectionView
+                <MtpModeSelectionView
                   onClose={() => onClose()}
                   selectedMode={selectedMode}
                   setSelectedMode={setSelectedMode}
                 />
               )}
 
-              {modalView === "browser" && (
-                <BrowserFileView
-                  mountInProgress={mountInProgress}
-                  onMountFile={(file, mode) => {
-                    handleBrowserMount(file, mode);
-                  }}
-                  onBack={() => {
-                    setMountInProgress(false);
-                    setModalView("mode");
-                  }}
-                />
-              )}
-
-              {modalView === "url" && (
-                <UrlView
-                  mountInProgress={mountInProgress}
-                  onBack={() => {
-                    setMountInProgress(false);
-                    setModalView("mode");
-                  }}
-                  onMount={(url, mode) => {
-                    handleUrlMount(url, mode);
-                  }}
-                />
-              )}
-
-              {modalView === "device" && (
+              {modalView === "mtp_device" && (
                 <DeviceFileView
                   onBack={() => {
-                    setMountInProgress(false);
                     setModalView("mode");
-                  }}
-                  mountInProgress={mountInProgress}
-                  onMountStorageFile={(fileName, mode) => {
-                    handleStorageMount(fileName, mode);
                   }}
                   onNewImageClick={incompleteFile => {
                     setIncompleteFileName(incompleteFile || null);
@@ -278,15 +100,10 @@ export function Dialog({ onClose }: { onClose: () => void }) {
                 />
               )}
 
-              {modalView === "sd" && (
+              {modalView === "mtp_sd" && (
                 <SDFileView
                   onBack={() => {
-                    setMountInProgress(false);
                     setModalView("mode");
-                  }}
-                  mountInProgress={mountInProgress}
-                  onMountStorageFile={(fileName, mode) => {
-                    handleSDStorageMount(fileName, mode);
                   }}
                   onNewImageClick={incompleteFile => {
                     setIncompleteFileName(incompleteFile || null);
@@ -297,9 +114,9 @@ export function Dialog({ onClose }: { onClose: () => void }) {
 
               {modalView === "upload" && (
                 <UploadFileView
-                  onBack={() => setModalView("device")}
+                  onBack={() => setModalView("mtp_device")}
                   onCancelUpload={() => {
-                    setModalView("device");
+                    setModalView("mtp_device");
                     // Implement cancel upload logic here
                   }}
                   incompleteFileName={incompleteFileName || undefined}
@@ -309,9 +126,9 @@ export function Dialog({ onClose }: { onClose: () => void }) {
 
               {modalView === "upload_sd" && (
                 <UploadFileView
-                  onBack={() => setModalView("sd")}
+                  onBack={() => setModalView("mtp_sd")}
                   onCancelUpload={() => {
-                    setModalView("sd");
+                    setModalView("mtp_sd");
                     // Implement cancel upload logic here
                   }}
                   incompleteFileName={incompleteFileName || undefined}
@@ -340,14 +157,14 @@ export function Dialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ModeSelectionView({
+function MtpModeSelectionView({
   onClose,
   selectedMode,
   setSelectedMode,
 }: {
   onClose: () => void;
-  selectedMode: "browser" | "url" | "device" | "sd";
-  setSelectedMode: (mode: "browser" | "url" | "device" | "sd") => void;
+  selectedMode: "mtp_device" | "mtp_sd";
+  setSelectedMode: (mode: "mtp_device" | "mtp_sd") => void;
 }) {
   const { setModalView } = useMountMediaStore();
 
@@ -363,34 +180,18 @@ function ModeSelectionView({
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         {[
-          //{
-          //  label: "Browser Mount",
-          //  value: "browser",
-          //  description: "Stream files directly from your browser",
-          //  icon: LuGlobe,
-          //  tag: "Coming Soon",
-          //  disabled: true,
-          //},
-          //{
-          //  label: "URL Mount",
-          //  value: "url",
-          //  description: "Mount files from any public web address",
-          //  icon: LuLink,
-          //  tag: "Experimental",
-          //  disabled: false,
-          //},
           {
-            label: "KVM Storage Mount",
-            value: "device",
-            description: "Mount previously uploaded files from the KVM storage",
+            label: "KVM Storage Manager",
+            value: "mtp_device",
+            description: "Manage the shared folder located on eMMC",
             icon: LuRadioReceiver,
             tag: null,
             disabled: false,
           },
           {
-            label: "KVM MicroSD Mount",
-            value: "sd",
-            description: "Mount previously uploaded files from the KVM MicroSD",
+            label: "KVM MicroSD Manager",
+            value: "mtp_sd",
+            description: "Manage the shared folder located on MicroSD",
             icon: LuRadioReceiver,
             tag: null,
             disabled: false,
@@ -417,7 +218,7 @@ function ModeSelectionView({
               <div
                 className="relative z-50 flex flex-col items-start p-4 select-none"
                 onClick={() =>
-                  disabled ? null : setSelectedMode(mode as "browser" | "url" | "device" | "sd")
+                  disabled ? null : setSelectedMode(mode as "mtp_device" | "mtp_sd")
                 }
               >
                 <div>
@@ -473,280 +274,10 @@ function ModeSelectionView({
   );
 }
 
-function BrowserFileView({
-  onMountFile,
-  onBack,
-  mountInProgress,
-}: {
-  onBack: () => void;
-  onMountFile: (file: File, mode: RemoteVirtualMediaState["mode"]) => void;
-  mountInProgress: boolean;
-}) {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [usbMode, setUsbMode] = useState<RemoteVirtualMediaState["mode"]>("CDROM");
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] || null;
-    setSelectedFile(file);
-
-    if (file?.name.endsWith(".iso")) {
-      setUsbMode("CDROM");
-    } else if (file?.name.endsWith(".img")) {
-      setUsbMode("Disk");
-    }
-  };
-
-  const handleMount = () => {
-    if (selectedFile) {
-      console.log(`Mounting ${selectedFile.name} as ${setUsbMode}`);
-      onMountFile(selectedFile, usbMode);
-    }
-  };
-
-  return (
-    <div className="w-full space-y-4">
-      <ViewHeader
-        title="Mount from Browser"
-        description="Select an image file to mount"
-      />
-      <div className="space-y-2">
-        <div
-          onClick={() => document.getElementById("file-upload")?.click()}
-          className="block cursor-pointer select-none"
-        >
-          <div
-            className="group animate-fadeIn opacity-0"
-            style={{
-              animationDuration: "0.7s",
-            }}
-          >
-            <Card className="transition-all duration-300 outline-dashed">
-              <div className="w-full px-4 py-12">
-                <div className="flex h-full flex-col items-center justify-center text-center">
-                  {selectedFile ? (
-                    <>
-                      <div className="space-y-1">
-                        <LuHardDrive className="mx-auto h-6 w-6 text-blue-700" />
-                        <h3 className="text-sm leading-none font-semibold">
-                          {formatters.truncateMiddle(selectedFile.name, 40)}
-                        </h3>
-                        <p className="text-xs leading-none text-slate-700">
-                          {formatters.bytes(selectedFile.size)}
-                        </p>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="space-y-1">
-                      <PlusCircleIcon className="mx-auto h-6 w-6 text-blue-700" />
-                      <h3 className="text-sm leading-none font-semibold">
-                        Click to select a file
-                      </h3>
-                      <p className="text-xs leading-none text-slate-700">
-                        Supported formats: ISO, IMG
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
-          </div>
-        </div>
-        <input
-          id="file-upload"
-          type="file"
-          onChange={handleFileChange}
-          className="hidden"
-          accept=".iso, .img"
-        />
-      </div>
-
-      <div
-        className="flex w-full animate-fadeIn items-end justify-between opacity-0"
-        style={{
-          animationDuration: "0.7s",
-          animationDelay: "0.1s",
-        }}
-      >
-        <Fieldset disabled={!selectedFile}>
-          <UsbModeSelector usbMode={usbMode} setUsbMode={setUsbMode} />
-        </Fieldset>
-        <div className="flex space-x-2">
-          <Button size="MD" theme="blank" text="Back" onClick={onBack} />
-          <Button
-            size="MD"
-            theme="primary"
-            text="Mount File"
-            onClick={handleMount}
-            disabled={!selectedFile || mountInProgress}
-            loading={mountInProgress}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function UrlView({
-  onBack,
-  onMount,
-  mountInProgress,
-}: {
-  onBack: () => void;
-  onMount: (url: string, usbMode: RemoteVirtualMediaState["mode"]) => void;
-  mountInProgress: boolean;
-}) {
-  const [usbMode, setUsbMode] = useState<RemoteVirtualMediaState["mode"]>("CDROM");
-  const [url, setUrl] = useState<string>("");
-
-  const popularImages = [
-    {
-      name: "Ubuntu 24.04 LTS",
-      url: "https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-desktop-amd64.iso",
-      icon: UbuntuIcon,
-    },
-    {
-      name: "Debian 12",
-      url: "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.9.0-amd64-netinst.iso",
-      icon: DebianIcon,
-    },
-    {
-      name: "Fedora 41",
-      url: "https://download.fedoraproject.org/pub/fedora/linux/releases/41/Workstation/x86_64/iso/Fedora-Workstation-Live-x86_64-41-1.4.iso",
-      icon: FedoraIcon,
-    },
-    {
-      name: "openSUSE Leap 15.6",
-      url: "https://download.opensuse.org/distribution/leap/15.6/iso/openSUSE-Leap-15.6-NET-x86_64-Media.iso",
-      icon: OpenSUSEIcon,
-    },
-    {
-      name: "openSUSE Tumbleweed",
-      url: "https://download.opensuse.org/tumbleweed/iso/openSUSE-Tumbleweed-NET-x86_64-Current.iso",
-      icon: OpenSUSEIcon,
-    },
-    {
-      name: "Arch Linux",
-      url: "https://archlinux.doridian.net/iso/2025.02.01/archlinux-2025.02.01-x86_64.iso",
-      icon: ArchIcon,
-    },
-    {
-      name: "netboot.xyz",
-      url: "https://boot.netboot.xyz/ipxe/netboot.xyz.iso",
-      icon: NetBootIcon,
-      description: "Boot and install various operating systems over network",
-    },
-  ];
-
-  const urlRef = useRef<HTMLInputElement>(null);
-
-  function handleUrlChange(url: string) {
-    setUrl(url);
-    if (url.endsWith(".iso")) {
-      setUsbMode("CDROM");
-    } else if (url.endsWith(".img")) {
-      setUsbMode("Disk");
-    }
-  }
-
-  return (
-    <div className="w-full space-y-4">
-      <ViewHeader
-        title="Mount from URL"
-        description="Enter an URL to the image file to mount"
-      />
-
-      <div
-        className="animate-fadeIn opacity-0"
-        style={{
-          animationDuration: "0.7s",
-        }}
-      >
-        <InputFieldWithLabel
-          placeholder="https://example.com/image.iso"
-          type="url"
-          label="Image URL"
-          ref={urlRef}
-          value={url}
-          onChange={e => handleUrlChange(e.target.value)}
-        />
-      </div>
-      <div
-        className="flex w-full animate-fadeIn items-end justify-between opacity-0"
-        style={{
-          animationDuration: "0.7s",
-          animationDelay: "0.1s",
-        }}
-      >
-        <Fieldset disabled={!urlRef.current?.validity.valid || url.length === 0}>
-          <UsbModeSelector usbMode={usbMode} setUsbMode={setUsbMode} />
-        </Fieldset>
-        <div className="flex space-x-2">
-          <Button size="MD" theme="blank" text="Back" onClick={onBack} />
-          <Button
-            size="MD"
-            theme="primary"
-            loading={mountInProgress}
-            text="Mount URL"
-            onClick={() => onMount(url, usbMode)}
-            disabled={
-              mountInProgress || !urlRef.current?.validity.valid || url.length === 0
-            }
-          />
-        </div>
-      </div>
-
-      <hr className="border-slate-800/30 dark:border-slate-300/20" />
-      <div
-        className="animate-fadeIn opacity-0"
-        style={{
-          animationDuration: "0.7s",
-          animationDelay: "0.2s",
-        }}
-      >
-        <h2 className="mb-2 text-sm font-semibold text-black dark:text-white">
-          Popular images
-        </h2>
-        <Card className="w-full divide-y divide-slate-800/20 dark:divide-slate-300/20">
-          {popularImages.map((image, index) => (
-            <div key={index} className="flex items-center justify-between gap-x-4 p-3.5">
-              <div className="flex items-center gap-x-4">
-                <img src={image.icon} alt={`${image.name} Icon`} className="w-6" />
-                <div className="flex flex-col gap-y-1">
-                  <h3 className="text-sm leading-none font-semibold dark:text-white">
-                    {formatters.truncateMiddle(image.name, 40)}
-                  </h3>
-                  {image.description && (
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
-                      {image.description}
-                    </p>
-                  )}
-                  <p className="text-xs leading-none text-slate-800 dark:text-slate-300">
-                    {formatters.truncateMiddle(image.url, 50)}
-                  </p>
-                </div>
-              </div>
-              <Button
-                size="XS"
-                theme="light"
-                text="Select"
-                onClick={() => handleUrlChange(image.url)}
-              />
-            </div>
-          ))}
-        </Card>
-      </div>
-    </div>
-  );
-}
-
 function DeviceFileView({
-  onMountStorageFile,
-  mountInProgress,
   onBack,
   onNewImageClick,
 }: {
-  onMountStorageFile: (name: string, mode: RemoteVirtualMediaState["mode"]) => void;
-  mountInProgress: boolean;
   onBack: () => void;
   onNewImageClick: (incompleteFileName?: string) => void;
 }) {
@@ -759,7 +290,6 @@ function DeviceFileView({
   >([]);
 
   const [selected, setSelected] = useState<string | null>(null);
-  const [usbMode, setUsbMode] = useState<RemoteVirtualMediaState["mode"]>("CDROM");
   const [currentPage, setCurrentPage] = useState(1);
   const filesPerPage = 5;
 
@@ -845,14 +375,15 @@ function DeviceFileView({
       syncStorage();
     });
   }
-
-  function handleOnSelectFile(file: { name: string; size: string; createdAt: string }) {
-    setSelected(file.name);
-    if (file.name.endsWith(".iso")) {
-      setUsbMode("CDROM");
-    } else if (file.name.endsWith(".img")) {
-      setUsbMode("Disk");
-    }
+  
+  function handleDownloadFile(file: { name: string }) {
+    const downloadUrl = `${DEVICE_API}/storage/download?file=${encodeURIComponent(file.name)}`;
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
 
   const indexOfLastFile = currentPage * filesPerPage;
@@ -898,7 +429,7 @@ function DeviceFileView({
                   <Button
                     size="SM"
                     theme="primary"
-                    text="Upload a new image"
+                    text="Upload a new File"
                     onClick={() => onNewImageClick()}
                   />
                 </div>
@@ -906,14 +437,25 @@ function DeviceFileView({
             </div>
           ) : (
             <div className="w-full divide-y divide-slate-800/20 dark:divide-slate-300/20">
-              {currentFiles.map((file, index) => (
+              {currentFiles.map((file, index) => ( 
                 <PreUploadedImageItem
                   key={index}
                   name={file.name}
                   size={file.size}
                   uploadedAt={file.createdAt}
                   isIncomplete={file.name.endsWith(".incomplete")}
-                  isSelected={selected === file.name}
+                  isSelected={selected === file.name} 
+                  onDownload={() => {
+                    const selectedFile = onStorageFiles.find(f => f.name === file.name);
+                    if (!selectedFile) return;
+                    if (
+                      window.confirm(
+                        "Are you sure you want to download " + selectedFile.name + "?",
+                      )
+                    ) {
+                      handleDownloadFile(selectedFile);
+                    }
+                  }}
                   onDelete={() => {
                     const selectedFile = onStorageFiles.find(f => f.name === file.name);
                     if (!selectedFile) return;
@@ -925,9 +467,8 @@ function DeviceFileView({
                       handleDeleteFile(selectedFile);
                     }
                   }}
-                  onSelect={() => handleOnSelectFile(file)}
                   onContinueUpload={() => onNewImageClick(file.name)}
-                />
+                /> 
               ))}
 
               {onStorageFiles.length > filesPerPage && (
@@ -970,24 +511,8 @@ function DeviceFileView({
             animationDelay: "0.15s",
           }}
         >
-          <Fieldset disabled={selected === null}>
-            <UsbModeSelector usbMode={usbMode} setUsbMode={setUsbMode} />
-          </Fieldset>
           <div className="flex items-center gap-x-2">
             <Button size="MD" theme="blank" text="Back" onClick={() => onBack()} />
-            <Button
-              size="MD"
-              disabled={selected === null || mountInProgress}
-              theme="primary"
-              text="Mount File"
-              loading={mountInProgress}
-              onClick={() =>
-                onMountStorageFile(
-                  onStorageFiles.find(f => f.name === selected)?.name || "",
-                  usbMode,
-                )
-              }
-            />
           </div>
         </div>
       ) : (
@@ -1047,7 +572,7 @@ function DeviceFileView({
             size="MD"
             theme="light"
             fullWidth
-            text="Upload a new image"
+            text="Upload a new File"
             onClick={() => onNewImageClick()}
           />
         </div>
@@ -1057,13 +582,9 @@ function DeviceFileView({
 }
 
 function SDFileView({
-  onMountStorageFile,
-  mountInProgress,
   onBack,
   onNewImageClick,
 }: {
-  onMountStorageFile: (name: string, mode: RemoteVirtualMediaState["mode"]) => void;
-  mountInProgress: boolean;
   onBack: () => void;
   onNewImageClick: (incompleteFileName?: string) => void;
 }) {
@@ -1077,7 +598,6 @@ function SDFileView({
 
   const [sdMountStatus, setSDMountStatus] = useState<"ok" | "none" | "fail" | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [usbMode, setUsbMode] = useState<RemoteVirtualMediaState["mode"]>("CDROM");
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const filesPerPage = 5;
@@ -1172,7 +692,7 @@ function SDFileView({
   useEffect(() => {
     syncStorage();
   }, [syncStorage]);
-
+  
   function handleSDDeleteFile(file: { name: string; size: string; createdAt: string }) {
     console.log("Deleting file:", file);
     send("deleteSDStorageFile", { filename: file.name }, res => {
@@ -1183,15 +703,16 @@ function SDFileView({
 
       syncStorage();
     });
-  }
-
-  function handleOnSelectFile(file: { name: string; size: string; createdAt: string }) {
-    setSelected(file.name);
-    if (file.name.endsWith(".iso")) {
-      setUsbMode("CDROM");
-    } else if (file.name.endsWith(".img")) {
-      setUsbMode("CDROM");
-    }
+  }  
+  
+  function handleSDDownloadFile(file: { name: string }) {
+    const downloadUrl = `${DEVICE_API}/storage/sd-download?file=${encodeURIComponent(file.name)}`;
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
 
   const indexOfLastFile = currentPage * filesPerPage;
@@ -1206,7 +727,7 @@ function SDFileView({
   const handleNextPage = () => {
     setCurrentPage(prev => Math.min(prev + 1, totalPages));
   };
-   
+
   async function handleResetSDStorage() { 
     setLoading(true);
     send("resetSDStorage", {}, res => {
@@ -1237,7 +758,21 @@ function SDFileView({
     syncStorage();
   }
 
-  
+  async function handleMountSDStorage() { 
+    setLoading(true);
+    send("mountSDStorage", {}, res => {
+      console.log("Mount SD response:", res);
+      if ("error" in res) {
+        notifications.error(`Failed to mount SD card`);
+        setLoading(false); 
+        return;
+      }
+    });
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    setLoading(false); 
+    syncStorage();
+  }
+
   if (sdMountStatus && sdMountStatus !== "ok") {
     return (
       <div className="w-full space-y-4">
@@ -1271,7 +806,7 @@ function SDFileView({
     );
   }
 
-  return (
+  return (    
     <div className="w-full space-y-4">
       <ViewHeader
         title="Mount from KVM MicroSD Card"
@@ -1294,7 +829,7 @@ function SDFileView({
                     No images available
                   </h3>
                   <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-                    Upload an image to start virtual media mounting.
+                    Upload a file.
                   </p>
                 </div>
                 <div>
@@ -1302,7 +837,7 @@ function SDFileView({
                     size="SM"
                     disabled={loading}
                     theme="primary"
-                    text="Upload a new image"
+                    text="Upload a new File"
                     onClick={() => onNewImageClick()}
                   />
                 </div>
@@ -1318,6 +853,17 @@ function SDFileView({
                   uploadedAt={file.createdAt}
                   isIncomplete={file.name.endsWith(".incomplete")}
                   isSelected={selected === file.name}
+                  onDownload={() => {
+                    const selectedFile = onStorageFiles.find(f => f.name === file.name);
+                    if (!selectedFile) return;
+                    if (
+                      window.confirm(
+                        "Are you sure you want to download " + selectedFile.name + "?",
+                      )
+                    ) {
+                      handleSDDownloadFile(selectedFile);
+                    }
+                  }}
                   onDelete={() => {
                     const selectedFile = onStorageFiles.find(f => f.name === file.name);
                     if (!selectedFile) return;
@@ -1325,7 +871,6 @@ function SDFileView({
                       handleSDDeleteFile(selectedFile);
                     }
                   }}
-                  onSelect={() => handleOnSelectFile(file)}
                   onContinueUpload={() => onNewImageClick(file.name)}
                 />
               ))}
@@ -1345,14 +890,14 @@ function SDFileView({
                       theme="light"
                       text="Previous"
                       onClick={handlePreviousPage}
-                      disabled={currentPage === 1 || loading}
+                      disabled={currentPage === 1}
                     />
                     <Button
                       size="XS"
                       theme="light"
                       text="Next"
                       onClick={handleNextPage}
-                      disabled={currentPage === totalPages || loading}
+                      disabled={currentPage === totalPages}
                     />
                   </div>
                 </div>
@@ -1370,36 +915,33 @@ function SDFileView({
             animationDelay: "0.15s",
           }}
         >
-          <Fieldset disabled={selected === null}>
-            <UsbModeSelector usbMode={usbMode} setUsbMode={setUsbMode} />
-          </Fieldset>
-          <div className="flex items-center gap-x-2">
+          <div className="flex items-center gap-x-2"> 
             <Button size="MD" theme="blank" text="Back" onClick={() => onBack()} />
             <Button
-              size="MD"
-              disabled={selected === null || mountInProgress || loading}
-              theme="primary"
-              text="Mount File"
-              loading={mountInProgress}
-              onClick={() =>
-                onMountStorageFile(
-                  onStorageFiles.find(f => f.name === selected)?.name || "",
-                  usbMode,
-                )
-              }
+                size="MD"
+                disabled={loading}
+                theme="light"
+                LeadingIcon={LuRefreshCw}
+                onClick={handleResetSDStorage}
             />
           </div>
         </div>
       ) : (
         <div
-          className="flex animate-fadeIn items-end justify-end opacity-0"
+          className="flex w-full animate-fadeIn items-end justify-end opacity-0"
           style={{
             animationDuration: "0.7s",
             animationDelay: "0.15s",
           }}
         >
-          <div className="flex items-center gap-x-2">
+          <div className="flex items-center gap-x-2 ml-auto ml-auto">
             <Button size="MD" theme="light" text="Back" onClick={() => onBack()} />
+            <Button
+                size="MD"
+                theme="light"
+                LeadingIcon={LuRefreshCw}
+                onClick={handleResetSDStorage}
+            />
           </div>
         </div>
       )}
@@ -1448,12 +990,12 @@ function SDFileView({
             disabled={loading}
             theme="light"
             fullWidth
-            text="Upload a new image"
+            text="Upload a new File"
             onClick={() => onNewImageClick()}
           />
         </div>
       )}
-      
+  
       <div
         className="w-full animate-fadeIn opacity-0"
         style={{
@@ -1471,6 +1013,7 @@ function SDFileView({
           className="text-red-500 dark:text-red-400"
         />
       </div>
+ 
     </div>
   );
 }
@@ -1817,7 +1360,7 @@ function UploadFileView({
                             : "Click to select a file"}
                         </h3>
                         <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-                          Supported formats: ISO, IMG
+                          Do not support directory
                         </p>
                       </div>
                     )}
@@ -1884,7 +1427,6 @@ function UploadFileView({
             type="file"
             onChange={handleFileChange}
             className="hidden"
-            accept=".iso, .img"
           />
           {fileError && (
             <p className="mt-2 text-sm text-red-600 dark:text-red-400">{fileError}</p>
@@ -1977,7 +1519,7 @@ function PreUploadedImageItem({
   uploadedAt,
   isSelected,
   isIncomplete,
-  onSelect,
+  onDownload,
   onDelete,
   onContinueUpload,
 }: {
@@ -1986,7 +1528,7 @@ function PreUploadedImageItem({
   uploadedAt: string;
   isSelected: boolean;
   isIncomplete: boolean;
-  onSelect: () => void;
+  onDownload: () => void;
   onDelete: () => void;
   onContinueUpload: () => void;
 }) {
@@ -2004,11 +1546,6 @@ function PreUploadedImageItem({
       )}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
-      onClick={() => {
-        if (!isIncomplete) {
-          onSelect();
-        }
-      }}
     >
       <div className="flex items-center gap-x-4">
         <div className="space-y-0.5 select-none">
@@ -2033,6 +1570,23 @@ function PreUploadedImageItem({
           <Button
             size="XS"
             theme="light"
+            LeadingIcon={LuDownload}
+            text="Download"
+            onClick={e => {
+              e.stopPropagation();
+              onDownload();
+            }}
+            className="text-blue-500 dark:text-blue-400"
+          />
+        </div>
+        <div
+          className={cx("opacity-0 transition-opacity duration-200", {
+            "w-auto opacity-100": isHovering,
+          })}
+        >
+          <Button
+            size="XS"
+            theme="light"
             LeadingIcon={TrashIcon}
             text="Delete"
             onClick={e => {
@@ -2042,16 +1596,7 @@ function PreUploadedImageItem({
             className="text-red-500 dark:text-red-400"
           />
         </div>
-        {!isIncomplete ? (
-          <input
-            type="radio"
-            checked={isSelected}
-            onChange={onSelect}
-            name={name}
-            className="form-radio h-3 w-3 border-slate-800/30 bg-white text-blue-700 focus:ring-blue-500 disabled:opacity-30 dark:border-slate-300/20 dark:bg-slate-800"
-            onClick={e => e.stopPropagation()} // Prevent double-firing of onSelect
-          />
-        ) : (
+        {isIncomplete && (
           <Button
             size="XS"
             theme="light"
@@ -2075,48 +1620,6 @@ function ViewHeader({ title, description }: { title: string; description: string
       </h2>
       <div className="text-sm leading-snug text-slate-600 dark:text-slate-400">
         {description}
-      </div>
-    </div>
-  );
-}
-
-function UsbModeSelector({
-  usbMode,
-  setUsbMode,
-}: {
-  usbMode: RemoteVirtualMediaState["mode"];
-  setUsbMode: (mode: RemoteVirtualMediaState["mode"]) => void;
-}) {
-  return (
-    <div className="flex flex-col items-start space-y-1 select-none">
-      <label className="text-sm font-semibold text-black dark:text-white">Mount as</label>
-      <div className="flex space-x-4">
-        <label htmlFor="cdrom" className="flex items-center">
-          <input
-            type="radio"
-            id="cdrom"
-            name="mountType"
-            onChange={() => setUsbMode("CDROM")}
-            checked={usbMode === "CDROM"}
-            className="form-radio h-3 w-3 rounded-full border-slate-800/30 bg-white text-blue-700 transition-opacity focus:ring-blue-500 disabled:opacity-30 dark:bg-slate-800"
-          />
-          <span className="ml-2 text-sm font-medium text-slate-900 dark:text-white">
-            CD/DVD
-          </span>
-        </label>
-        <label htmlFor="disk" className="flex items-center">
-          <input
-            type="radio"
-            id="disk"
-            name="mountType"
-            checked={usbMode === "Disk"}
-            onChange={() => setUsbMode("Disk")}
-            className="form-radio h-3 w-3 rounded-full border-slate-800/30 bg-white text-blue-700 transition-opacity focus:ring-blue-500 disabled:opacity-30 dark:bg-slate-800"
-          />
-          <span className="ml-2 text-sm font-medium text-slate-900 dark:text-white">
-            Disk
-          </span>
-        </label>
       </div>
     </div>
   );

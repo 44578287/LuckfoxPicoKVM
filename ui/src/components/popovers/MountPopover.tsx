@@ -1,12 +1,14 @@
 import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { PlusCircleIcon } from "@heroicons/react/20/solid";
-import { useMemo, forwardRef, useEffect, useCallback } from "react";
+import { useMemo, forwardRef, useEffect, useCallback, useState } from "react";
 import {
   LuArrowUpFromLine,
   LuCheckCheck,
   LuLink,
   LuPlus,
   LuRadioReceiver,
+  LuFileBadge,
+  LuFlagOff,
 } from "react-icons/lu";
 import { useClose } from "@headlessui/react";
 import { useLocation } from "react-router-dom";
@@ -14,17 +16,43 @@ import { useLocation } from "react-router-dom";
 import { Button } from "@components/Button";
 import Card, { GridCard } from "@components/Card";
 import { formatters } from "@/utils";
-import { RemoteVirtualMediaState, useMountMediaStore, useRTCStore } from "@/hooks/stores";
+import { RemoteVirtualMediaState, useMountMediaStore, useRTCStore, useUsbEpModeStore } from "@/hooks/stores";
 import { SettingsPageHeader } from "@components/SettingsPageheader";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
 import { useDeviceUiNavigation } from "@/hooks/useAppNavigation";
 import notifications from "@/notifications";
+import { SelectMenuBasic } from "../SelectMenuBasic";
+import { SettingsItem } from "../../routes/devices.$id.settings";
+import { UsbDeviceConfig  } from "@components/UsbEpModeSetting";
 
 const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
   const diskDataChannelStats = useRTCStore(state => state.diskDataChannelStats);
   const [send] = useJsonRpc();
   const { remoteVirtualMediaState, setModalView, setRemoteVirtualMediaState } =
     useMountMediaStore();
+
+  const usbEpMode = useUsbEpModeStore(state => state.usbEpMode)
+  const setUsbEpMode = useUsbEpModeStore(state => state.setUsbEpMode)
+
+  const [usbStorageMode, setUsbStorageMode] = useState("ums");
+  const usbStorageModeOptions = [
+    { value: "ums", label: "USB Mass Storage"},
+    { value: "mtp", label: "MTP"},
+  ]
+
+  const getUsbEpMode = useCallback(() => { 
+    send("getUsbDevices", {}, resp => {
+      if ("error" in resp) {
+        console.error("Failed to load USB devices:", resp.error);
+        notifications.error(
+          `Failed to load USB devices: ${resp.error.data || "Unknown error"}`,
+        );
+      } else {
+        const usbConfigState = resp.result as UsbDeviceConfig;
+        setUsbEpMode(usbConfigState.mtp ? "mtp" : "uac");
+      }
+    });
+  }, [send])
 
   const bytesSentPerSecond = useMemo(() => {
     if (diskDataChannelStats.size < 2) return null;
@@ -67,6 +95,10 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
       }
     });
   };
+
+  const handleUsbStorageModeChange = (value: string) => {
+    setUsbStorageMode(value);
+  }
 
   const renderGridCardContent = () => {
     if (!remoteVirtualMediaState) {
@@ -187,7 +219,8 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
 
   useEffect(() => {
     syncRemoteVirtualMediaState();
-  }, [syncRemoteVirtualMediaState, location.pathname]);
+    getUsbEpMode();
+  }, [syncRemoteVirtualMediaState, location.pathname, getUsbEpMode]);
 
   const { navigateTo } = useDeviceUiNavigation();
 
@@ -202,6 +235,21 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
                 description="Mount an image to boot from or install an operating system."
               />
 
+              <SettingsItem
+                title="USB Storage Mode"
+                description=""
+              >
+                <SelectMenuBasic
+                  size="SM"
+                  label=""
+                  value={usbStorageMode}
+                  fullWidth
+                  onChange={(e) => handleUsbStorageModeChange(e.target.value)}
+                  options={usbStorageModeOptions}
+                />
+              </SettingsItem>
+
+
               {remoteVirtualMediaState?.source === "WebRTC" ? (
                 <Card>
                   <div className="flex items-center gap-x-1.5 px-2.5 py-2 text-sm">
@@ -213,81 +261,119 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
                 </Card>
               ) : null}
 
-              <div
-                className="animate-fadeIn opacity-0 space-y-2"
-                style={{
-                  animationDuration: "0.7s",
-                  animationDelay: "0.1s",
-                }}
-              >
-                <div className="block select-none">
-                  <div className="group">
-                    <Card>
-                      <div className="w-full px-4 py-8">
-                        <div className="flex h-full flex-col items-center justify-center text-center">
-                          {renderGridCardContent()}
+              {usbStorageMode === "ums" && (
+                <div
+                  className="animate-fadeIn opacity-0 space-y-2"
+                  style={{
+                    animationDuration: "0.7s",
+                    animationDelay: "0.1s",
+                  }}
+                >
+                  <div className="block select-none">
+                    <div className="group">
+                      <Card>
+                        <div className="w-full px-4 py-8">
+                          <div className="flex h-full flex-col items-center justify-center text-center">
+                            {renderGridCardContent()}
+                          </div>
                         </div>
+                      </Card>
+                    </div>
+                  </div>
+                  {remoteVirtualMediaState ? (
+                    <div className="flex select-none items-center justify-between text-xs">
+                      <div className="select-none text-white dark:text-slate-300">
+                        <span>Mounted as</span>{" "}
+                        <span className="font-semibold">
+                          {remoteVirtualMediaState.mode === "Disk" ? "Disk" : "CD-ROM"}
+                        </span>
                       </div>
-                    </Card>
+
+                      <div className="flex items-center gap-x-2">
+                        <Button
+                          size="SM"
+                          theme="blank"
+                          text="Close"
+                          onClick={() => {
+                            close();
+                          }}
+                        />
+                        <Button
+                          size="SM"
+                          theme="light"
+                          text="Unmount"
+                          LeadingIcon={({ className }) => (
+                            <svg
+                              className={`${className} h-2.5 w-2.5 shrink-0`}
+                              viewBox="0 0 10 10"
+                              fill="none"
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <g clipPath="url(#clip0_3137_1186)">
+                                <path
+                                  d="M4.99933 0.775635L0 5.77546H10L4.99933 0.775635Z"
+                                  fill="currentColor"
+                                />
+                                <path
+                                  d="M10 7.49976H0V9.22453H10V7.49976Z"
+                                  fill="currentColor"
+                                />
+                              </g>
+                              <defs>
+                                <clipPath id="clip0_3137_1186">
+                                  <rect width="10" height="10" fill="white" />
+                                </clipPath>
+                              </defs>
+                            </svg>
+                          )}
+                          onClick={handleUnmount}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              {usbStorageMode === "mtp" && usbEpMode !== "mtp" && ( 
+                <div
+                  className="animate-fadeIn opacity-0 space-y-2"
+                  style={{
+                    animationDuration: "0.7s",
+                    animationDelay: "0.1s",
+                  }}
+                >
+                  <div className="block select-none">
+                    <div className="group">
+                      <Card>
+                        <div className="w-full px-4 py-8">
+                          <div className="flex h-full flex-col items-center justify-center text-center">                            
+                            <div className="space-y-1">
+                              <div className="inline-block">
+                                <Card>
+                                  <div className="p-1">
+                                    <LuFlagOff className="h-4 w-4 shrink-0 text-blue-700 dark:text-white" />
+                                  </div>
+                                </Card>
+                              </div>
+                              <div className="space-y-1">
+                                <h3 className="text-sm font-semibold leading-none text-black dark:text-white">
+                                  The MTP function has not been activated.
+                                </h3>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    </div>
                   </div>
                 </div>
-                {remoteVirtualMediaState ? (
-                  <div className="flex select-none items-center justify-between text-xs">
-                    <div className="select-none text-white dark:text-slate-300">
-                      <span>Mounted as</span>{" "}
-                      <span className="font-semibold">
-                        {remoteVirtualMediaState.mode === "Disk" ? "Disk" : "CD-ROM"}
-                      </span>
-                    </div>
+              )}
 
-                    <div className="flex items-center gap-x-2">
-                      <Button
-                        size="SM"
-                        theme="blank"
-                        text="Close"
-                        onClick={() => {
-                          close();
-                        }}
-                      />
-                      <Button
-                        size="SM"
-                        theme="light"
-                        text="Unmount"
-                        LeadingIcon={({ className }) => (
-                          <svg
-                            className={`${className} h-2.5 w-2.5 shrink-0`}
-                            viewBox="0 0 10 10"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <g clipPath="url(#clip0_3137_1186)">
-                              <path
-                                d="M4.99933 0.775635L0 5.77546H10L4.99933 0.775635Z"
-                                fill="currentColor"
-                              />
-                              <path
-                                d="M10 7.49976H0V9.22453H10V7.49976Z"
-                                fill="currentColor"
-                              />
-                            </g>
-                            <defs>
-                              <clipPath id="clip0_3137_1186">
-                                <rect width="10" height="10" fill="white" />
-                              </clipPath>
-                            </defs>
-                          </svg>
-                        )}
-                        onClick={handleUnmount}
-                      />
-                    </div>
-                  </div>
-                ) : null}
-              </div>
             </div>
           </div>
         </div>
 
-        {!remoteVirtualMediaState && (
+        {!remoteVirtualMediaState && usbStorageMode === "ums" && (
           <div
             className="flex animate-fadeIn opacity-0 items-center justify-end space-x-2"
             style={{
@@ -315,6 +401,36 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
             />
           </div>
         )}
+
+        {usbStorageMode === "mtp" && usbEpMode === "mtp" && (
+          <div
+            className="flex animate-fadeIn opacity-0 items-center justify-end space-x-2"
+            style={{
+              animationDuration: "0.7s",
+              animationDelay: "0.2s",
+            }}
+          >
+            <Button
+              size="SM"
+              theme="blank"
+              text="Close"
+              onClick={() => {
+                close();
+              }}
+            /> 
+            <Button
+              size="SM"
+              theme="primary"
+              text="Manager"
+              onClick={() => {
+                setModalView("mode");
+                navigateTo("/mtp");
+              }}
+              LeadingIcon={LuFileBadge}
+            />  
+          </div>
+        )}
+
       </div>
     </GridCard>
   );

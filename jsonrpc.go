@@ -793,6 +793,13 @@ func updateUsbRelatedConfig() error {
 }
 
 func rpcSetUsbDevices(usbDevices usbgadget.Devices) error {
+	mediaState, _ := rpcGetVirtualMediaState()
+	if mediaState != nil && mediaState.Filename != "" {
+		err := rpcUnmountImage()
+		if err != nil {
+			jsonRpcLogger.Error().Err(err).Msg("failed to unmount image")
+		}
+	}
 	config.UsbDevices = &usbDevices
 	gadget.SetGadgetDevices(config.UsbDevices)
 	return updateUsbRelatedConfig()
@@ -978,6 +985,13 @@ func rpcSetAudioMode(mode string) error {
 	if err := SaveConfig(); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
+
+	if config.AudioMode != "disabled" {
+		StartNtpAudioServer(handleAudioClient)
+	} else {
+		StopNtpAudioServer()
+	}
+
 	return nil
 }
 
@@ -1064,6 +1078,8 @@ var rpcHandlers = map[string]RPCHandler{
 	"getStorageSpace":          {Func: rpcGetStorageSpace},
 	"getSDStorageSpace":        {Func: rpcGetSDStorageSpace},
 	"resetSDStorage":           {Func: rpcResetSDStorage},
+	"mountSDStorage":           {Func: rpcMountSDStorage},
+	"unmountSDStorage":         {Func: rpcUnmountSDStorage},
 	"mountWithHTTP":            {Func: rpcMountWithHTTP, Params: []string{"url", "mode"}},
 	"mountWithWebRTC":          {Func: rpcMountWithWebRTC, Params: []string{"filename", "size", "mode"}},
 	"mountWithStorage":         {Func: rpcMountWithStorage, Params: []string{"filename", "mode"}},
@@ -1113,4 +1129,9 @@ var rpcHandlers = map[string]RPCHandler{
 	"setUpdateSource":          {Func: rpcSetUpdateSource, Params: []string{"source"}},
 	"getAudioMode":             {Func: rpcGetAudioMode},
 	"setAudioMode":             {Func: rpcSetAudioMode, Params: []string{"mode"}},
+	"startFrpc":                {Func: rpcStartFrpc, Params: []string{"frpcToml"}},
+	"stopFrpc":                 {Func: rpcStopFrpc},
+	"getFrpcStatus":            {Func: rpcGetFrpcStatus},
+	"getFrpcToml":              {Func: rpcGetFrpcToml},
+	"getFrpcLog":               {Func: rpcGetFrpcLog},
 }

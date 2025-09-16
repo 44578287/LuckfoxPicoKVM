@@ -31,6 +31,7 @@ import WelcomeLocalPasswordRoute from "./routes/welcome-local.password";
 import { DEVICE_API } from "./ui.config";
 import OtherSessionRoute from "./routes/devices.$id.other-session";
 import MountRoute from "./routes/devices.$id.mount";
+import MtpRoute from "./routes/devices.$id.mtp";
 import * as SettingsRoute from "./routes/devices.$id.settings";
 import SettingsMouseRoute from "./routes/devices.$id.settings.mouse";
 import SettingsKeyboardRoute from "./routes/devices.$id.settings.keyboard";
@@ -108,6 +109,10 @@ export async function checkAuth() {
         {
           path: "mount",
           element: <MountRoute />,
+        },
+        {
+          path: "mtp",
+          element: <MtpRoute />,
         },
         {
           path: "settings",

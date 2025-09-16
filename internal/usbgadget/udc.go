@@ -80,7 +80,7 @@ func (u *UsbGadget) IsUDCBound() (bool, error) {
 
 // BindUDC binds the gadget to the UDC.
 func (u *UsbGadget) BindUDC() error {
-	err := os.WriteFile(path.Join(dwc3Path, "bind"), []byte(u.udc), 0644)
+	err := os.WriteFile(path.Join(udcPath, "bind"), []byte(u.udc), 0644)
 	if err != nil {
 		return fmt.Errorf("error binding UDC: %w", err)
 	}
@@ -89,7 +89,7 @@ func (u *UsbGadget) BindUDC() error {
 
 // UnbindUDC unbinds the gadget from the UDC.
 func (u *UsbGadget) UnbindUDC() error {
-	err := os.WriteFile(path.Join(dwc3Path, "unbind"), []byte(u.udc), 0644)
+	err := os.WriteFile(path.Join(udcPath, " "), []byte(u.udc), 0644)
 	if err != nil {
 		return fmt.Errorf("error unbinding UDC: %w", err)
 	}

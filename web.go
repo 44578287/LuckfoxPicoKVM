@@ -158,6 +158,8 @@ func setupRouter() *gin.Engine {
 		protected.PUT("/auth/password-local", handleUpdatePassword)
 		protected.DELETE("/auth/local-password", handleDeletePassword)
 		protected.POST("/storage/upload", handleUploadHttp)
+		protected.GET("/storage/download", handleDownloadHttp)
+		protected.GET("/storage/sd-download", handleSDDownloadHttp)
 	}
 
 	// Catch-all route for SPA
@@ -214,12 +216,17 @@ var (
 func handleLocalWebRTCSignal(c *gin.Context) {
 	// get the source from the request
 	source := c.ClientIP()
-	connectionID := uuid.New().String()
+
+	connectionID := c.Query("id")
+	if connectionID == "" {
+		connectionID = uuid.New().String()
+	}
 
 	scopedLogger := websocketLogger.With().
 		Str("component", "websocket").
 		Str("source", source).
 		Str("sourceType", "local").
+		Str("connectionID", connectionID).
 		Logger()
 
 	scopedLogger.Info().Msg("new websocket connection established")
@@ -246,7 +253,10 @@ func handleLocalWebRTCSignal(c *gin.Context) {
 	// Now use conn for websocket operations
 	defer wsCon.Close(websocket.StatusNormalClosure, "")
 
-	err = wsjson.Write(context.Background(), wsCon, gin.H{"type": "device-metadata", "data": gin.H{"deviceVersion": builtAppVersion}})
+	err = wsjson.Write(context.Background(), wsCon, gin.H{
+		"type": "device-metadata",
+		"data": gin.H{"deviceVersion": builtAppVersion, "connectionID": connectionID},
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -271,8 +281,7 @@ func handleWebRTCSignalWsMessages(
 	}()
 
 	// connection type
-	var sourceType string
-	sourceType = "local"
+	var sourceType = "local"
 
 	l := scopedLogger.With().
 		Str("source", source).

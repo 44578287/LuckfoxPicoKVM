@@ -2,6 +2,7 @@ package usbgadget
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/sourcegraph/tf-dag/dag"
@@ -127,6 +128,11 @@ func (c *ChangeSetResolver) applyChanges() error {
 		l.Str("action", actionStr).Str("change", change.String()).Msg("applying change")
 
 		err := c.changeset.applyChange(change)
+		if err != nil {
+			time.Sleep(500 * time.Millisecond)
+			err = c.changeset.applyChange(change)
+		}
+
 		if err != nil {
 			if change.IgnoreErrors {
 				c.l.Warn().Str("change", change.String()).Err(err).Msg("ignoring error")

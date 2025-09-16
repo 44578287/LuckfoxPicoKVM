@@ -1,8 +1,11 @@
 package usbgadget
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 	"os/exec"
+	"strings"
 )
 
 type gadgetConfigItem struct {
@@ -51,6 +54,8 @@ var defaultGadgetConfig = map[string]gadgetConfigItem{
 			"configuration": "Config 1: HID",
 		},
 	},
+	// mtp
+	"mtp": mtpConfig,
 	// keyboard HID
 	"keyboard": keyboardConfig,
 	// mouse HID
@@ -91,6 +96,8 @@ func (u *UsbGadget) isGadgetConfigItemEnabled(itemKey string) bool {
 		return u.enabledDevices.MassStorage
 	case "mass_storage_lun0":
 		return u.enabledDevices.MassStorage
+	case "mtp":
+		return u.enabledDevices.Mtp
 	case "audio":
 		return u.enabledDevices.Audio
 	default:
@@ -181,6 +188,45 @@ func mountConfigFS(path string) error {
 	if err != nil {
 		return fmt.Errorf("failed to mount configfs: %w", err)
 	}
+	return nil
+}
+
+func mountFunctionFS(path string) error {
+	err := os.MkdirAll("/dev/ffs-mtp", 0755)
+	if err != nil {
+		return fmt.Errorf("failed to create mtp dev dir: %w", err)
+	}
+	mounted := false
+	if f, err := os.Open("/proc/mounts"); err == nil {
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			if strings.Contains(scanner.Text(), functionFSPath) {
+				mounted = true
+				break
+			}
+		}
+		f.Close()
+	}
+
+	if !mounted {
+		err := exec.Command("mount", "-t", "functionfs", "mtp", path).Run()
+		if err != nil {
+			return fmt.Errorf("failed to mount functionfs: %w", err)
+		}
+	}
+
+	umtprdRunning := false
+	if out, err := exec.Command("pgrep", "-x", "umtprd").Output(); err == nil && len(out) > 0 {
+		umtprdRunning = true
+	}
+
+	if !umtprdRunning {
+		cmd := exec.Command("umtprd")
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("failed to exec binary: %w", err)
+		}
+	}
+
 	return nil
 }
 

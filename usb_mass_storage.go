@@ -93,7 +93,7 @@ func mountImage(imagePath string) error {
 
 var nbdDevice *NBDDevice
 
-const imagesFolder = "/userdata/picokvm/images"
+const imagesFolder = "/userdata/picokvm/share"
 const SDImagesFolder = "/mnt/sdcard"
 
 func initImagesFolder() error {
@@ -402,7 +402,7 @@ func rpcMountWithSDStorage(filename string, mode VirtualMediaMode) error {
 	fullPath := filepath.Join(SDImagesFolder, filename)
 	fileInfo, err := os.Stat(fullPath)
 	if err != nil {
-		return fmt.Errorf("[rpcMountWithStorage]failed to get file info: %w", err)
+		return fmt.Errorf("[rpcMountWithSDStorage]failed to get file info: %w", err)
 	}
 
 	if err := setMassStorageMode(mode == CDROM); err != nil {
@@ -694,6 +694,25 @@ func handleUploadHttp(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Upload completed"})
 }
 
+func handleDownloadHttp(c *gin.Context) {
+	filename := c.Query("file")
+	if filename == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing file parameter"})
+		return
+	}
+
+	sanitizedFilename, err := sanitizeFilename(filename)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid filename"})
+		return
+	}
+
+	fullPath := filepath.Join(imagesFolder, sanitizedFilename)
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", sanitizedFilename))
+	c.FileAttachment(fullPath, sanitizedFilename)
+}
+
 // SD Card
 func rpcGetSDStorageSpace() (*StorageSpace, error) {
 	var stat syscall.Statfs_t
@@ -715,13 +734,50 @@ func rpcGetSDStorageSpace() (*StorageSpace, error) {
 func rpcResetSDStorage() error {
 	err := os.WriteFile("/sys/bus/platform/drivers/dwmmc_rockchip/unbind", []byte("ffaa0000.mmc"), 0644)
 	if err != nil {
-		return fmt.Errorf("failed to write to file: %v", err)
+		logger.Error().Err(err).Msg("failed to unbind mmc")
 	}
 	time.Sleep(100 * time.Millisecond)
 	err = os.WriteFile("/sys/bus/platform/drivers/dwmmc_rockchip/bind", []byte("ffaa0000.mmc"), 0644)
 	if err != nil {
-		return fmt.Errorf("failed to write to file: %v", err)
+		logger.Error().Err(err).Msg("failed to bind mmc")
 	}
+	time.Sleep(500 * time.Millisecond)
+
+	err = updateMtpWithSDStatus()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func rpcMountSDStorage() error {
+	err := os.WriteFile("/sys/bus/platform/drivers/dwmmc_rockchip/bind", []byte("ffaa0000.mmc"), 0644)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to bind mmc")
+	}
+	time.Sleep(500 * time.Millisecond)
+
+	err = updateMtpWithSDStatus()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func rpcUnmountSDStorage() error {
+	err := os.WriteFile("/sys/bus/platform/drivers/dwmmc_rockchip/unbind", []byte("ffaa0000.mmc"), 0644)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to unbind mmc")
+	}
+	time.Sleep(500 * time.Millisecond)
+
+	err = updateMtpWithSDStatus()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -860,4 +916,107 @@ func rpcStartSDStorageFileUpload(filename string, size int64) (*SDStorageFileUpl
 		AlreadyUploadedBytes: alreadyUploadedBytes,
 		DataChannel:          uploadId,
 	}, nil
+}
+
+func handleSDDownloadHttp(c *gin.Context) {
+	filename := c.Query("file")
+	if filename == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing file parameter"})
+		return
+	}
+
+	sanitizedFilename, err := sanitizeFilename(filename)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid filename"})
+		return
+	}
+
+	fullPath := filepath.Join(SDImagesFolder, sanitizedFilename)
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", sanitizedFilename))
+	c.FileAttachment(fullPath, sanitizedFilename)
+}
+
+const umtprdConfPath = "/etc/umtprd/umtprd.conf"
+
+var umtprdWriteLock sync.Mutex
+
+func writeUmtprdConfFile(withSD bool) error {
+	umtprdWriteLock.Lock()
+	defer umtprdWriteLock.Unlock()
+
+	if err := os.MkdirAll(filepath.Dir(umtprdConfPath), 0755); err != nil {
+		return fmt.Errorf("failed to create umtprd.conf dir: %w", err)
+	}
+
+	conf := `loop_on_disconnect 1
+
+storage "/userdata/picokvm/share" "share folder" "rw"
+`
+	if withSD {
+		conf += `storage "/mnt/sdcard" "sdcard folder" "rw"
+`
+	}
+
+	conf += fmt.Sprintf(`
+manufacturer "%s"
+product "%s"
+serial "%s"
+
+usb_vendor_id   %s
+usb_product_id  %s
+
+usb_functionfs_mode 0x1
+
+usb_dev_path   "/dev/ffs-mtp/ep0"
+usb_epin_path  "/dev/ffs-mtp/ep1"
+usb_epout_path "/dev/ffs-mtp/ep2"
+usb_epint_path "/dev/ffs-mtp/ep3"
+usb_max_packet_size 0x200
+`,
+		config.UsbConfig.Manufacturer,
+		config.UsbConfig.Product,
+		config.UsbConfig.SerialNumber,
+		config.UsbConfig.VendorId,
+		config.UsbConfig.ProductId,
+	)
+
+	return os.WriteFile(umtprdConfPath, []byte(conf), 0644)
+}
+
+func updateMtpWithSDStatus() error {
+	resp, _ := rpcGetSDMountStatus()
+	if resp.Status == SDMountOK {
+		if err := writeUmtprdConfFile(true); err != nil {
+			logger.Error().Err(err).Msg("failed to write umtprd conf file")
+		}
+	} else {
+		if err := writeUmtprdConfFile(false); err != nil {
+			logger.Error().Err(err).Msg("failed to write umtprd conf file")
+		}
+	}
+
+	if config.UsbDevices.Mtp {
+		if err := gadget.UnbindUDC(); err != nil {
+			logger.Error().Err(err).Msg("failed to unbind UDC")
+		}
+
+		if out, err := exec.Command("pgrep", "-x", "umtprd").Output(); err == nil && len(out) > 0 {
+			cmd := exec.Command("killall", "umtprd")
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("failed to killall umtprd: %w", err)
+			}
+		}
+
+		cmd := exec.Command("umtprd")
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("failed to exec binary: %w", err)
+		}
+
+		if err := rpcSetUsbDevices(*config.UsbDevices); err != nil {
+			return fmt.Errorf("failed to set usb devices: %w", err)
+		}
+	}
+
+	return nil
 }

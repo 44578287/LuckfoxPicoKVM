@@ -11,6 +11,7 @@ import {
   useMountMediaStore,
   useSettingsStore,
   useUiStore,
+  useAudioModeStore,
 } from "@/hooks/stores";
 import Container from "@components/Container";
 import { cx } from "@/cva.config";
@@ -41,10 +42,10 @@ export default function Actionbar({
   const developerMode = useSettingsStore(state => state.developerMode);
 
   // Audio related
-  const [audioMode, setAudioMode] = useState("disabled");
   const [send] = useJsonRpc();
-
-  
+  const audioMode = useAudioModeStore(state => state.audioMode);
+  const setAudioMode = useAudioModeStore(state => state.setAudioMode);
+   
   // This is the only way to get a reliable state change for the popover
   // at time of writing this there is no mount, or unmount event for the popover
   const isOpen = useRef<boolean>(false);
@@ -126,11 +127,11 @@ export default function Actionbar({
                     return (
                       <>
                         <LuHardDrive className={className} />
-                        <div
+                        {/*<div
                           className={cx(className, "h-2 w-2 rounded-full bg-blue-700", {
                             hidden: !remoteVirtualMediaState,
                           })}
-                        />
+                        />*/}
                       </>
                     );
                   }}

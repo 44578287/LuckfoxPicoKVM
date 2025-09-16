@@ -36,8 +36,9 @@ type NetworkConfig struct {
 	Hostname null.String `json:"hostname,omitempty" validate_type:"hostname"`
 	Domain   null.String `json:"domain,omitempty" validate_type:"hostname"`
 
-	IPv4Mode   null.String       `json:"ipv4_mode,omitempty" one_of:"dhcp,static,disabled" default:"dhcp"`
-	IPv4Static *IPv4StaticConfig `json:"ipv4_static,omitempty" required_if:"IPv4Mode=static"`
+	IPv4Mode           null.String       `json:"ipv4_mode,omitempty" one_of:"dhcp,static,disabled" default:"dhcp"`
+	IPv4RequestAddress null.String       `json:"ipv4_request_address,omitempty"`
+	IPv4Static         *IPv4StaticConfig `json:"ipv4_static,omitempty" required_if:"IPv4Mode=static"`
 
 	IPv6Mode   null.String       `json:"ipv6_mode,omitempty" one_of:"slaac,dhcpv6,slaac_and_dhcpv6,static,link_local,disabled" default:"slaac"`
 	IPv6Static *IPv6StaticConfig `json:"ipv6_static,omitempty" required_if:"IPv6Mode=static"`

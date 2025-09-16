@@ -14,6 +14,7 @@ import (
 var appCtx context.Context
 
 func Main() {
+	SyncConfigSD(true)
 	LoadConfig()
 
 	var cancel context.CancelFunc
@@ -105,7 +106,6 @@ func Main() {
 			logger.Warn().Err(err).Msg("failed to extract and run vpn bin")
 			//TODO: prepare an error message screen buffer to show on kvm screen
 		}
-
 	}()
 
 	// initialize usb gadget
@@ -128,6 +128,8 @@ func Main() {
 
 	// Initialize VPN
 	initVPN()
+
+	initSystemInfo()
 
 	//Auto update
 	//go func() {

@@ -1,9 +1,14 @@
 package kvm
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"kvm/internal/logging"
@@ -75,8 +80,7 @@ func (m *KeyboardMacro) Validate() error {
 }
 
 type Config struct {
-	CloudToken           string                 `json:"cloud_token"`
-	GoogleIdentity       string                 `json:"google_identity"`
+	STUN                 string                 `json:"stun"`
 	JigglerEnabled       bool                   `json:"jiggler_enabled"`
 	AutoUpdateEnabled    bool                   `json:"auto_update_enabled"`
 	IncludePreRelease    bool                   `json:"include_pre_release"`
@@ -102,6 +106,8 @@ type Config struct {
 	TailScaleXEdge       bool                   `json:"tailscale_xedge"`
 	ZeroTierNetworkID    string                 `json:"zerotier_network_id"`
 	ZeroTierAutoStart    bool                   `json:"zerotier_autostart"`
+	FrpcAutoStart        bool                   `json:"frpc_autostart"`
+	FrpcToml             string                 `json:"frpc_toml"`
 	IO0Status            bool                   `json:"io0_status"`
 	IO1Status            bool                   `json:"io1_status"`
 	AudioMode            string                 `json:"audio_mode"`
@@ -111,8 +117,10 @@ type Config struct {
 }
 
 const configPath = "/userdata/kvm_config.json"
+const sdConfigPath = "/mnt/sdcard/kvm_config.json"
 
 var defaultConfig = &Config{
+	STUN:                 "stun:stun.l.google.com:19302",
 	AutoUpdateEnabled:    false, // Set a default value
 	ActiveExtension:      "",
 	KeyboardMacros:       []KeyboardMacro{},
@@ -135,13 +143,15 @@ var defaultConfig = &Config{
 		RelativeMouse: true,
 		Keyboard:      true,
 		MassStorage:   true,
-		Audio:         true,
+		Audio:         false, //At any given time, only one of Audio and Mtp can be set to true
+		Mtp:           false,
 	},
 	NetworkConfig:      &network.NetworkConfig{},
 	DefaultLogLevel:    "INFO",
 	ZeroTierAutoStart:  false,
 	TailScaleAutoStart: false,
 	TailScaleXEdge:     false,
+	FrpcAutoStart:      false,
 	IO0Status:          true,
 	IO1Status:          true,
 	AudioMode:          "disabled",
@@ -165,6 +175,14 @@ func LoadConfig() {
 
 	// load the default config
 	config = defaultConfig
+	if config.UsbConfig.SerialNumber == "" {
+		serialNumber, err := extractSerialNumber()
+		if err != nil {
+			logger.Warn().Err(err).Msg("failed to extract serial number")
+		} else {
+			config.UsbConfig.SerialNumber = serialNumber
+		}
+	}
 
 	file, err := os.Open(configPath)
 	if err != nil {
@@ -177,6 +195,10 @@ func LoadConfig() {
 	loadedConfig := *defaultConfig
 	if err := json.NewDecoder(file).Decode(&loadedConfig); err != nil {
 		logger.Warn().Err(err).Msg("config file JSON parsing failed")
+		os.Remove(configPath)
+		if _, err := os.Stat(sdConfigPath); err == nil {
+			os.Remove(sdConfigPath)
+		}
 		return
 	}
 
@@ -200,6 +222,74 @@ func LoadConfig() {
 	logger.Info().Str("path", configPath).Msg("config loaded")
 }
 
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := out.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+
+	if err := out.Sync(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func SyncConfigSD(isUpdate bool) {
+	resp, err := rpcGetSDMountStatus()
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to get sd mount status")
+		return
+	}
+
+	if resp.Status == SDMountOK {
+		if _, err := os.Stat(configPath); err != nil {
+			if err := SaveConfig(); err != nil {
+				logger.Error().Err(err).Msg("failed to create kvm_config.json")
+				return
+			}
+		}
+
+		if isUpdate {
+			if _, err := os.Stat(sdConfigPath); err == nil {
+				if err := copyFile(sdConfigPath, configPath); err != nil {
+					logger.Error().Err(err).Msg("failed to copy kvm_config.json from sdcard to userdata")
+					return
+				}
+			} else {
+				if err := copyFile(configPath, sdConfigPath); err != nil {
+					logger.Error().Err(err).Msg("failed to copy kvm_config.json from userdata to sdcard")
+					return
+				}
+			}
+		} else {
+			if err := copyFile(configPath, sdConfigPath); err != nil {
+				logger.Error().Err(err).Msg("failed to copy kvm_config.json from userdata to sdcard")
+				return
+			}
+		}
+	}
+}
+
 func SaveConfig() error {
 	configLock.Lock()
 	defer configLock.Unlock()
@@ -218,6 +308,8 @@ func SaveConfig() error {
 		return fmt.Errorf("failed to encode config: %w", err)
 	}
 
+	SyncConfigSD(false)
+
 	return nil
 }
 
@@ -225,4 +317,96 @@ func ensureConfigLoaded() {
 	if config == nil {
 		LoadConfig()
 	}
+}
+
+var systemInfoWriteLock sync.Mutex
+
+func writeSystemInfoImg() error {
+	systemInfoWriteLock.Lock()
+	defer systemInfoWriteLock.Unlock()
+
+	imgPath := filepath.Join(imagesFolder, "system_info.img")
+	unverifiedimgPath := filepath.Join(imagesFolder, "system_info.img") + ".unverified"
+	mountPoint := "/mnt/system_info"
+
+	run := func(cmd string, args ...string) error {
+		c := exec.Command(cmd, args...)
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		return c.Run()
+	}
+
+	if _, err := os.Stat(unverifiedimgPath); err == nil {
+		err := os.Rename(unverifiedimgPath, imgPath)
+		if err != nil {
+			return fmt.Errorf("failed to rename %s to %s: %v", unverifiedimgPath, imgPath, err)
+		}
+		return nil
+	}
+
+	isMounted := false
+	if f, err := os.Open("/proc/mounts"); err == nil {
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			fields := strings.Fields(scanner.Text())
+			if len(fields) >= 2 && fields[1] == mountPoint {
+				isMounted = true
+				break
+			}
+		}
+	}
+
+	if isMounted {
+		logger.Info().Msgf("%s is mounted, umounting...\n", mountPoint)
+		_ = run("umount", mountPoint)
+	}
+
+	if _, err := os.Stat(mountPoint); err == nil {
+		if err := os.Remove(mountPoint); err != nil {
+			return fmt.Errorf("failed to remove %s: %v", mountPoint, err)
+		}
+	}
+
+	if _, err := os.Stat(imgPath); err == nil {
+		if err := copyFile(imgPath, unverifiedimgPath); err != nil {
+			logger.Error().Err(err).Msg("failed to copy system_info.img")
+			return err
+		}
+	} else {
+		if err := run("dd", "if=/dev/zero", "of="+unverifiedimgPath, "bs=1M", "count=4"); err != nil {
+			return fmt.Errorf("dd failed: %v", err)
+		}
+
+		if err := run("mkfs.vfat", unverifiedimgPath); err != nil {
+			return fmt.Errorf("mkfs.vfat failed: %v", err)
+		}
+	}
+
+	if err := os.MkdirAll(mountPoint, 0755); err != nil {
+		return fmt.Errorf("mkdir failed: %v", err)
+	}
+
+	if err := run("mount", "-o", "loop", unverifiedimgPath, mountPoint); err != nil {
+		return fmt.Errorf("mount failed: %v", err)
+	}
+
+	if err := run("cp", "/etc/hostname", mountPoint+"/hostname.txt"); err != nil {
+		return fmt.Errorf("copy hostname failed: %v", err)
+	}
+	if err := run("sh", "-c", "ip addr show > "+mountPoint+"/network_info.txt"); err != nil {
+		return fmt.Errorf("write network info failed: %v", err)
+	}
+
+	_ = run("umount", mountPoint)
+	if err := os.RemoveAll(mountPoint); err != nil {
+		return fmt.Errorf("failed to remove %s: %v", mountPoint, err)
+	}
+
+	if err := os.Rename(unverifiedimgPath, imgPath); err != nil {
+		return fmt.Errorf("failed to rename %s to %s: %v", unverifiedimgPath, imgPath, err)
+	}
+
+	logger.Info().Msg("system_info.img update successfully")
+	return nil
 }

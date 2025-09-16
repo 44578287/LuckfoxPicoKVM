@@ -58,7 +58,8 @@ func setGPIOValue(pin int, status bool) error {
 }
 
 func setLedMode(ledConfigPath string, mode string) error {
-	if mode == "network-link" {
+	switch mode {
+	case "network-link":
 		err := os.WriteFile(ledConfigPath+"/trigger", []byte("netdev"), 0644)
 		if err != nil {
 			return fmt.Errorf("failed to set LED trigger: %v", err)
@@ -71,7 +72,7 @@ func setLedMode(ledConfigPath string, mode string) error {
 		if err != nil {
 			return fmt.Errorf("failed to set LED link: %v", err)
 		}
-	} else if mode == "network-tx" {
+	case "network-tx":
 		err := os.WriteFile(ledConfigPath+"/trigger", []byte("netdev"), 0644)
 		if err != nil {
 			return fmt.Errorf("failed to set LED trigger: %v", err)
@@ -84,7 +85,7 @@ func setLedMode(ledConfigPath string, mode string) error {
 		if err != nil {
 			return fmt.Errorf("failed to set LED tx: %v", err)
 		}
-	} else if mode == "network-rx" {
+	case "network-rx":
 		err := os.WriteFile(ledConfigPath+"/trigger", []byte("netdev"), 0644)
 		if err != nil {
 			return fmt.Errorf("failed to set LED trigger: %v", err)
@@ -97,12 +98,12 @@ func setLedMode(ledConfigPath string, mode string) error {
 		if err != nil {
 			return fmt.Errorf("failed to set LED rx: %v", err)
 		}
-	} else if mode == "kernel-activity" {
+	case "kernel-activity":
 		err := os.WriteFile(ledConfigPath+"/trigger", []byte("activity"), 0644)
 		if err != nil {
 			return fmt.Errorf("failed to set LED trigger: %v", err)
 		}
-	} else {
+	default:
 		return fmt.Errorf("invalid LED mode: %s", mode)
 	}
 	return nil

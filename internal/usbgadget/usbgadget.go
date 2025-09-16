@@ -20,6 +20,7 @@ type Devices struct {
 	RelativeMouse bool `json:"relative_mouse"`
 	Keyboard      bool `json:"keyboard"`
 	MassStorage   bool `json:"mass_storage"`
+	Mtp           bool `json:"mtp"`
 	Audio         bool `json:"audio"`
 }
 
@@ -87,6 +88,9 @@ type UsbGadget struct {
 
 const configFSPath = "/sys/kernel/config"
 const gadgetPath = "/sys/kernel/config/usb_gadget"
+
+const functionFSPath = "/dev/ffs-mtp"
+const umtprdPath = "/usr/sbin/umtprd"
 
 var defaultLogger = logging.GetSubsystemLogger("usbgadget")
 

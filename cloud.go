@@ -118,8 +118,7 @@ func handleSessionRequest(
 	source string,
 	scopedLogger *zerolog.Logger,
 ) error {
-	var sourceType string
-	sourceType = "local"
+	var sourceType = "local"
 
 	timer := prometheus.NewTimer(prometheus.ObserverFunc(func(v float64) {
 		metricConnectionLastSessionRequestDuration.WithLabelValues(sourceType, source).Set(v)

@@ -12,6 +12,17 @@ var gadget *usbgadget.UsbGadget
 // initUsbGadget initializes the USB gadget.
 // call it only after the config is loaded.
 func initUsbGadget() {
+	resp, _ := rpcGetSDMountStatus()
+	if resp.Status == SDMountOK {
+		if err := writeUmtprdConfFile(true); err != nil {
+			usbLogger.Error().Err(err).Msg("failed to write umtprd conf file")
+		}
+	} else {
+		if err := writeUmtprdConfFile(false); err != nil {
+			usbLogger.Error().Err(err).Msg("failed to write umtprd conf file")
+		}
+	}
+
 	gadget = usbgadget.NewUsbGadget(
 		"kvm",
 		config.UsbDevices,
@@ -36,6 +47,34 @@ func initUsbGadget() {
 	if err := gadget.OpenKeyboardHidFile(); err != nil {
 		usbLogger.Error().Err(err).Msg("failed to open keyboard hid file")
 	}
+}
+
+func initSystemInfo() {
+	go func() {
+		for {
+			if !networkState.HasIPAssigned() {
+				vpnLogger.Warn().Msg("waiting for network get IPv4 address, will retry in 3 seconds")
+				time.Sleep(3 * time.Second)
+				continue
+			} else {
+				break
+			}
+		}
+		err := writeSystemInfoImg()
+		if err != nil {
+			usbLogger.Error().Err(err).Msg("failed to create system_info.img")
+		}
+
+		mediaState, _ := rpcGetVirtualMediaState()
+		if mediaState != nil && mediaState.Filename == "system_info.img" {
+			usbLogger.Error().Err(err).Msg("system_info.img is busy")
+		} else if mediaState == nil || mediaState.Filename == "" {
+			err = rpcMountWithStorage("system_info.img", Disk)
+			if err != nil {
+				usbLogger.Error().Err(err).Msg("failed to mount system_info.img")
+			}
+		}
+	}()
 }
 
 func rpcKeyboardReport(modifier uint8, keys []uint8) error {

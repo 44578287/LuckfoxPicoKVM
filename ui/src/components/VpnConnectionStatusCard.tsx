@@ -1,5 +1,8 @@
 import StatusCard from "@components/StatusCards";
 
+import TailscaleIcon from "@/assets/tailscale.png";
+import ZeroTierIcon from "@/assets/zerotier.png";
+
 const VpnConnectionStatusMap = {
   connected: "Connected",
   connecting: "Connecting",
@@ -39,10 +42,28 @@ export default function VpnConnectionStatusCard({
     },
     closed: {
       statusIndicatorClassName: "bg-slate-300 border-slate-400",
-    },
+    },  
   };
   const props = StatusCardProps[state];
   if (!props) return;
+  
+  const Icon = () => {
+    if (title === "ZeroTier") {
+      return (
+        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-300 dark:bg-gray-800">
+          <img src={ZeroTierIcon} alt="zerotier" className="h-4 w-4" />
+        </span>
+      );
+    }
+    if (title === "TailScale") {
+      return (
+        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-800 dark:bg-gray-800">
+          <img src={TailscaleIcon} alt="tailscale" className="h-4 w-4" />
+        </span>
+      );
+    }
+    return null;
+  };
 
   return (
     <StatusCard

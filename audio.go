@@ -99,7 +99,10 @@ func StartNtpAudioServer(handleClient func(net.Conn)) {
 }
 
 func StopNtpAudioServer() {
-	CallAudioCtrlAction("set_audio_enable", map[string]interface{}{"audio_enable": false})
+	_, err := CallAudioCtrlAction("set_audio_enable", map[string]interface{}{"audio_enable": false})
+	if err != nil {
+		audioLogger.Error().Err(err).Msg("failed to set audio enable")
+	}
 
 	if audioListener != nil {
 		audioListener.Close()
@@ -138,7 +141,7 @@ func handleAudioClient(conn net.Conn) {
 			}
 
 			timestamp += timestampStep
-			packet.Header.Timestamp = timestamp
+			packet.Timestamp = timestamp
 			buf, err := packet.Marshal()
 			if err != nil {
 				audioLogger.Warn().Err(err).Msg("error marshalling packet")

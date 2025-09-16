@@ -1,13 +1,16 @@
 import React from "react";
+import { useCallback } from "react";
 import { ExclamationTriangleIcon } from "@heroicons/react/24/solid";
 import { ArrowPathIcon, ArrowRightIcon } from "@heroicons/react/16/solid";
 import { motion, AnimatePresence } from "framer-motion";
-import { LuPlay } from "react-icons/lu";
+import { LuPlay, LuView } from "react-icons/lu";
 import { BsMouseFill } from "react-icons/bs";
 
 import { Button, LinkButton } from "@components/Button";
 import LoadingSpinner from "@components/LoadingSpinner";
 import Card, { GridCard } from "@components/Card";
+import { useJsonRpc } from "@/hooks/useJsonRpc";
+import notifications from "@/notifications";
 
 interface OverlayContentProps {
   readonly children: React.ReactNode;
@@ -215,6 +218,18 @@ export function HDMIErrorOverlay({ show, hdmiState }: HDMIErrorOverlayProps) {
   const isNoSignal = hdmiState === "no_signal";
   const isOtherError = hdmiState === "no_lock" || hdmiState === "out_of_range";
 
+  const [send] = useJsonRpc();
+  const onSendUsbWakeupSignal = useCallback(() => {
+    send("sendUsbWakeupSignal", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to send USB wakeup signal: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+    });
+  }, [send]);
+
   return (
     <>
       <AnimatePresence>
@@ -245,7 +260,19 @@ export function HDMIErrorOverlay({ show, hdmiState }: HDMIErrorOverlayProps) {
                           If using an adapter, ensure it&apos;s compatible and functioning
                           correctly
                         </li>
+                        <li>
+                          Ensure source device is not in sleep mode and outputting a signal
+                        </li>
                       </ul>
+                    </div>
+                    <div>
+                      <Button
+                        theme="light"
+                        text="Try Wakeup"
+                        TrailingIcon={LuView}
+                        size="SM"
+                        onClick={onSendUsbWakeupSignal}
+                      />
                     </div>
                     <div>
                       <LinkButton

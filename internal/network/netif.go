@@ -95,6 +95,7 @@ func NewNetworkInterfaceState(opts *NetworkInterfaceOptions) (*NetworkInterfaceS
 
 			opts.OnDhcpLeaseChange(lease)
 		},
+		RequestAddress: s.config.IPv4RequestAddress.String,
 	})
 
 	s.dhcpClient = dhcpClient

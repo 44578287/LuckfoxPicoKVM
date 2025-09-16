@@ -434,7 +434,7 @@ export interface MountMediaState {
   remoteVirtualMediaState: RemoteVirtualMediaState | null;
   setRemoteVirtualMediaState: (state: MountMediaState["remoteVirtualMediaState"]) => void;
 
-  modalView: "mode" | "browser" | "url" | "device" | "sd" | "upload" | "upload_sd" | "error" | null;
+  modalView: "mode" | "browser" | "url" | "device" | "sd" | "upload" | "upload_sd" | "error" | "mtp_device" | "mtp_sd" |  null;
   setModalView: (view: MountMediaState["modalView"]) => void;
 
   isMountMediaDialogOpen: boolean;
@@ -565,6 +565,26 @@ export const useHidStore = create<HidState>((set, get) => ({
   // Add these new properties for USB state
   usbState: "not attached",
   setUsbState: state => set({ usbState: state }),
+}));
+
+
+export interface UsbEpModeStore {
+  usbEpMode: string;
+  setUsbEpMode: (mode: string) => void;
+}
+
+export const useUsbEpModeStore = create<UsbEpModeStore>(set => ({
+  usbEpMode: "disabled",
+  setUsbEpMode: (mode: string) => set({ usbEpMode: mode }),
+}));
+
+export interface AudioModeStore {
+  audioMode: string;
+  setAudioMode: (mode: string) => void;
+}
+export const useAudioModeStore = create<AudioModeStore>(set => ({
+  audioMode: "disabled",
+  setAudioMode: (mode: string) => set({ audioMode: mode }),
 }));
 
 export const useUserStore = create<UserState>(set => ({

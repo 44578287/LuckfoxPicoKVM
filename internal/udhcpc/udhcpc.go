@@ -3,10 +3,13 @@ package udhcpc
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -21,20 +24,22 @@ const (
 )
 
 type DHCPClient struct {
-	InterfaceName string
-	leaseFile     string
-	pidFile       string
-	lease         *Lease
-	logger        *zerolog.Logger
-	process       *os.Process
-	onLeaseChange func(lease *Lease)
+	InterfaceName  string
+	leaseFile      string
+	pidFile        string
+	requestAddress string
+	lease          *Lease
+	logger         *zerolog.Logger
+	process        *os.Process
+	onLeaseChange  func(lease *Lease)
 }
 
 type DHCPClientOptions struct {
-	InterfaceName string
-	PidFile       string
-	Logger        *zerolog.Logger
-	OnLeaseChange func(lease *Lease)
+	InterfaceName  string
+	PidFile        string
+	Logger         *zerolog.Logger
+	OnLeaseChange  func(lease *Lease)
+	RequestAddress string
 }
 
 var defaultLogger = zerolog.New(os.Stdout).Level(zerolog.InfoLevel)
@@ -46,11 +51,12 @@ func NewDHCPClient(options *DHCPClientOptions) *DHCPClient {
 
 	l := options.Logger.With().Str("interface", options.InterfaceName).Logger()
 	return &DHCPClient{
-		InterfaceName: options.InterfaceName,
-		logger:        &l,
-		leaseFile:     fmt.Sprintf(DHCPLeaseFile, options.InterfaceName),
-		pidFile:       options.PidFile,
-		onLeaseChange: options.OnLeaseChange,
+		InterfaceName:  options.InterfaceName,
+		logger:         &l,
+		leaseFile:      fmt.Sprintf(DHCPLeaseFile, options.InterfaceName),
+		pidFile:        options.PidFile,
+		onLeaseChange:  options.OnLeaseChange,
+		requestAddress: options.RequestAddress,
 	}
 }
 
@@ -80,8 +86,8 @@ func (c *DHCPClient) watchLink() {
 
 	for update := range ch {
 		if update.Link.Attrs().Name == c.InterfaceName {
-			if update.IfInfomsg.Flags&unix.IFF_RUNNING != 0 {
-				fmt.Printf("[watchLink]link is up, starting udhcpc")
+			if update.Flags&unix.IFF_RUNNING != 0 {
+				c.logger.Info().Msg("link is up, starting udhcpc")
 				go c.runUDHCPC()
 			} else {
 				c.logger.Info().Msg("link is down")
@@ -90,10 +96,45 @@ func (c *DHCPClient) watchLink() {
 	}
 }
 
+type udhcpcOutput struct {
+	mu     *sync.Mutex
+	logger *zerolog.Event
+}
+
+func (w *udhcpcOutput) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.logger.Msg(string(p))
+	return len(p), nil
+}
+
 func (c *DHCPClient) runUDHCPC() {
 	cmd := exec.Command("udhcpc", "-i", c.InterfaceName, "-t", "1")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	if c.requestAddress != "" {
+		ip := net.ParseIP(c.requestAddress)
+		if ip != nil && ip.To4() != nil {
+			cmd.Args = append(cmd.Args, "-r", c.requestAddress)
+		}
+	}
+
+	udhcpcOutputLock := sync.Mutex{}
+	udhcpcStdout := &udhcpcOutput{
+		mu:     &udhcpcOutputLock,
+		logger: c.logger.Debug().Str("pipe", "stdout"),
+	}
+	udhcpcStderr := &udhcpcOutput{
+		mu:     &udhcpcOutputLock,
+		logger: c.logger.Debug().Str("pipe", "stderr"),
+	}
+
+	cmd.Stdout = udhcpcStdout
+	cmd.Stderr = udhcpcStderr
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid:   true,
+		Pdeathsig: syscall.SIGKILL,
+	}
 	if err := cmd.Run(); err != nil {
 		c.logger.Error().Err(err).Msg("failed to run udhcpc")
 	}
@@ -113,6 +154,7 @@ func (c *DHCPClient) Run() error {
 	}
 	defer watcher.Close()
 
+	go c.runUDHCPC()
 	go c.watchLink()
 
 	go func() {

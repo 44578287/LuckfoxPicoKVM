@@ -34,6 +34,7 @@ const (
 	FileStateFileWrite // update file content without checking
 	FileStateMounted
 	FileStateMountedConfigFS
+	FileStateMountedFunctionFS
 	FileStateSymlink
 	FileStateSymlinkInOrderConfigFS // configfs is a shithole, so we need to check if the symlinks are created in the correct order
 	FileStateSymlinkNotInOrderConfigFS
@@ -52,6 +53,7 @@ var FileStateString = map[FileState]string{
 	FileStateSymlink:                "SYMLINK",
 	FileStateSymlinkInOrderConfigFS: "SYMLINK_IN_ORDER_CONFIGFS",
 	FileStateTouch:                  "TOUCH",
+	FileStateMountedFunctionFS:      "FUNCTIONFS_MOUNTED",
 }
 
 const (
@@ -78,6 +80,7 @@ const (
 	FileChangeResolvedActionRemoveDirectory
 	FileChangeResolvedActionTouch
 	FileChangeResolvedActionMountConfigFS
+	FileChangeResolvedActionMountFunctionFS
 )
 
 var FileChangeResolvedActionString = map[FileChangeResolvedAction]string{
@@ -96,6 +99,7 @@ var FileChangeResolvedActionString = map[FileChangeResolvedAction]string{
 	FileChangeResolvedActionRemoveDirectory:            "DIR_REMOVE",
 	FileChangeResolvedActionTouch:                      "TOUCH",
 	FileChangeResolvedActionMountConfigFS:              "CONFIGFS_MOUNT",
+	FileChangeResolvedActionMountFunctionFS:            "FUNCTIONFS_MOUNT",
 }
 
 type ChangeSet struct {
@@ -147,6 +151,8 @@ func (f *RequestedFileChange) String() string {
 		s = fmt.Sprintf("write: %s with content [%s]", f.Path, f.ExpectedContent)
 	case FileStateMountedConfigFS:
 		s = fmt.Sprintf("configfs: %s", f.Path)
+	case FileStateMountedFunctionFS:
+		s = fmt.Sprintf("functionfs: %s", f.Path)
 	case FileStateTouch:
 		s = fmt.Sprintf("touch: %s", f.Path)
 	case FileStateUnknown:
@@ -298,6 +304,8 @@ func (fc *FileChange) getFileChangeResolvedAction() FileChangeResolvedAction {
 		return FileChangeResolvedActionWriteFile
 	case FileStateTouch:
 		return FileChangeResolvedActionTouch
+	case FileStateMountedFunctionFS:
+		return FileChangeResolvedActionMountFunctionFS
 	}
 
 	// get the actual state of the file
@@ -424,6 +432,8 @@ func (c *ChangeSet) applyChange(change *FileChange) error {
 		return os.Chtimes(change.Path, time.Now(), time.Now())
 	case FileChangeResolvedActionMountConfigFS:
 		return mountConfigFS(change.Path)
+	case FileChangeResolvedActionMountFunctionFS:
+		return mountFunctionFS(change.Path)
 	case FileChangeResolvedActionDoNothing:
 		return nil
 	default:

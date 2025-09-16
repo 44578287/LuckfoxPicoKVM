@@ -23,3 +23,10 @@ var massStorageLun0Config = gadgetConfigItem{
 		"inquiry_string": "KVM  Virtual Media",
 	},
 }
+
+var mtpConfig = gadgetConfigItem{
+	order:      3003,
+	device:     "ffs.mtp",
+	path:       []string{"functions", "ffs.mtp"},
+	configPath: []string{"ffs.mtp"},
+}

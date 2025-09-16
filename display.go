@@ -109,10 +109,14 @@ func updateDisplay() {
 	} else {
 		_, _ = lvObjSetState("Main", "USB_DISCONNECTED")
 	}
+	_ = os.WriteFile("/userdata/usb_state", []byte(usbState), 0644)
+
 	if lastVideoState.Ready {
 		_, _ = lvObjSetState("Main", "HDMI_CONNECTED")
+		_ = os.WriteFile("/userdata/hdmi_state", []byte("connected"), 0644)
 	} else {
 		_, _ = lvObjSetState("Main", "HDMI_DISCONNECTED")
+		_ = os.WriteFile("/userdata/hdmi_state", []byte("disconnected"), 0644)
 	}
 
 	if networkState.IsUp() {
@@ -120,7 +124,6 @@ func updateDisplay() {
 	} else {
 		_, _ = lvObjSetState("Network", "NO_NETWORK")
 	}
-
 }
 
 var (

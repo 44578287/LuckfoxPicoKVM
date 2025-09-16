@@ -131,6 +131,16 @@ func (tx *UsbGadgetTransaction) MountConfigFS() {
 	})
 }
 
+func (tx *UsbGadgetTransaction) MountFunctionFS() {
+	tx.addFileChange("mtp", RequestedFileChange{
+		Path:          functionFSPath,
+		Key:           "mtp",
+		ExpectedState: FileStateMountedFunctionFS,
+		Description:   "mount functionfs",
+		DependsOn:     []string{"reorder-symlinks"},
+	})
+}
+
 func (tx *UsbGadgetTransaction) CreateConfigPath() {
 	tx.mkdirAll(
 		"gadget",
@@ -164,7 +174,12 @@ func (tx *UsbGadgetTransaction) WriteGadgetConfig() {
 		deps = tx.writeGadgetItemConfig(item, deps)
 	}
 
-	tx.WriteUDC()
+	if tx.isGadgetConfigItemEnabled("mtp") {
+		tx.MountFunctionFS()
+		tx.WriteUDC(true)
+	} else {
+		tx.WriteUDC(false)
+	}
 }
 
 func (tx *UsbGadgetTransaction) getDisableKeys() []string {
@@ -315,17 +330,28 @@ func (tx *UsbGadgetTransaction) addReorderSymlinkChange(path string, target stri
 	})
 }
 
-func (tx *UsbGadgetTransaction) WriteUDC() {
+func (tx *UsbGadgetTransaction) WriteUDC(mtpServer bool) {
 	// bound the gadget to a UDC (USB Device Controller)
 	path := path.Join(tx.kvmGadgetPath, "UDC")
-	tx.addFileChange("udc", RequestedFileChange{
-		Key:             "udc",
-		Path:            path,
-		ExpectedState:   FileStateFileContentMatch,
-		ExpectedContent: []byte(tx.udc),
-		DependsOn:       []string{"reorder-symlinks"},
-		Description:     "write UDC",
-	})
+	if mtpServer {
+		tx.addFileChange("udc", RequestedFileChange{
+			Key:             "udc",
+			Path:            path,
+			ExpectedState:   FileStateFileContentMatch,
+			ExpectedContent: []byte(tx.udc),
+			DependsOn:       []string{"mtp"},
+			Description:     "write UDC",
+		})
+	} else {
+		tx.addFileChange("udc", RequestedFileChange{
+			Key:             "udc",
+			Path:            path,
+			ExpectedState:   FileStateFileContentMatch,
+			ExpectedContent: []byte(tx.udc),
+			DependsOn:       []string{"reorder-symlinks"},
+			Description:     "write UDC",
+		})
+	}
 }
 
 func (tx *UsbGadgetTransaction) RebindUsb(ignoreUnbindError bool) {

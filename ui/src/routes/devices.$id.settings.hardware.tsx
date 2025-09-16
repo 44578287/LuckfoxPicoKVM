@@ -5,13 +5,11 @@ import { SettingsItem } from "@routes/devices.$id.settings";
 import { BacklightSettings, useSettingsStore } from "@/hooks/stores";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
 import { SelectMenuBasic } from "@components/SelectMenuBasic";
-import { UsbDeviceSetting } from "@components/UsbDeviceSetting";
 import { InputField } from "@/components/InputField";
 import { Button, LinkButton } from "@/components/Button";
 
 import notifications from "../notifications";
-import { UsbInfoSetting } from "../components/UsbInfoSetting";
-import { FeatureFlag } from "../components/FeatureFlag";
+import { UsbEpModeSetting } from "@components/UsbEpModeSetting";
 
 export default function SettingsHardwareRoute() {
   const [send] = useJsonRpc();
@@ -333,13 +331,9 @@ export default function SettingsHardwareRoute() {
 
       </div>
 
-      <FeatureFlag minAppVersion="0.3.8">
-        <UsbDeviceSetting />
-      </FeatureFlag>
-
-      <FeatureFlag minAppVersion="0.3.8">
-        <UsbInfoSetting />
-      </FeatureFlag>
+      <UsbEpModeSetting />
+      {/*<UsbDeviceSetting /> */}
+      {/*<UsbInfoSetting /> */}
     </div>
   );
 }

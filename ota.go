@@ -59,7 +59,7 @@ var UpdateMetadataUrls = []string{
 	"https://api.github.com/repos/luckfox-eng29/kvm/releases/latest",
 }
 
-var builtAppVersion = "0.0.1+dev"
+var builtAppVersion = "0.0.2+dev"
 
 var updateSource = "github"
 
@@ -136,11 +136,7 @@ func fetchUpdateMetadata(ctx context.Context, deviceId string, includePreRelease
 			appSha256 = release.Assets[0].Digest
 		}
 
-		// add sha256 prefix
-		if strings.HasPrefix(appSha256, "sha256:") {
-			// delete "sha256:"
-			appSha256 = appSha256[7:]
-		}
+		appSha256 = strings.TrimPrefix(appSha256, "sha256:")
 
 		remoteMetadata := &RemoteMetadata{
 			AppUrl:        updateUrl,

@@ -233,7 +233,8 @@ export default function KvmIdRoute() {
   const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
   const { sendMessage, getWebSocket } = useWebSocket(
-    `${wsProtocol}//${window.location.host}/webrtc/signaling/client?id=${params.id}`,
+    //`${wsProtocol}//${window.location.host}/webrtc/signaling/client?id=${params.id}`,
+    `${wsProtocol}//${window.location.host}/webrtc/signaling/client`,
     {
       heartbeat: true,
       retryOnError: true,
@@ -362,9 +363,18 @@ export default function KvmIdRoute() {
       setLoadingMessage("Creating peer connection...");
       pc = new RTCPeerConnection({
         // We only use STUN or TURN servers if we're in the cloud
-        ...(isInCloud && iceConfig?.iceServers
-          ? { iceServers: [iceConfig?.iceServers] }
-          : {}),
+        //...(isInCloud && iceConfig?.iceServers
+        //  ? { iceServers: [iceConfig?.iceServers] }
+        //  : {}),
+        ...(iceConfig?.iceServers 
+        ? { iceServers: [iceConfig?.iceServers] }
+        : {
+          iceServers: [
+            {
+              urls: ['stun:stun.l.google.com:19302']
+            }
+          ]
+        }),
       });
 
       setPeerConnectionState(pc.connectionState);

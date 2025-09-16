@@ -68,23 +68,38 @@ func (s *Session) ExchangeOffer(offerStr string) (string, error) {
 	return base64.StdEncoding.EncodeToString(localDescription), nil
 }
 
-func newSession(config SessionConfig) (*Session, error) {
+func newSession(sessionConfig SessionConfig) (*Session, error) {
 	webrtcSettingEngine := webrtc.SettingEngine{
 		LoggerFactory: logging.GetPionDefaultLoggerFactory(),
 	}
-	iceServer := webrtc.ICEServer{}
+	webrtcSettingEngine.SetNetworkTypes([]webrtc.NetworkType{
+		webrtc.NetworkTypeUDP4,
+		webrtc.NetworkTypeUDP6,
+	})
+	//iceServer := webrtc.ICEServer{}
 
 	var scopedLogger *zerolog.Logger
-	if config.Logger != nil {
-		l := config.Logger.With().Str("component", "webrtc").Logger()
+	if sessionConfig.Logger != nil {
+		l := sessionConfig.Logger.With().Str("component", "webrtc").Logger()
 		scopedLogger = &l
 	} else {
 		scopedLogger = webrtcLogger
 	}
 
+	iceServers := []webrtc.ICEServer{
+		{
+			URLs: []string{"stun:stun.l.google.com:19302"},
+		},
+	}
+	if config.STUN != "" {
+		iceServers = append(iceServers, webrtc.ICEServer{
+			URLs: []string{config.STUN},
+		})
+	}
+
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(webrtcSettingEngine))
 	peerConnection, err := api.NewPeerConnection(webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{iceServer},
+		ICEServers: iceServers,
 	})
 	if err != nil {
 		return nil, err
@@ -162,7 +177,7 @@ func newSession(config SessionConfig) (*Session, error) {
 	peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		scopedLogger.Info().Interface("candidate", candidate).Msg("WebRTC peerConnection has a new ICE candidate")
 		if candidate != nil {
-			err := wsjson.Write(context.Background(), config.ws, gin.H{"type": "new-ice-candidate", "data": candidate.ToJSON()})
+			err := wsjson.Write(context.Background(), sessionConfig.ws, gin.H{"type": "new-ice-candidate", "data": candidate.ToJSON()})
 			if err != nil {
 				scopedLogger.Warn().Err(err).Msg("failed to write new-ice-candidate to WebRTC signaling channel")
 			}

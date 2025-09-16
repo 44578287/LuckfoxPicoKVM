@@ -22,6 +22,8 @@ import { CloudState } from "./adopt";
 import { useVpnStore } from "@/hooks/stores";
 import Checkbox from "../components/Checkbox";
 
+import { LogDialog } from "../components/LogDialog";
+
 export interface TailScaleResponse {
   state: string;
   loginUrl: string;
@@ -34,6 +36,11 @@ export interface ZeroTierResponse {
   networkID: string;
   ip: string;
 }
+
+export interface FrpcResponse {
+  running: boolean;
+}
+
 
 export interface TLSState {
   mode: "self-signed" | "custom" | "disabled";
@@ -83,6 +90,11 @@ export default function SettingsAccessIndexRoute() {
 
   const [tempNetworkID, setTempNetworkID] = useState("");
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+ 
+  const [frpcToml, setFrpcToml] = useState<string>("");
+  const [frpcLog, setFrpcLog] = useState<string>("");
+  const [showFrpcLogModal, setShowFrpcLogModal] = useState(false);
+  const [frpcStatus, setFrpcRunningStatus] = useState<FrpcResponse>({ running: false });
 
   const getTLSState = useCallback(() => {
     send("getTLSState", {}, resp => {
@@ -262,6 +274,77 @@ export default function SettingsAccessIndexRoute() {
     });
   },[send, zeroTierNetworkID]);
 
+  const handleStartFrpc = useCallback(() => {
+    send("startFrpc", { frpcToml }, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to start frpc: ${resp.error.data || "Unknown error"}`,
+        );
+        setFrpcRunningStatus({ running: false });
+        return;
+      }
+      notifications.success("frpc started");
+      setFrpcRunningStatus({ running: true });
+    });
+  }, [send, frpcToml]);
+  
+  const handleStopFrpc = useCallback(() => {
+    send("stopFrpc", { frpcToml }, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to stop frpc: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+      notifications.success("frpc stopped");
+      setFrpcRunningStatus({ running: false });
+    });
+  }, [send]);
+
+  const handleGetFrpcLog = useCallback(() => {
+    send("getFrpcLog", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to get frpc log: ${resp.error.data || "Unknown error"}`,
+        );
+        setFrpcLog("");
+        return;
+      }
+      setFrpcLog(resp.result as string);
+      setShowFrpcLogModal(true);
+    });
+  }, [send]);
+
+  const getFrpcToml = useCallback(() => {
+    send("getFrpcToml", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to get frpc toml: ${resp.error.data || "Unknown error"}`,
+        );
+        setFrpcToml("");
+        return;
+      }
+      setFrpcToml(resp.result as string);
+    });
+  }, [send]);
+  
+  const getFrpcStatus = useCallback(() => {
+    send("getFrpcStatus", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to get frpc status: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+      setFrpcRunningStatus(resp.result as FrpcResponse);
+    });
+  }, [send]);
+
+  useEffect(() => {
+    getFrpcStatus();
+    getFrpcToml();
+  }, [getFrpcStatus, getFrpcToml]);
+
   return (
     <div className="space-y-4">
       <SettingsPageHeader
@@ -399,16 +482,6 @@ export default function SettingsAccessIndexRoute() {
           badge="Experimental"
           description="Connect to TailScale VPN network"
         >
-          <div className="space-y-4">
-            { ((tailScaleConnectionState === "disconnected") || (tailScaleConnectionState === "closed")) && (
-              <Button
-                size="SM"
-                theme="light"
-                text="Enable TailScale"
-                onClick={handleTailScaleLogin}
-              />
-            )}
-          </div>
         </SettingsItem>
         <SettingsItem
           title=""
@@ -424,6 +497,21 @@ export default function SettingsAccessIndexRoute() {
               handleTailScaleXEdgeChange(e.target.checked);
             }}
           />
+        </SettingsItem>
+        <SettingsItem
+          title=""
+          description=""
+        >
+          <div className="space-y-4">
+            { ((tailScaleConnectionState === "disconnected") || (tailScaleConnectionState === "closed")) && (
+              <Button
+                size="SM"
+                theme="light"
+                text="Enable"
+                onClick={handleTailScaleLogin}
+              />
+            )}
+          </div>
         </SettingsItem>
       </div>
               
@@ -558,7 +646,58 @@ export default function SettingsAccessIndexRoute() {
         )}
       </div>    
 
+      <div className="space-y-4">
+        <SettingsItem
+          title="Frp"
+          description="Connect to Frp Server"
+        />
+          <div className="space-y-4">
+            <TextAreaWithLabel
+              label="Edit frpc.toml"
+              placeholder="Enter frpc settings"
+              value={frpcToml || ""}
+              rows={3}
+              onChange={e => setFrpcToml(e.target.value)}
+            />
+            <div className="flex items-center gap-x-2">
+              {frpcStatus.running ? (
+                <div className="flex items-center gap-x-2">
+                  <Button
+                    size="SM"
+                    theme="danger"
+                    text="Stop frpc"
+                    onClick={handleStopFrpc}
+                  />
+                  <Button
+                    size="SM"
+                    theme="light"
+                    text="Log"
+                    onClick={handleGetFrpcLog}
+                  />
+                </div>
+              ) : (
+                <Button
+                  size="SM"
+                  theme="primary"
+                  text="Start frpc"
+                  onClick={handleStartFrpc}
+                />
+              )}
+            </div>
+          </div>
       </div>
+
+      </div>
+
+      <LogDialog
+        open={showFrpcLogModal}
+        onClose={() => {
+          setShowFrpcLogModal(false);
+        }}
+        title="Frpc Log"
+        description={frpcLog}
+      />
+
     </div>
   );
 }

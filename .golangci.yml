@@ -5,6 +5,8 @@ linters:
     - misspell
     - whitespace
     - gochecknoinits
+  disable:
+    - unused
   settings:
     forbidigo:
       forbid:
