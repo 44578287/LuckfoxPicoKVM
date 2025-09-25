@@ -11,7 +11,10 @@ import { SelectMenuBasic } from "../components/SelectMenuBasic";
 
 import { SettingsItem } from "./devices.$id.settings";
 
+import {useReactAt} from 'i18n-auto-extractor/react'
+
 export default function SettingsKeyboardRoute() {
+  const { $at }= useReactAt();
   const keyboardLayout = useSettingsStore(state => state.keyboardLayout);
   const keyboardLedSync = useSettingsStore(state => state.keyboardLedSync);
   const showPressedKeys = useSettingsStore(state => state.showPressedKeys);
@@ -33,11 +36,6 @@ export default function SettingsKeyboardRoute() {
   }, [keyboardLayout]);
 
   const layoutOptions = Object.entries(layouts).map(([code, language]) => { return { value: code, label: language } })
-  const ledSyncOptions = [
-    { value: "auto", label: "Automatic" },
-    { value: "browser", label: "Browser Only" },
-    { value: "host", label: "Host Only" },
-  ];
 
   const [send] = useJsonRpc();
 
@@ -67,15 +65,15 @@ export default function SettingsKeyboardRoute() {
   return (
     <div className="space-y-4">
       <SettingsPageHeader
-        title="Keyboard"
-        description="Configure keyboard settings for your device"
+        title={$at("Keyboard")}
+        description={$at("Configure keyboard settings for your device")}
       />
 
       <div className="space-y-4">
         { /* this menu item could be renamed to plain "Keyboard layout" in the future, when also the virtual keyboard layout mappings are being implemented */ }
         <SettingsItem
-          title="Paste text"
-          description="Keyboard layout of target operating system"
+          title={$at("Paste text")}
+          description={$at("Keyboard layout of target operating system")}
         >
           <SelectMenuBasic
             size="SM"
@@ -87,15 +85,15 @@ export default function SettingsKeyboardRoute() {
           />
         </SettingsItem>
         <p className="text-xs text-slate-600 dark:text-slate-400">
-          Pasting text sends individual key strokes to the target device. The keyboard layout determines which key codes are being sent. Ensure that the keyboard layout in KVM matches the settings in the operating system.
+          {$at("Pasting text sends individual key strokes to the target device. The keyboard layout determines which key codes are being sent. Ensure that the keyboard layout in KVM matches the settings in the operating system.")}
         </p>
       </div>
 
       <div className="space-y-4">
         { /* this menu item could be renamed to plain "Keyboard layout" in the future, when also the virtual keyboard layout mappings are being implemented */ }
         <SettingsItem
-          title="LED state synchronization"
-          description="Synchronize the LED state of the keyboard with the target device"
+          title={$at("LED state synchronization")}
+          description={$at("Synchronize the LED state of the keyboard with the target device")}
         >
           <SelectMenuBasic
             size="SM"
@@ -103,15 +101,19 @@ export default function SettingsKeyboardRoute() {
             fullWidth
             value={keyboardLedSync}
             onChange={e => setKeyboardLedSync(e.target.value as KeyboardLedSync)}
-            options={ledSyncOptions}
+            options={[
+              { value: "auto", label: $at("Auto") },
+              { value: "browser", label: $at("Browser Only") },
+              { value: "host", label: $at("Host Only") },
+            ]}
           />
         </SettingsItem>
       </div>
       
       <div className="space-y-4">
         <SettingsItem
-          title="Show Pressed Keys"
-          description="Display currently pressed keys in the status bar"
+          title={$at("Show Pressed Keys")}
+          description={$at("Display currently pressed keys in the status bar")}
         >
           <Checkbox
             checked={showPressedKeys}

@@ -3,6 +3,7 @@ import { LuPlus } from "react-icons/lu";
 
 import Card from "@/components/Card";
 import { Button } from "@/components/Button";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 export default function EmptyStateCard({
   onCancelWakeOnLanModal,
@@ -11,6 +12,8 @@ export default function EmptyStateCard({
   onCancelWakeOnLanModal: () => void;
   setShowAddForm: (show: boolean) => void;
 }) {
+  const { $at }= useReactAt();
+
   return (
     <div className="select-none space-y-4">
       <Card className="animate-fadeIn opacity-0">
@@ -25,10 +28,10 @@ export default function EmptyStateCard({
                 </Card>
               </div>
               <h3 className="text-sm font-semibold leading-none text-black dark:text-white">
-                No devices added
+                { $at("No devices added") }
               </h3>
               <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-                Add a device to start using Wake-on-LAN
+                { $at("Add a device to start using Wake-on-LAN") }
               </p>
             </div>
           </div>
@@ -41,11 +44,11 @@ export default function EmptyStateCard({
           animationDelay: "0.2s",
         }}
       >
-        <Button size="SM" theme="blank" text="Close" onClick={onCancelWakeOnLanModal} />
+        <Button size="SM" theme="blank" text={ $at("Close") } onClick={onCancelWakeOnLanModal} />
         <Button
           size="SM"
           theme="primary"
-          text="Add New Device"
+          text={ $at("Add new device") }
           onClick={() => setShowAddForm(true)}
           LeadingIcon={LuPlus}
         />

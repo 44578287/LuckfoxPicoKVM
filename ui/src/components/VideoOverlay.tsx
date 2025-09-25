@@ -11,6 +11,7 @@ import LoadingSpinner from "@components/LoadingSpinner";
 import Card, { GridCard } from "@components/Card";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
 import notifications from "@/notifications";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 interface OverlayContentProps {
   readonly children: React.ReactNode;
@@ -30,6 +31,7 @@ interface LoadingOverlayProps {
 }
 
 export function LoadingVideoOverlay({ show }: LoadingOverlayProps) {
+  const { $at } = useReactAt();
   return (
     <AnimatePresence>
       {show && (
@@ -49,7 +51,7 @@ export function LoadingVideoOverlay({ show }: LoadingOverlayProps) {
                 <LoadingSpinner className="h-8 w-8 text-blue-800 dark:text-blue-200" />
               </div>
               <p className="text-center text-sm text-slate-700 dark:text-slate-300">
-                Loading video stream...
+                {$at("Loading video stream...")}
               </p>
             </div>
           </OverlayContent>
@@ -102,6 +104,7 @@ export function ConnectionFailedOverlay({
   show,
   setupPeerConnection,
 }: ConnectionErrorOverlayProps) {
+  const { $at } = useReactAt();
   return (
     <AnimatePresence>
       {show && (
@@ -121,26 +124,26 @@ export function ConnectionFailedOverlay({
               <div className="text-left text-sm text-slate-700 dark:text-slate-300">
                 <div className="space-y-4">
                   <div className="space-y-2 text-black dark:text-white">
-                    <h2 className="text-xl font-bold">Connection Issue Detected</h2>
+                    <h2 className="text-xl font-bold">{$at("Connection Issue Detected")}</h2>
                     <ul className="list-disc space-y-2 pl-4 text-left">
-                      <li>Verify that the device is powered on and properly connected</li>
-                      <li>Check all cable connections for any loose or damaged wires</li>
-                      <li>Ensure your network connection is stable and active</li>
-                      <li>Try restarting both the device and your computer</li>
+                      <li>{$at("Verify that the device is powered on and properly connected")}</li>
+                      <li>{$at("Check all cable connections for any loose or damaged wires")}</li>
+                      <li>{$at("Ensure your network connection is stable and active")}</li>
+                      <li>{$at("Try restarting both the device and your computer")}</li>
                     </ul>
                   </div>
                   <div className="flex items-center gap-x-2">
                     <LinkButton
                       to={"https://wiki.luckfox.com/intro"}
                       theme="primary"
-                      text="Troubleshooting Guide"
+                      text={$at("Troubleshooting Guide")}
                       TrailingIcon={ArrowRightIcon}
                       size="SM"
                     />
                     <Button
                       onClick={() => setupPeerConnection()}
                       LeadingIcon={ArrowPathIcon}
-                      text="Try again"
+                      text={$at("Try again")}
                       size="SM"
                       theme="light"
                     />
@@ -162,6 +165,7 @@ interface PeerConnectionDisconnectedOverlay {
 export function PeerConnectionDisconnectedOverlay({
   show,
 }: PeerConnectionDisconnectedOverlay) {
+  const { $at } = useReactAt();
   return (
     <AnimatePresence>
       {show && (
@@ -181,12 +185,12 @@ export function PeerConnectionDisconnectedOverlay({
               <div className="text-left text-sm text-slate-700 dark:text-slate-300">
                 <div className="space-y-4">
                   <div className="space-y-2 text-black dark:text-white">
-                    <h2 className="text-xl font-bold">Connection Issue Detected</h2>
+                    <h2 className="text-xl font-bold">{$at("Connection Issue Detected")}</h2>
                     <ul className="list-disc space-y-2 pl-4 text-left">
-                      <li>Verify that the device is powered on and properly connected</li>
-                      <li>Check all cable connections for any loose or damaged wires</li>
-                      <li>Ensure your network connection is stable and active</li>
-                      <li>Try restarting both the device and your computer</li>
+                      <li>{$at("Verify that the device is powered on and properly connected")}</li>
+                      <li>{$at("Check all cable connections for any loose or damaged wires")}</li>
+                      <li>{$at("Ensure your network connection is stable and active")}</li>
+                      <li>{$at("Try restarting both the device and your computer")}</li>
                     </ul>
                   </div>
                   <div className="flex items-center gap-x-2">
@@ -194,7 +198,7 @@ export function PeerConnectionDisconnectedOverlay({
                       <div className="flex items-center gap-x-2 p-4">
                         <LoadingSpinner className="h-4 w-4 text-blue-800 dark:text-blue-200" />
                         <p className="text-sm text-slate-700 dark:text-slate-300">
-                          Retrying connection...
+                          {$at("Retrying connection...")}
                         </p>
                       </div>
                     </Card>
@@ -217,7 +221,7 @@ interface HDMIErrorOverlayProps {
 export function HDMIErrorOverlay({ show, hdmiState }: HDMIErrorOverlayProps) {
   const isNoSignal = hdmiState === "no_signal";
   const isOtherError = hdmiState === "no_lock" || hdmiState === "out_of_range";
-
+  const { $at }= useReactAt();
   const [send] = useJsonRpc();
   const onSendUsbWakeupSignal = useCallback(() => {
     send("sendUsbWakeupSignal", {}, resp => {
@@ -250,25 +254,24 @@ export function HDMIErrorOverlay({ show, hdmiState }: HDMIErrorOverlayProps) {
                 <div className="text-left text-sm text-slate-700 dark:text-slate-300">
                   <div className="space-y-4">
                     <div className="space-y-2 text-black dark:text-white">
-                      <h2 className="text-xl font-bold">No HDMI signal detected.</h2>
+                      <h2 className="text-xl font-bold">{$at("No HDMI signal detected.")}</h2>
                       <ul className="list-disc space-y-2 pl-4 text-left">
-                        <li>Ensure the HDMI cable securely connected at both ends</li>
+                        <li>{$at("Ensure the HDMI cable securely connected at both ends")}</li>
                         <li>
-                          Ensure source device is powered on and outputting a signal
+                          {$at("Ensure source device is powered on and outputting a signal")}
                         </li>
                         <li>
-                          If using an adapter, ensure it&apos;s compatible and functioning
-                          correctly
+                          {$at("If using an adapter, ensure it's compatible and functioning correctly")}
                         </li>
                         <li>
-                          Ensure source device is not in sleep mode and outputting a signal
+                          {$at("Ensure source device is not in sleep mode and outputting a signal")}
                         </li>
                       </ul>
                     </div>
                     <div>
                       <Button
                         theme="light"
-                        text="Try Wakeup"
+                        text={$at("Try Wakeup")}
                         TrailingIcon={LuView}
                         size="SM"
                         onClick={onSendUsbWakeupSignal}
@@ -278,7 +281,7 @@ export function HDMIErrorOverlay({ show, hdmiState }: HDMIErrorOverlayProps) {
                       <LinkButton
                         to={"https://wiki.luckfox.com/intro"}
                         theme="light"
-                        text="Learn more"
+                        text={$at("Learn more")}
                         TrailingIcon={ArrowRightIcon}
                         size="SM"
                       />
@@ -311,9 +314,9 @@ export function HDMIErrorOverlay({ show, hdmiState }: HDMIErrorOverlayProps) {
                     <div className="space-y-2 text-black dark:text-white">
                       <h2 className="text-xl font-bold">HDMI signal error detected.</h2>
                       <ul className="list-disc space-y-2 pl-4 text-left">
-                        <li>A loose or faulty HDMI connection</li>
-                        <li>Incompatible resolution or refresh rate settings</li>
-                        <li>Issues with the source device&apos;s HDMI output</li>
+                        <li>{$at("A loose or faulty HDMI connection")}</li>
+                        <li>{$at("Incompatible resolution or refresh rate settings")}</li>
+                        <li>{$at("Issues with the source device's HDMI output")}</li>
                       </ul>
                     </div>
                     <div>
@@ -345,6 +348,7 @@ export function NoAutoplayPermissionsOverlay({
   show,
   onPlayClick,
 }: NoAutoplayPermissionsOverlayProps) {
+  const { $at }= useReactAt();
   return (
     <AnimatePresence>
       {show && (
@@ -376,7 +380,7 @@ export function NoAutoplayPermissionsOverlay({
                 </div>
 
                 <div className="text-xs text-slate-600 dark:text-slate-400">
-                  Please adjust browser settings to enable autoplay
+                  {$at("Please adjust browser settings to enable autoplay")}
                 </div>
               </div>
             </div>
@@ -392,6 +396,7 @@ interface PointerLockBarProps {
 }
 
 export function PointerLockBar({ show }: PointerLockBarProps) {
+  const { $at }= useReactAt();
   return (
     <AnimatePresence mode="wait">
       {show ? (
@@ -408,7 +413,7 @@ export function PointerLockBar({ show }: PointerLockBarProps) {
                 <div className="flex items-center space-x-2">
                   <BsMouseFill className="h-4 w-4 text-blue-700 dark:text-blue-500" />
                   <span className="text-sm text-black dark:text-white">
-                    Click on the video to enable mouse control
+                    {$at("Click on the video to enable mouse control")}
                   </span>
                 </div>
               </div>

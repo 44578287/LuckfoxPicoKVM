@@ -24,6 +24,7 @@ import useKeyboard from "@/hooks/useKeyboard";
 import { FeatureFlag } from "../components/FeatureFlag";
 import { cx } from "../cva.config";
 
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 /* TODO: Migrate to using URLs instead of the global state. To simplify the refactoring, we'll keep the global state for now. */
 export default function SettingsRoute() {
@@ -34,6 +35,7 @@ export default function SettingsRoute() {
   const [showLeftGradient, setShowLeftGradient] = useState(false);
   const [showRightGradient, setShowRightGradient] = useState(false);
   const { width = 0 } = useResizeObserver({ ref: scrollContainerRef as React.RefObject<HTMLDivElement> });
+  const {setCurrentLang,$at,langSet}= useReactAt()
 
   // Handle scroll position to show/hide gradients
   const handleScroll = () => {
@@ -92,7 +94,7 @@ export default function SettingsRoute() {
                   to=".."
                   size="SM"
                   theme="blank"
-                  text="Back to KVM"
+                  text={$at("Back to KVM")}
                   LeadingIcon={LuArrowLeft}
                   textAlign="left"
                 />
@@ -102,7 +104,7 @@ export default function SettingsRoute() {
                   to=".."
                   size="SM"
                   theme="blank"
-                  text="Back to KVM"
+                  text={$at("Back to KVM")}
                   LeadingIcon={LuArrowLeft}
                   textAlign="left"
                   fullWidth
@@ -141,7 +143,7 @@ export default function SettingsRoute() {
                   >
                     <div className="flex items-center gap-x-2 rounded-md px-2.5 py-2.5 text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 in-[.active]:bg-blue-50 in-[.active]:text-blue-700! md:in-[.active]:bg-transparent dark:in-[.active]:bg-blue-900 dark:in-[.active]:text-blue-200! dark:md:in-[.active]:bg-transparent">
                       <LuSettings className="h-4 w-4 shrink-0" />
-                      <h1>General</h1>
+                      <h1>{$at("General")}</h1>
                     </div>
                   </NavLink>
                 </div>
@@ -153,11 +155,11 @@ export default function SettingsRoute() {
                     <div className="flex items-center gap-x-2 rounded-md px-2.5 py-2.5 text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 in-[.active]:bg-blue-50 in-[.active]:text-blue-700! md:in-[.active]:bg-transparent dark:in-[.active]:bg-blue-900 dark:in-[.active]:text-blue-200! dark:md:in-[.active]:bg-transparent">
 
                       <LuMouse className="h-4 w-4 shrink-0" />
-                      <h1>Mouse</h1>
+                      <h1>{$at("Mouse")}</h1>
                     </div>
                   </NavLink>
                 </div>
-                <FeatureFlag minAppVersion="0.4.0" name="Paste text">
+
                   <div className="shrink-0">
                     <NavLink
                       to="keyboard"
@@ -165,11 +167,11 @@ export default function SettingsRoute() {
                     >
                       <div className="flex items-center gap-x-2 rounded-md px-2.5 py-2.5 text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 [.active_&]:bg-blue-50 [.active_&]:!text-blue-700 md:[.active_&]:bg-transparent dark:[.active_&]:bg-blue-900 dark:[.active_&]:!text-blue-200 dark:md:[.active_&]:bg-transparent">
                         <LuKeyboard className="h-4 w-4 shrink-0" />
-                        <h1>Keyboard</h1>
+                        <h1>{$at("Keyboard")}</h1>
                       </div>
                     </NavLink>
                   </div>
-                </FeatureFlag>
+
                 <div className="shrink-0">
                   <NavLink
                     to="video"
@@ -177,7 +179,7 @@ export default function SettingsRoute() {
                   >
                     <div className="flex items-center gap-x-2 rounded-md px-2.5 py-2.5 text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 in-[.active]:bg-blue-50 in-[.active]:text-blue-700! md:in-[.active]:bg-transparent dark:in-[.active]:bg-blue-900 dark:in-[.active]:text-blue-200! dark:md:in-[.active]:bg-transparent">
                       <LuVideo className="h-4 w-4 shrink-0" />
-                      <h1>Video</h1>
+                      <h1>{$at("Video")}</h1>
                     </div>
                   </NavLink>
                 </div>
@@ -188,7 +190,7 @@ export default function SettingsRoute() {
                   >
                     <div className="flex items-center gap-x-2 rounded-md px-2.5 py-2.5 text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 in-[.active]:bg-blue-50 in-[.active]:text-blue-700! md:in-[.active]:bg-transparent dark:in-[.active]:bg-blue-900 dark:in-[.active]:text-blue-200! dark:md:in-[.active]:bg-transparent">
                       <LuCpu className="h-4 w-4 shrink-0" />
-                      <h1>Hardware</h1>
+                      <h1>{$at("Hardware")}</h1>
                     </div>
                   </NavLink>
                 </div>
@@ -199,7 +201,7 @@ export default function SettingsRoute() {
                   >
                     <div className="flex items-center gap-x-2 rounded-md px-2.5 py-2.5 text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 in-[.active]:bg-blue-50 in-[.active]:text-blue-700! md:in-[.active]:bg-transparent dark:in-[.active]:bg-blue-900 dark:in-[.active]:text-blue-200! dark:md:in-[.active]:bg-transparent">
                       <LuShieldCheck className="h-4 w-4 shrink-0" />
-                      <h1>Access</h1>
+                      <h1>{$at("Access")}</h1>
                     </div>
                   </NavLink>
                 </div>
@@ -210,7 +212,7 @@ export default function SettingsRoute() {
                   >
                     <div className="flex items-center gap-x-2 rounded-md px-2.5 py-2.5 text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 in-[.active]:bg-blue-50 in-[.active]:text-blue-700! md:in-[.active]:bg-transparent dark:in-[.active]:bg-blue-900 dark:in-[.active]:text-blue-200! dark:md:in-[.active]:bg-transparent">
                       <LuPalette className="h-4 w-4 shrink-0" />
-                      <h1>Appearance</h1>
+                      <h1>{$at("Appearance")}</h1>
                     </div>
                   </NavLink>
                 </div>
@@ -221,7 +223,7 @@ export default function SettingsRoute() {
                   >
                     <div className="flex items-center gap-x-2 rounded-md px-2.5 py-2.5 text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 in-[.active]:bg-blue-50 in-[.active]:text-blue-700! md:in-[.active]:bg-transparent dark:in-[.active]:bg-blue-900 dark:in-[.active]:text-blue-200! dark:md:in-[.active]:bg-transparent">
                       <LuCommand className="h-4 w-4 shrink-0" />
-                      <h1>Keyboard Macros</h1>
+                      <h1>{$at("Keyboard Macros")}</h1>
                     </div>
                   </NavLink>
                 </div>
@@ -232,7 +234,7 @@ export default function SettingsRoute() {
                   >
                     <div className="flex items-center gap-x-2 rounded-md px-2.5 py-2.5 text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 in-[.active]:bg-blue-50 in-[.active]:text-blue-700! md:in-[.active]:bg-transparent dark:in-[.active]:bg-blue-900 dark:in-[.active]:text-blue-200! dark:md:in-[.active]:bg-transparent">
                       <LuNetwork className="h-4 w-4 shrink-0" />
-                      <h1>Network</h1>
+                      <h1>{$at("Network")}</h1>
                     </div>
                   </NavLink>
                 </div>
@@ -243,7 +245,7 @@ export default function SettingsRoute() {
                   >
                     <div className="flex items-center gap-x-2 rounded-md px-2.5 py-2.5 text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 in-[.active]:bg-blue-50 in-[.active]:text-blue-700! md:in-[.active]:bg-transparent dark:in-[.active]:bg-blue-900 dark:in-[.active]:text-blue-200! dark:md:in-[.active]:bg-transparent">
                       <LuWrench className="h-4 w-4 shrink-0" />
-                      <h1>Advanced</h1>
+                      <h1>{$at("Advanced")}</h1>
                     </div>
                   </NavLink>
                 </div>

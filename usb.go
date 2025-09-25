@@ -50,6 +50,10 @@ func initUsbGadget() {
 }
 
 func initSystemInfo() {
+	if !config.AutoMountSystemInfo {
+		return
+	}
+
 	go func() {
 		for {
 			if !networkState.HasIPAssigned() {

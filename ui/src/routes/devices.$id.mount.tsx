@@ -38,7 +38,9 @@ import {
   useRTCStore,
 } from "../hooks/stores";
 import { UploadDialog } from "@/components/UploadDialog";
-import { ConfirmDialog } from "@components/ConfirmDialog";
+import { SettingsItem } from "./devices.$id.settings";
+import { Checkbox } from "@/components/Checkbox";
+import { useReactAt } from 'i18n-auto-extractor/react'
 
 export default function MountRoute() {
   const navigate = useNavigate();
@@ -349,16 +351,17 @@ function ModeSelectionView({
   selectedMode: "browser" | "url" | "device" | "sd";
   setSelectedMode: (mode: "browser" | "url" | "device" | "sd") => void;
 }) {
+  const { $at }= useReactAt();
   const { setModalView } = useMountMediaStore();
 
   return (
     <div className="w-full space-y-4">
       <div className="animate-fadeIn space-y-0 opacity-0">
         <h2 className="text-lg leading-tight font-bold dark:text-white">
-          Virtual Media Source
+          {$at("Virtual Media Source")}
         </h2>
         <div className="text-sm leading-snug text-slate-600 dark:text-slate-400">
-          Choose how you want to mount your virtual media
+          {$at("Choose how you want to mount your virtual media")}
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
@@ -382,7 +385,7 @@ function ModeSelectionView({
           {
             label: "KVM Storage Mount",
             value: "device",
-            description: "Mount previously uploaded files from the KVM storage",
+            description: "",
             icon: LuRadioReceiver,
             tag: null,
             disabled: false,
@@ -390,7 +393,7 @@ function ModeSelectionView({
           {
             label: "KVM MicroSD Mount",
             value: "sd",
-            description: "Mount previously uploaded files from the KVM MicroSD",
+            description: "",
             icon: LuRadioReceiver,
             tag: null,
             disabled: false,
@@ -458,14 +461,14 @@ function ModeSelectionView({
         }}
       >
         <div className="flex gap-x-2 pt-2">
-          <Button size="MD" theme="blank" onClick={onClose} text="Cancel" />
+          <Button size="MD" theme="blank" onClick={onClose} text={$at("Cancel")} />
           <Button
             size="MD"
             theme="primary"
             onClick={() => {
               setModalView(selectedMode);
             }}
-            text="Continue"
+            text={$at("Continue")}
           />
         </div>
       </div>
@@ -482,6 +485,7 @@ function BrowserFileView({
   onMountFile: (file: File, mode: RemoteVirtualMediaState["mode"]) => void;
   mountInProgress: boolean;
 }) {
+  const { $at } = useReactAt();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [usbMode, setUsbMode] = useState<RemoteVirtualMediaState["mode"]>("CDROM");
 
@@ -571,11 +575,11 @@ function BrowserFileView({
           <UsbModeSelector usbMode={usbMode} setUsbMode={setUsbMode} />
         </Fieldset>
         <div className="flex space-x-2">
-          <Button size="MD" theme="blank" text="Back" onClick={onBack} />
+          <Button size="MD" theme="blank" text={$at("Back")} onClick={onBack} />
           <Button
             size="MD"
             theme="primary"
-            text="Mount File"
+            text={$at("Mount")}
             onClick={handleMount}
             disabled={!selectedFile || mountInProgress}
             loading={mountInProgress}
@@ -758,6 +762,7 @@ function DeviceFileView({
     }[]
   >([]);
 
+  const { $at } = useReactAt();
   const [selected, setSelected] = useState<string | null>(null);
   const [usbMode, setUsbMode] = useState<RemoteVirtualMediaState["mode"]>("CDROM");
   const [currentPage, setCurrentPage] = useState(1);
@@ -867,13 +872,56 @@ function DeviceFileView({
   const handleNextPage = () => {
     setCurrentPage(prev => Math.min(prev + 1, totalPages));
   };
+ 
+  const [autoMountSystemInfo, setAutoMountSystemInfo] = useState(false);
+  const handleAutoMountSystemInfoChange = (value: boolean) => {
+    send("setAutoMountSystemInfo", { enabled: value }, response => {
+      if ("error" in response) {
+        notifications.error(`Failed to set auto mount system_info.img: ${response.error.message}`);
+        return;
+      }
+      setAutoMountSystemInfo(value);
+    });
+  }
+
+  useEffect(() => {
+    send("getAutoMountSystemInfo", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to load auto mount system_info.img: ${resp.error.data || "Unknown error"}`,
+        );
+        setAutoMountSystemInfo(false);
+      } else {
+        setAutoMountSystemInfo(resp.result as boolean);
+      }
+    });
+  }, [send, setAutoMountSystemInfo])
 
   return (
     <div className="w-full space-y-4">
       <ViewHeader
-        title="Mount from KVM Storage"
-        description="Select an image to mount from the KVM storage"
+        title={$at("Mount from KVM Storage")}
+        description={$at("Select the image you want to mount from the KVM storage")}
       />
+
+      <div
+        className="w-full animate-fadeIn opacity-0"
+        style={{
+          animationDuration: "0.7s",
+          animationDelay: "0.1s",
+        }}
+      >
+        <SettingsItem
+          title={$at("Automatically mount system_info.img")}
+          description={$at("Mount system_info.img automatically when the KVM startup")}
+        >
+          <Checkbox
+            checked={autoMountSystemInfo}
+            onChange={(e) => handleAutoMountSystemInfoChange(e.target.checked)}
+          />
+        </SettingsItem>
+      </div>
+      <hr className="border-slate-800/20 dark:border-slate-300/20" /> 
       <div
         className="w-full animate-fadeIn opacity-0"
         style={{
@@ -888,17 +936,17 @@ function DeviceFileView({
                 <div className="space-y-1">
                   <PlusCircleIcon className="mx-auto h-6 w-6 text-blue-700 dark:text-blue-500" />
                   <h3 className="text-sm leading-none font-semibold text-black dark:text-white">
-                    No images available
+                    {$at("No images available")}
                   </h3>
                   <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-                    Upload an image to start virtual media mounting.
+                    {$at("Upload an image to start virtual media mounting.")}
                   </p>
                 </div>
                 <div>
                   <Button
                     size="SM"
                     theme="primary"
-                    text="Upload a new image"
+                    text={$at("Upload a new image")}
                     onClick={() => onNewImageClick()}
                   />
                 </div>
@@ -919,7 +967,7 @@ function DeviceFileView({
                     if (!selectedFile) return;
                     if (
                       window.confirm(
-                        "Are you sure you want to delete " + selectedFile.name + "?",
+                        $at("Are you sure you want to delete " + selectedFile.name + "?"),
                       )
                     ) {
                       handleDeleteFile(selectedFile);
@@ -943,14 +991,14 @@ function DeviceFileView({
                     <Button
                       size="XS"
                       theme="light"
-                      text="Previous"
+                      text={$at("Previous")}
                       onClick={handlePreviousPage}
                       disabled={currentPage === 1}
                     />
                     <Button
                       size="XS"
                       theme="light"
-                      text="Next"
+                      text={$at("Next")}
                       onClick={handleNextPage}
                       disabled={currentPage === totalPages}
                     />
@@ -974,12 +1022,12 @@ function DeviceFileView({
             <UsbModeSelector usbMode={usbMode} setUsbMode={setUsbMode} />
           </Fieldset>
           <div className="flex items-center gap-x-2">
-            <Button size="MD" theme="blank" text="Back" onClick={() => onBack()} />
+            <Button size="MD" theme="blank" text={$at("Back")} onClick={() => onBack()} />
             <Button
               size="MD"
               disabled={selected === null || mountInProgress}
               theme="primary"
-              text="Mount File"
+              text={$at("Mount")}
               loading={mountInProgress}
               onClick={() =>
                 onMountStorageFile(
@@ -999,7 +1047,7 @@ function DeviceFileView({
           }}
         >
           <div className="flex items-center gap-x-2">
-            <Button size="MD" theme="light" text="Back" onClick={() => onBack()} />
+            <Button size="MD" theme="light" text={$at("Back")} onClick={() => onBack()} />
           </div>
         </div>
       )}
@@ -1013,10 +1061,10 @@ function DeviceFileView({
       >
         <div className="flex justify-between text-sm">
           <span className="font-medium text-black dark:text-white">
-            Available Storage
+            {$at("Available space")}
           </span>
           <span className="text-slate-700 dark:text-slate-300">
-            {percentageUsed}% used
+            {percentageUsed}% {$at("used")}
           </span>
         </div>
         <div className="h-3.5 w-full overflow-hidden rounded-xs bg-slate-200 dark:bg-slate-700">
@@ -1027,10 +1075,10 @@ function DeviceFileView({
         </div>
         <div className="flex justify-between text-sm text-slate-600">
           <span className="text-slate-700 dark:text-slate-300">
-            {formatters.bytes(bytesUsed)} used
+            {formatters.bytes(bytesUsed)} {$at("used")}
           </span>
           <span className="text-slate-700 dark:text-slate-300">
-            {formatters.bytes(bytesFree)} free
+            {formatters.bytes(bytesFree)} {$at("free")}
           </span>
         </div>
       </div>
@@ -1047,7 +1095,7 @@ function DeviceFileView({
             size="MD"
             theme="light"
             fullWidth
-            text="Upload a new image"
+            text={$at("Upload a new image")}
             onClick={() => onNewImageClick()}
           />
         </div>
@@ -1074,7 +1122,7 @@ function SDFileView({
       createdAt: string;
     }[]
   >([]);
-
+  const { $at }= useReactAt();
   const [sdMountStatus, setSDMountStatus] = useState<"ok" | "none" | "fail" | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [usbMode, setUsbMode] = useState<RemoteVirtualMediaState["mode"]>("CDROM");
@@ -1242,16 +1290,16 @@ function SDFileView({
     return (
       <div className="w-full space-y-4">
         <ViewHeader
-          title="Mount from KVM MicroSD Card"
-          description="Select an image to mount from the KVM storage"
+          title={$at("Mount from KVM MicroSD Card")}
+          description={$at("Select an image to mount from the KVM storage")}
         />
         <div className="flex items-center justify-center py-8 text-center">
           <div className="space-y-3">
             <ExclamationTriangleIcon className="mx-auto h-6 w-6 text-red-500" />
             <h3 className="text-sm font-semibold leading-none text-black dark:text-white">
               {sdMountStatus === "none"
-                ? "No SD card detected"
-                : "SD card mount failed"}  
+                ? $at("No SD card detected")
+                : $at("SD card mount failed")}  
               <Button
                 size="XS"
                 disabled={loading}
@@ -1262,8 +1310,8 @@ function SDFileView({
             </h3>
             <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
               {sdMountStatus === "none"
-                ? "Please insert an SD card and try again."
-                : "Please format the SD card and try again."}
+                ? $at("Please insert an SD card and try again.")
+                : $at("Please format the SD card and try again.")}
             </p>
           </div>
         </div>
@@ -1274,8 +1322,8 @@ function SDFileView({
   return (
     <div className="w-full space-y-4">
       <ViewHeader
-        title="Mount from KVM MicroSD Card"
-        description="Select an image to mount from the KVM storage"
+        title={$at("Mount from KVM MicroSD Card")}
+        description={$at("Select an image to mount from the KVM storage")}
       />
       <div
         className="w-full animate-fadeIn opacity-0"
@@ -1291,10 +1339,10 @@ function SDFileView({
                 <div className="space-y-1">
                   <PlusCircleIcon className="mx-auto h-6 w-6 text-blue-700 dark:text-blue-500" />
                   <h3 className="text-sm font-semibold leading-none text-black dark:text-white">
-                    No images available
+                    {$at("No images available")}
                   </h3>
                   <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-                    Upload an image to start virtual media mounting.
+                    {$at("Upload an image to start virtual media mounting.")}
                   </p>
                 </div>
                 <div>
@@ -1302,7 +1350,7 @@ function SDFileView({
                     size="SM"
                     disabled={loading}
                     theme="primary"
-                    text="Upload a new image"
+                    text={$at("Upload a new image")}
                     onClick={() => onNewImageClick()}
                   />
                 </div>
@@ -1321,7 +1369,7 @@ function SDFileView({
                   onDelete={() => {
                     const selectedFile = onStorageFiles.find(f => f.name === file.name);
                     if (!selectedFile) return;
-                    if (window.confirm("Are you sure you want to delete " + selectedFile.name + "?")) {
+                    if (window.confirm($at("Are you sure you want to delete " + selectedFile.name + "?")  )) {
                       handleSDDeleteFile(selectedFile);
                     }
                   }}
@@ -1343,14 +1391,14 @@ function SDFileView({
                     <Button
                       size="XS"
                       theme="light"
-                      text="Previous"
+                      text={$at("Previous")}
                       onClick={handlePreviousPage}
                       disabled={currentPage === 1 || loading}
                     />
                     <Button
                       size="XS"
                       theme="light"
-                      text="Next"
+                      text={$at("Next")}
                       onClick={handleNextPage}
                       disabled={currentPage === totalPages || loading}
                     />
@@ -1374,12 +1422,12 @@ function SDFileView({
             <UsbModeSelector usbMode={usbMode} setUsbMode={setUsbMode} />
           </Fieldset>
           <div className="flex items-center gap-x-2">
-            <Button size="MD" theme="blank" text="Back" onClick={() => onBack()} />
+            <Button size="MD" theme="blank" text={$at("Back")} onClick={() => onBack()} />
             <Button
               size="MD"
               disabled={selected === null || mountInProgress || loading}
               theme="primary"
-              text="Mount File"
+              text={$at("Mount File")}
               loading={mountInProgress}
               onClick={() =>
                 onMountStorageFile(
@@ -1399,7 +1447,7 @@ function SDFileView({
           }}
         >
           <div className="flex items-center gap-x-2">
-            <Button size="MD" theme="light" text="Back" onClick={() => onBack()} />
+            <Button size="MD" theme="light" text={$at("Back")} onClick={() => onBack()} />
           </div>
         </div>
       )}
@@ -1413,10 +1461,10 @@ function SDFileView({
       >
         <div className="flex justify-between text-sm">
           <span className="font-medium text-black dark:text-white">
-            Available Storage
+            {$at("Available Space")}
           </span>
           <span className="text-slate-700 dark:text-slate-300">
-            {percentageUsed}% used
+            {percentageUsed}% {$at("used")}
           </span>
         </div>
         <div className="h-3.5 w-full overflow-hidden rounded-sm bg-slate-200 dark:bg-slate-700">
@@ -1427,10 +1475,10 @@ function SDFileView({
         </div>
         <div className="flex justify-between text-sm text-slate-600">
           <span className="text-slate-700 dark:text-slate-300">
-            {formatters.bytes(bytesUsed)} used
+            {formatters.bytes(bytesUsed)} {$at("used")}
           </span>
           <span className="text-slate-700 dark:text-slate-300">
-            {formatters.bytes(bytesFree)} free
+            {formatters.bytes(bytesFree)} {$at("free")}
           </span>
         </div>
       </div>
@@ -1448,7 +1496,7 @@ function SDFileView({
             disabled={loading}
             theme="light"
             fullWidth
-            text="Upload a new image"
+            text={$at("Upload a New Image")}
             onClick={() => onNewImageClick()}
           />
         </div>
@@ -1466,7 +1514,7 @@ function SDFileView({
           disabled={loading}
           theme="light"
           fullWidth
-          text="Unmount SD Card"
+          text={$at("Unmount Micro SD Card")}
           onClick={() => handleUnmountSDStorage()}
           className="text-red-500 dark:text-red-400"
         />
@@ -1489,6 +1537,7 @@ function UploadFileView({
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "success">(
     "idle",
   );
+  const { $at }= useReactAt();
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [uploadedFileSize, setUploadedFileSize] = useState<number | null>(null);
@@ -1767,16 +1816,16 @@ function UploadFileView({
       }
     }
   };
-  
+
   return (
     <div className="w-full space-y-4">
       <UploadDialog
         open={true}
-        title="Upload New Image"
+        title={$at("Upload a New Image")}
         description={
           incompleteFileName
-            ? `Continue uploading "${incompleteFileName}"`
-            : "Select an image file to upload to KVM storage"
+            ? $at(`Continue uploading "${incompleteFileName}"`)
+            : $at("Select an image file to upload to KVM storage")
         }
       >
         <div
@@ -1813,11 +1862,11 @@ function UploadFileView({
                         </div>
                         <h3 className="text-sm leading-none font-semibold text-black dark:text-white">
                           {incompleteFileName
-                            ? `Click to select "${incompleteFileName.replace(".incomplete", "")}"`
-                            : "Click to select a file"}
+                            ? `"${$at("Click to select")}" "${incompleteFileName.replace(".incomplete", "")}"`
+                            : $at("Click to select a file")}
                         </h3>
                         <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-                          Supported formats: ISO, IMG
+                          {$at("Supported formats: ISO, IMG")}
                         </p>
                       </div>
                     )}
@@ -1832,7 +1881,7 @@ function UploadFileView({
                           </Card>
                         </div>
                         <h3 className="leading-non text-lg font-semibold text-black dark:text-white">
-                          Uploading {formatters.truncateMiddle(uploadedFileName, 30)}
+                          {$at("Uploading")} {formatters.truncateMiddle(uploadedFileName, 30)}
                         </h3>
                         <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
                           {formatters.bytes(uploadedFileSize || 0)}
@@ -1845,11 +1894,11 @@ function UploadFileView({
                             ></div>
                           </div>
                           <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
-                            <span>Uploading...</span>
+                            <span>{$at("Uploading...")}</span>
                             <span>
                               {uploadSpeed !== null
                                 ? `${formatters.bytes(uploadSpeed)}/s`
-                                : "Calculating..."}
+                                : $at("Calculating...")}
                             </span>
                           </div>
                         </div>
@@ -1866,11 +1915,10 @@ function UploadFileView({
                           </Card>
                         </div>
                         <h3 className="text-sm leading-none font-semibold text-black dark:text-white">
-                          Upload successful
+                          {$at("Upload Successful")}
                         </h3>
                         <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-                          {formatters.truncateMiddle(uploadedFileName, 40)} has been
-                          uploaded
+                          {formatters.truncateMiddle(uploadedFileName, 40)} {$at("Uploaded")}
                         </p>
                       </div>
                     )}
@@ -1913,7 +1961,7 @@ function UploadFileView({
               <Button
                 size="MD"
                 theme="light"
-                text="Cancel Upload"
+                text={$at("Cancel Upload")}
                 onClick={() => {
                   onCancelUpload();
                   setUploadState("idle");
@@ -1927,7 +1975,7 @@ function UploadFileView({
               <Button
                 size="MD"
                 theme={uploadState === "success" ? "primary" : "light"}
-                text="Back to Overview"
+                text={$at("Back to Overview")}
                 onClick={onBack}
               />
             )}
@@ -1990,6 +2038,7 @@ function PreUploadedImageItem({
   onDelete: () => void;
   onContinueUpload: () => void;
 }) {
+  const { $at }= useReactAt();
   const [isHovering, setIsHovering] = useState(false);
   return (
     <label
@@ -2034,7 +2083,7 @@ function PreUploadedImageItem({
             size="XS"
             theme="light"
             LeadingIcon={TrashIcon}
-            text="Delete"
+            text={$at("Delete")}
             onClick={e => {
               e.stopPropagation();
               onDelete();
@@ -2055,7 +2104,7 @@ function PreUploadedImageItem({
           <Button
             size="XS"
             theme="light"
-            text="Continue uploading"
+            text={$at("Continue uploading")}
             onClick={e => {
               e.stopPropagation();
               onContinueUpload();
@@ -2087,9 +2136,12 @@ function UsbModeSelector({
   usbMode: RemoteVirtualMediaState["mode"];
   setUsbMode: (mode: RemoteVirtualMediaState["mode"]) => void;
 }) {
+  const { $at } = useReactAt();
   return (
     <div className="flex flex-col items-start space-y-1 select-none">
-      <label className="text-sm font-semibold text-black dark:text-white">Mount as</label>
+      <label className="text-sm font-semibold text-black dark:text-white">
+        { $at("Mount as") }
+      </label>
       <div className="flex space-x-4">
         <label htmlFor="cdrom" className="flex items-center">
           <input

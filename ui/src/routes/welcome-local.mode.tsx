@@ -1,5 +1,5 @@
 import { ActionFunctionArgs, Form, redirect, useActionData } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import GridBackground from "@components/GridBackground";
 import Container from "@components/Container";
@@ -10,6 +10,9 @@ import { DEVICE_API } from "@/ui.config";
 import { GridCard } from "../components/Card";
 import { cx } from "../cva.config";
 import api from "../api";
+import { SelectMenuBasic } from "@/components/SelectMenuBasic";
+import {useReactAt} from 'i18n-auto-extractor/react'
+import DashboardNavbar from "@/components/Header";
 
 import { DeviceStatus } from "./welcome-local";
 
@@ -47,6 +50,7 @@ const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function WelcomeLocalModeRoute() {
+  const { $at }= useReactAt();
   const actionData = useActionData() as { error?: string };
   const [selectedMode, setSelectedMode] = useState<"password" | "noPassword" | null>(
     null,
@@ -54,6 +58,12 @@ export default function WelcomeLocalModeRoute() {
 
   return (
     <>
+      <DashboardNavbar
+        primaryLinks={[]}
+        showConnectionStatus={false}
+        isLoggedIn={false}
+        kvmName={"PicoKVM Device"}
+      />
       <GridBackground />
       <div className="grid min-h-screen">
         <Container>
@@ -73,10 +83,10 @@ export default function WelcomeLocalModeRoute() {
                 style={{ animationDelay: "200ms" }}
               >
                 <h1 className="text-4xl font-semibold text-black dark:text-white">
-                  Local Authentication Method
+                  {($at("Local Authentication Method"))}
                 </h1>
                 <p className="font-medium text-slate-600 dark:text-slate-400">
-                  Select how you{"'"}d like to secure your KVM device locally.
+                  {($at("Select how you would like to secure your KVM device locally."))}
                 </p>
               </div>
 
@@ -101,10 +111,18 @@ export default function WelcomeLocalModeRoute() {
                           <h3 className="text-base font-bold text-black dark:text-white">
                             {mode === "password" ? "Password protected" : "No Password"}
                           </h3>
+                          <h3 className="text-base font-bold text-black dark:text-white">
+                            {mode === "password" ? "密码保护" : "无密码"}
+                          </h3>
                           <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
                             {mode === "password"
                               ? "Secure your device with a password for added protection."
                               : "Quick access without password authentication."}
+                          </p>
+                          <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
+                            {mode === "password"
+                              ? "设置密码保护您的设备安全"
+                              : "无需密码快速访问"}
                           </p>
                         </div>
                         <input
@@ -140,7 +158,7 @@ export default function WelcomeLocalModeRoute() {
                     theme="primary"
                     fullWidth
                     type="submit"
-                    text="Continue"
+                    text={$at("Continue")}
                     textAlign="center"
                     disabled={!selectedMode}
                   />
@@ -151,7 +169,7 @@ export default function WelcomeLocalModeRoute() {
                 className="animate-fadeIn mx-auto max-w-md text-center text-xs text-slate-500 opacity-0 dark:text-slate-400"
                 style={{ animationDelay: "600ms" }}
               >
-                You can always change your authentication method later in the settings.
+                {($at("You can always change your authentication method later in the settings."))}
               </p>
             </div>
           </div>

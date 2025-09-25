@@ -21,6 +21,7 @@ import { keyDisplayMap, modifierDisplayMap } from "@/keyboardMappings";
 import notifications from "@/notifications";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 const normalizeSortOrders = (macros: KeySequence[]): KeySequence[] => {
   return macros.map((macro, index) => ({
@@ -30,6 +31,7 @@ const normalizeSortOrders = (macros: KeySequence[]): KeySequence[] => {
 };
 
 export default function SettingsMacrosRoute() {
+  const { $at }= useReactAt();
   const { macros, loading, initialized, loadMacros, saveMacros } = useMacrosStore();
   const navigate = useNavigate();
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -223,7 +225,7 @@ export default function SettingsMacrosRoute() {
                               </>
                             ) : (
                               <span className="font-medium text-slate-500 dark:text-slate-400">
-                                Delay only
+                                {$at("Delay Only")}
                               </span>
                             )}
                             {step.delay !== DEFAULT_DELAY && (
@@ -264,7 +266,7 @@ export default function SettingsMacrosRoute() {
                   size="XS"
                   theme="light"
                   LeadingIcon={LuPenLine}
-                  text="Edit"
+                  text={$at("Edit")}
                   onClick={() => navigate(`${macro.id}/edit`)}
                   disabled={actionLoadingId === macro.id}
                   aria-label={`Edit macro ${macro.name}`}
@@ -280,10 +282,11 @@ export default function SettingsMacrosRoute() {
             setShowDeleteConfirm(false);
             setMacroToDelete(null);
           }}
-          title="Delete Macro"
-          description={`Are you sure you want to delete "${macroToDelete?.name}"? This action cannot be undone.`}
+          title={$at("Delete Macro")}
+          description={`${$at("Are you sure you want to delete")} "${macroToDelete?.name}" ${$at("? This action cannot be undone.")}`}
           variant="danger"
-          confirmText={actionLoadingId === macroToDelete?.id ? "Deleting..." : "Delete"}
+          confirmText={actionLoadingId === macroToDelete?.id ? $at("Deleting...") : $at("Delete")}
+          cancelText={$at("Cancel")}
           onConfirm={handleDeleteMacro}
           isConfirming={actionLoadingId === macroToDelete?.id}
         />
@@ -306,18 +309,18 @@ export default function SettingsMacrosRoute() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <SettingsPageHeader
-          title="Keyboard Macros"
-          description={`Combine keystrokes into a single action for faster workflows.`}
+          title={$at("Keyboard Macros")}
+          description={$at("Combine keystrokes into a single action for faster workflows.")}
         />
         {macros.length > 0 && (
           <div className="flex items-center pl-2">
             <Button
               size="SM"
               theme="primary"
-              text={isMaxMacrosReached ? `Max Reached` : "Add New Macro"}
+              text={isMaxMacrosReached ? $at("Max Reached") : $at("Add New Macro")}
               onClick={() => navigate("add")}
               disabled={isMaxMacrosReached}
-              aria-label="Add new macro"
+              aria-label={$at("Add new macro")}
             />
           </div>
         )}
@@ -327,7 +330,7 @@ export default function SettingsMacrosRoute() {
         {loading && macros.length === 0 ? (
           <EmptyCard
             IconElm={LuCommand}
-            headline="Loading macros..."
+            headline={$at("Loading macros...")}
             BtnElm={
               <div className="my-2 flex flex-col items-center space-y-2 text-center">
                 <LoadingSpinner className="h-6 w-6 text-blue-700 dark:text-blue-500" />
@@ -337,16 +340,16 @@ export default function SettingsMacrosRoute() {
         ) : macros.length === 0 ? (
           <EmptyCard
             IconElm={LuCommand}
-            headline="Create Your First Macro"
-            description="Combine keystrokes into a single action"
+            headline={$at("Create Your First Macro")}
+            description={$at("Combine keystrokes into a single action")}
             BtnElm={
               <Button
                 size="SM"
                 theme="primary"
-                text="Add New Macro"
+                text={$at("Add New Macro")}
                 onClick={() => navigate("add")}
                 disabled={isMaxMacrosReached}
-                aria-label="Add new macro"
+                aria-label={$at("Add new macro")}
               />
             }
           />

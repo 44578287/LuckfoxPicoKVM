@@ -10,6 +10,7 @@ import { SelectMenuBasic } from "./SelectMenuBasic";
 import { SettingsSectionHeader } from "./SettingsSectionHeader";
 import Fieldset from "./Fieldset";
 import { useUsbEpModeStore, useAudioModeStore } from "../hooks/stores";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 export interface UsbDeviceConfig {
   keyboard: boolean;
@@ -29,20 +30,8 @@ const defaultUsbDeviceConfig: UsbDeviceConfig = {
   audio: true,
 };
 
-const usbEpOptions = [
-  { value: "uac", label: "USB Audio Card"},
-  { value: "mtp", label: "Media Transfer Protocol"},
-  { value: "disabled", label: "Disabled"},
-]
-
-const audioModeOptions = [
-  { value: "disabled", label: "Disabled"},
-  { value: "usb", label: "USB"},
-  //{ value: "hdmi", label: "HDMI"},
-]
-
-
 export function UsbEpModeSetting() {
+  const { $at }= useReactAt();
   const usbEpMode = useUsbEpModeStore(state => state.usbEpMode)
   const setUsbEpMode = useUsbEpModeStore(state => state.setUsbEpMode)
  
@@ -110,6 +99,7 @@ export function UsbEpModeSetting() {
 
       notifications.success(`Audio Mode set to ${mode}.It takes effect after refreshing the page`);
       setAudioMode(mode);
+      window.location.reload();
     });
   };
 
@@ -132,7 +122,9 @@ export function UsbEpModeSetting() {
           audio: false,
           mtp: true,
         })
-        handleAudioModeChange("disabled");
+        if (audioMode !== "disabled") {
+          handleAudioModeChange("disabled");
+        }
         setUsbEpMode("mtp");
       } else {
         handleUsbConfigChange({
@@ -140,11 +132,13 @@ export function UsbEpModeSetting() {
           audio: false,
           mtp: false,
         })
-        handleAudioModeChange("disabled");
+        if (audioMode !== "disabled") {
+          handleAudioModeChange("disabled");
+        }
         setUsbEpMode("disabled");
       }
     },
-    [handleUsbConfigChange, usbDeviceConfig],
+    [handleUsbConfigChange, usbDeviceConfig, audioMode],
   );
 
   useEffect(() => {
@@ -162,8 +156,8 @@ export function UsbEpModeSetting() {
       <div className="h-px w-full bg-slate-800/10 dark:bg-slate-300/20" />
         <SettingsItem
           loading={loading}
-          title="USB Other Function"
-          description="Select the active USB function (MTP or UAC)"
+          title={$at("USB Expansion Function")}
+          description={$at("Select the active USB function (MTP or UAC)")}
         >
           <SelectMenuBasic
             size="SM"
@@ -171,7 +165,11 @@ export function UsbEpModeSetting() {
             value={usbEpMode}
             fullWidth
             onChange={handleUsbEpModeChange}
-            options={usbEpOptions}
+            options={[
+              { value: "uac", label: $at("UAC(USB Audio Card)")},
+              { value: "mtp", label: $at("MTP(Media Transfer Protocol)")},
+              { value: "disabled", label: $at("Disabled")},
+            ]}
           />
         </SettingsItem>
         
@@ -186,7 +184,11 @@ export function UsbEpModeSetting() {
               size="SM"
               label=""
               value={audioMode}
-              options={audioModeOptions}
+              options={[
+                { value: "disabled", label: $at("Disabled")},
+                { value: "usb", label: $at("USB")},
+                //{ value: "hdmi", label: "HDMI"},
+              ]}
               onChange={e => handleAudioModeChange(e.target.value)}
             />
           </SettingsItem>

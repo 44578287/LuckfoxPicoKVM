@@ -300,6 +300,9 @@ export const useVideoStore = create<VideoState>(set => ({
 export type KeyboardLedSync = "auto" | "browser" | "host";
 
 interface SettingsState {
+  language: string;
+  setLanguage: (language: string) => void;
+
   isCursorHidden: boolean;
   setCursorVisibility: (enabled: boolean) => void;
 
@@ -355,6 +358,9 @@ interface SettingsState {
 export const useSettingsStore = create(
   persist<SettingsState>(
     set => ({
+      language: "en",
+      setLanguage: language => set({ language }),
+
       isCursorHidden: false,
       setCursorVisibility: enabled => set({ isCursorHidden: enabled }),
 
@@ -516,7 +522,7 @@ export interface HidState {
   isPasteModeEnabled: boolean;
   setPasteModeEnabled: (enabled: boolean) => void;
 
-  usbState: "configured" | "attached" | "not attached" | "suspended" | "addressed";
+  usbState: "configured" | "attached" | "not attached" | "suspended" | "addressed" | "default";
   setUsbState: (state: HidState["usbState"]) => void;
 }
 

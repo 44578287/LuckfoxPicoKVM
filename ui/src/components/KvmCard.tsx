@@ -5,6 +5,7 @@ import { LuEllipsisVertical } from "react-icons/lu";
 
 import Card from "@components/Card";
 import { Button, LinkButton } from "@components/Button";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 function getRelativeTimeString(date: Date | number, lang = navigator.language): string {
   // Allow dates or times to be passed
@@ -50,6 +51,7 @@ export default function KvmCard({
   online: boolean;
   lastSeen: Date | null;
 }) {
+  const { $at }= useReactAt();
   return (
     <Card>
       <div className="px-5 py-5 space-y-3">
@@ -85,7 +87,7 @@ export default function KvmCard({
               <LinkButton
                 size="MD"
                 theme="light"
-                text="Connect to KVM"
+                text={$at("Connect to KVM")}
                 LeadingIcon={MdConnectWithoutContact}
                 textAlign="center"
                 to={`/devices/${id}`}
@@ -94,7 +96,7 @@ export default function KvmCard({
               <Button
                 size="MD"
                 theme="light"
-                text="Troubleshoot Connection"
+                text={$at("Troubleshoot Connection")}
                 textAlign="center"
               />
             )}
@@ -123,7 +125,7 @@ export default function KvmCard({
                             className="block w-full py-1.5 text-black dark:text-white"
                             to={`./${id}/rename`}
                           >
-                            Rename
+                            {$at("Rename")}
                           </Link>
                         </div>
                       </div>
@@ -137,7 +139,7 @@ export default function KvmCard({
                             className="block w-full py-1.5 text-black dark:text-white"
                             to={`./${id}/deregister`}
                           >
-                            Deregister from cloud
+                            {$at("Deregister from cloud")}
                           </Link>
                         </div>
                       </div>

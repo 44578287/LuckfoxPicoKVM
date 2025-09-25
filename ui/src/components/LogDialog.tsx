@@ -109,7 +109,7 @@ export default function Ansi({ children, className }: AnsiProps) {
       col = 0;
     } else if (chunk) {
       const style = getStyle();
-      const chars = [...chunk]; // 正确识别 Unicode 码点
+      const chars = [...chunk];
       for (const ch of chars) {
         if (col < currentLine.text.length) {
           currentLine.text =
@@ -155,7 +155,7 @@ export function LogDialog({
 
   return (
     <Modal open={open} onClose={onClose}>
-      <div className="mx-auto max-w-xl px-3 transition-all duration-300 ease-in-out">
+      <div className="mx-auto max-w-4xl px-3 transition-all duration-300 ease-in-out">
         <div className="pointer-events-auto relative w-full overflow-hidden rounded-lg bg-white p-5 text-left align-middle shadow-xl transition-all dark:bg-slate-800">
           <div className="space-y-3">
             <div className="sm:flex sm:items-start">

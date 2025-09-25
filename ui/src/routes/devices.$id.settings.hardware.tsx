@@ -10,8 +10,10 @@ import { Button, LinkButton } from "@/components/Button";
 
 import notifications from "../notifications";
 import { UsbEpModeSetting } from "@components/UsbEpModeSetting";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 export default function SettingsHardwareRoute() {
+  const { $at }= useReactAt();
   const [send] = useJsonRpc();
   const settings = useSettingsStore();
 
@@ -139,7 +141,6 @@ export default function SettingsHardwareRoute() {
           `Failed to get LED-Green mode: ${resp.error.data || "Unknown error"}`,
         );
       }
-      console.log("LED-Green mode:", resp.result);
       const result = resp.result as string;
       setLedGreenMode(result);
     });    
@@ -150,7 +151,6 @@ export default function SettingsHardwareRoute() {
           `Failed to get LED-Yellow mode: ${resp.error.data || "Unknown error"}`,
         );
       }
-      console.log("LED-Yellow mode:", resp.result);
       const result = resp.result as string;
       setLedYellowMode(result);
     });    
@@ -159,13 +159,13 @@ export default function SettingsHardwareRoute() {
   return (
     <div className="space-y-4">
       <SettingsPageHeader
-        title="Hardware"
-        description="Configure display settings and hardware options for your KVM device"
+        title={$at("Hardware")}
+        description={$at("Configure display settings and hardware options for your KVM device")}
       />
       <div className="space-y-4">
         <SettingsItem
-          title="Display Orientation"
-          description="Set the orientation of the display"
+          title={$at("Display Orientation")}
+          description={$at("Set the orientation of the display")}
         >
           <SelectMenuBasic
             size="SM"
@@ -184,18 +184,18 @@ export default function SettingsHardwareRoute() {
           />
         </SettingsItem>
         <SettingsItem
-          title="Display Brightness"
-          description="Set the brightness of the display"
+          title={$at("Display Brightness")}
+          description={$at("Set the brightness of the display")}
         >
           <SelectMenuBasic
             size="SM"
             label=""
             value={settings.backlightSettings.max_brightness.toString()}
             options={[
-              { value: "0", label: "Off" },
-              { value: "64", label: "Low" },
-              { value: "128", label: "Medium" },
-              { value: "200", label: "High" },
+              { value: "0", label: $at("Off") },
+              { value: "64", label: $at("Low") },
+              { value: "128", label: $at("Medium") },
+              { value: "200", label: $at("High") },
             ]}
             onChange={e => {
               settings.backlightSettings.max_brightness = parseInt(e.target.value);
@@ -215,8 +215,8 @@ export default function SettingsHardwareRoute() {
         {settings.backlightSettings.max_brightness != 0 && (
           <>
             <SettingsItem
-              title="Dim Display After"
-              description="Set how long to wait before dimming the display"
+              title={$at("Dim Display After")}
+              description={$at("Set how long to wait before dimming the display")}
             >
               <SelectMenuBasic
                 size="SM"
@@ -237,8 +237,8 @@ export default function SettingsHardwareRoute() {
               />
             </SettingsItem>
             <SettingsItem
-              title="Turn off Display After"
-              description="Period of inactivity before display automatically turns off"
+              title={$at("Turn off Display After")}
+              description={$at("Period of inactivity before display automatically turns off")}
             >
               <SelectMenuBasic
                 size="SM"
@@ -259,15 +259,15 @@ export default function SettingsHardwareRoute() {
             </SettingsItem>
           
             <p className="text-xs text-slate-600 dark:text-slate-400">
-              The display will wake up when the connection state changes, or when touched.
+              {$at("The display will wake up when the connection state changes, or when touched.")}
             </p>
 
           </>
         )}
 
         <SettingsItem
-          title="Time Zone"
-          description="Set the time zone for the clock"
+          title={$at("Time Zone")}
+          description={$at("Set the time zone for the clock")}
         >
         </SettingsItem>
         <div className="space-y-4">  
@@ -281,25 +281,25 @@ export default function SettingsHardwareRoute() {
             <Button
               size="SM"
               theme="light"
-              text="Set"
+              text={$at("Set")}
               onClick={handleTimeZoneSave}
             />
-          </div> 
+          </div>
         </div>
 
         <SettingsItem
-          title="LED-Green Type"
-          description="Set the type of system status indicated by the LED-Green"
+          title={$at("LED-Green Type")}
+          description={$at("Set the type of system status indicated by the LED-Green")}
         >
           <SelectMenuBasic
             size="SM"
             label=""
             value={settings.ledGreenMode.toString()}
             options={[
-              { value: "network-link", label: "network-link" },
-              { value: "network-tx", label: "network-tx" },
-              { value: "network-rx", label: "network-rx" },
-              { value: "kernel-activity", label: "kernel-activity" },
+              { value: "network-link", label: $at("network-link") },
+              { value: "network-tx", label: $at("network-tx") },
+              { value: "network-rx", label: $at("network-rx") },
+              { value: "kernel-activity", label: $at("kernel-activity") },
             ]}
             onChange={e => {
               settings.ledGreenMode = e.target.value;
@@ -309,18 +309,18 @@ export default function SettingsHardwareRoute() {
         </SettingsItem>
 
         <SettingsItem
-          title="LED-Yellow Type"
-          description="Set the type of system status indicated by the LED-Yellow"
+          title={$at("LED-Yellow Type")}
+          description={$at("Set the type of system status indicated by the LED-Yellow")}
         >
           <SelectMenuBasic
             size="SM"
             label=""
             value={settings.ledYellowMode.toString()}
             options={[
-              { value: "network-link", label: "network-link" },
-              { value: "network-tx", label: "network-tx" },
-              { value: "network-rx", label: "network-rx" },
-              { value: "kernel-activity", label: "kernel-activity" },
+              { value: "network-link", label: $at("network-link") },
+              { value: "network-tx", label: $at("network-tx") },
+              { value: "network-rx", label: $at("network-rx") },
+              { value: "kernel-activity", label: $at("kernel-activity") },
             ]}
             onChange={e => {
               settings.ledYellowMode = e.target.value;

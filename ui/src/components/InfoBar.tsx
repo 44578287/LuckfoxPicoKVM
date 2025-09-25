@@ -9,8 +9,10 @@ import {
   useVideoStore,
 } from "@/hooks/stores";
 import { keys, modifiers } from "@/keyboardMappings";
+import { useReactAt } from 'i18n-auto-extractor/react'
 
 export default function InfoBar() {
+  const { $at } = useReactAt();
   const activeKeys = useHidStore(state => state.activeKeys);
   const activeModifiers = useHidStore(state => state.activeModifiers);
   const mouseX = useMouseStore(state => state.mouseX);
@@ -53,21 +55,21 @@ export default function InfoBar() {
           <div className="flex flex-wrap items-center pl-2 gap-x-4">
             {settings.debugMode ? (
               <div className="flex">
-                <span className="text-xs font-semibold">Resolution:</span>{" "}
+                <span className="text-xs font-semibold">{$at("Resolution")}:</span>{" "}
                 <span className="text-xs">{videoSize}</span>
               </div>
             ) : null}
 
             {settings.debugMode ? (
               <div className="flex">
-                <span className="text-xs font-semibold">Video Size: </span>
+                <span className="text-xs font-semibold">{$at("Video Size")}: </span>
                 <span className="text-xs">{videoClientSize}</span>
               </div>
             ) : null}
 
             {(settings.debugMode && settings.mouseMode == "absolute") ? (
               <div className="flex w-[118px] items-center gap-x-1">
-                <span className="text-xs font-semibold">Pointer:</span>
+                <span className="text-xs font-semibold">{$at("Pointer")}:</span>
                 <span className="text-xs">
                   {mouseX},{mouseY}
                 </span>
@@ -76,7 +78,7 @@ export default function InfoBar() {
 
             {(settings.debugMode && settings.mouseMode == "relative") ? (
               <div className="flex w-[118px] items-center gap-x-1">
-                <span className="text-xs font-semibold">Last Move:</span>
+                <span className="text-xs font-semibold">{$at("Last Move")}:</span>
                 <span className="text-xs">
                   {mouseMove ?
                     `${mouseMove.x},${mouseMove.y} ${mouseMove.buttons ? `(${mouseMove.buttons})` : ""}` :
@@ -87,20 +89,20 @@ export default function InfoBar() {
 
             {settings.debugMode && (
               <div className="flex w-[156px] items-center gap-x-1">
-                <span className="text-xs font-semibold">USB State:</span>
+                <span className="text-xs font-semibold">{$at("USB State")}:</span>
                 <span className="text-xs">{usbState}</span>
               </div>
             )}
             {settings.debugMode && (
               <div className="flex w-[156px] items-center gap-x-1">
-                <span className="text-xs font-semibold">HDMI State:</span>
+                <span className="text-xs font-semibold">{$at("HDMI State")}:</span>
                 <span className="text-xs">{hdmiState}</span>
               </div>
             )}
 
             {showPressedKeys && (
               <div className="flex items-center gap-x-1">
-                <span className="text-xs font-semibold">Keys:</span>
+                <span className="text-xs font-semibold">{$at("Keys")}:</span>
                 <h2 className="text-xs">
                   {[
                     ...activeKeys.map(

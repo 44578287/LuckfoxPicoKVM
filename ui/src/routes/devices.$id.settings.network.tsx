@@ -29,6 +29,7 @@ import AutoHeight from "../components/AutoHeight";
 import DhcpLeaseCard from "../components/DhcpLeaseCard";
 
 import { SettingsItem } from "./devices.$id.settings";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 dayjs.extend(relativeTime);
 
@@ -71,6 +72,7 @@ export function LifeTimeLabel({ lifetime }: { lifetime: string }) {
 }
 
 export default function SettingsNetworkRoute() {
+  const { $at } = useReactAt();
   const [send] = useJsonRpc();
   const [networkState, setNetworkState] = useNetworkStateStore(state => [
     state,
@@ -215,13 +217,13 @@ export default function SettingsNetworkRoute() {
     <>
       <Fieldset disabled={!networkSettingsLoaded} className="space-y-4">
         <SettingsPageHeader
-          title="Network"
-          description="Configure your network settings"
+          title={$at("Network")}
+          description={$at("Configure your network settings")}
         />
         <div className="space-y-4">
           <SettingsItem
-            title="MAC Address"
-            description="Hardware identifier for the network interface"
+            title={$at("MAC Address")}
+            description={$at("Hardware identifier for the network interface")}
           >
             <InputField
               type="text"
@@ -236,7 +238,7 @@ export default function SettingsNetworkRoute() {
         <div className="space-y-4">
           <SettingsItem
             title="Hostname"
-            description="Device identifier on the network. Blank for system default"
+            description={$at("Device identifier on the network. Blank for system default")}
           >
             <div className="relative">
               <div>
@@ -258,8 +260,8 @@ export default function SettingsNetworkRoute() {
         <div className="space-y-4">
           <div className="space-y-1">
             <SettingsItem
-              title="Domain"
-              description="Network domain suffix for the device"
+              title={$at("Domain")}
+              description={$at("Device domain suffix in mDNS network")}
             >
               <div className="space-y-2">
                 <SelectMenuBasic
@@ -279,7 +281,7 @@ export default function SettingsNetworkRoute() {
                 <InputFieldWithLabel
                   size="SM"
                   type="text"
-                  label="Custom Domain"
+                  label={$at("Custom Domain")}
                   placeholder="home"
                   value={customDomain}
                   onChange={e => {
@@ -293,7 +295,7 @@ export default function SettingsNetworkRoute() {
           <div className="space-y-4">
             <SettingsItem
               title="mDNS"
-              description="Control mDNS (multicast DNS) operational mode"
+              description={$at("Control mDNS (multicast DNS) operational mode")}
             >
               <SelectMenuBasic
                 size="SM"
@@ -311,8 +313,8 @@ export default function SettingsNetworkRoute() {
 
           <div className="space-y-4">
             <SettingsItem
-              title="Time synchronization"
-              description="Configure time synchronization settings"
+              title={$at("Time synchronization")}
+              description={$at("Configure time synchronization settings")}
             >
               <SelectMenuBasic
                 size="SM"
@@ -336,7 +338,7 @@ export default function SettingsNetworkRoute() {
             size="SM"
             theme="primary"
             disabled={firstNetworkSettings.current === networkSettings}
-            text="Save Settings"
+            text={$at("Save settings")}
             onClick={() => setNetworkSettingsRemote(networkSettings)}
           />
         </div>
@@ -344,7 +346,7 @@ export default function SettingsNetworkRoute() {
         <div className="h-px w-full bg-slate-800/10 dark:bg-slate-300/20" />
 
         <div className="space-y-4">
-          <SettingsItem title="IPv4 Mode" description="Configure the IPv4 mode">
+          <SettingsItem title={$at("IPv4 Mode")} description={$at("Configure IPv4 mode")}>
             <SelectMenuBasic
               size="SM"
               value={networkSettings.ipv4_mode}
@@ -361,7 +363,7 @@ export default function SettingsNetworkRoute() {
                 <div className="p-4">
                   <div className="space-y-4">
                     <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                      DHCP Lease Information
+                      {$at("DHCP Lease Information")}
                     </h3>
                     <div className="animate-pulse space-y-3">
                       <div className="h-4 w-1/3 rounded bg-slate-200 dark:bg-slate-700" />
@@ -379,14 +381,14 @@ export default function SettingsNetworkRoute() {
             ) : (
               <EmptyCard
                 IconElm={LuEthernetPort}
-                headline="DHCP Information"
-                description="No DHCP lease information available"
+                headline={$at("DHCP Information")}
+                description={$at("No DHCP lease information available")}
               />
             )}
           </AutoHeight>
         </div>
         <div className="space-y-4">
-          <SettingsItem title="IPv6 Mode" description="Configure the IPv6 mode">
+          <SettingsItem title={$at("IPv6 Mode")} description={$at("Configure the IPv6 mode")}>
             <SelectMenuBasic
               size="SM"
               value={networkSettings.ipv6_mode}
@@ -423,8 +425,8 @@ export default function SettingsNetworkRoute() {
             ) : (
               <EmptyCard
                 IconElm={LuEthernetPort}
-                headline="IPv6 Information"
-                description="No IPv6 addresses configured"
+                headline={$at("IPv6 Information")}
+                description={$at("No IPv6 addresses configured")}
               />
             )}
           </AutoHeight>
@@ -450,10 +452,11 @@ export default function SettingsNetworkRoute() {
       <ConfirmDialog
         open={showRenewLeaseConfirm}
         onClose={() => setShowRenewLeaseConfirm(false)}
-        title="Renew DHCP Lease"
-        description="This will request a new IP address from your DHCP server. Your device may temporarily lose network connectivity during this process."
+        title={$at("Renew DHCP Lease")}
+        description={$at("This will request your DHCP server to assign a new IP address. Your device may lose network connectivity during the process.")}
         variant="danger"
-        confirmText="Renew Lease"
+        confirmText={$at("Renew DHCP Lease")}
+        cancelText={$at("Cancel")}
         onConfirm={() => {
           handleRenewLease();
           setShowRenewLeaseConfirm(false);

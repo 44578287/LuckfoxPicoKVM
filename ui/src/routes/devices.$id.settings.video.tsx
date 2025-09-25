@@ -10,6 +10,8 @@ import notifications from "../notifications";
 import { SelectMenuBasic } from "../components/SelectMenuBasic";
 
 import { SettingsItem } from "./devices.$id.settings";
+import {useReactAt} from 'i18n-auto-extractor/react'
+
 const defaultEdid =
   "00ffffffffffff0052620188008888881c150103800000780a0dc9a05747982712484c00000001010101010101010101010101010101023a801871382d40582c4500c48e2100001e011d007251d01e206e285500c48e2100001e000000fc00543734392d6648443732300a20000000fd00147801ff1d000a202020202020017b";
 const edids = [
@@ -41,6 +43,7 @@ const streamQualityOptions = [
 ];
 
 export default function SettingsVideoRoute() {
+  const { $at }= useReactAt();
   const [send] = useJsonRpc();
   const [streamQuality, setStreamQuality] = useState("1");
   const [customEdidValue, setCustomEdidValue] = useState<string | null>(null);
@@ -117,15 +120,15 @@ export default function SettingsVideoRoute() {
     <div className="space-y-3">
       <div className="space-y-4">
         <SettingsPageHeader
-          title="Video"
-          description="Configure display settings and EDID for optimal compatibility"
+          title={$at("Video")}
+          description={$at("Configure display settings and EDID for optimal compatibility")}
         />
 
         <div className="space-y-4">
           <div className="space-y-4">
             <SettingsItem
-              title="Stream Quality"
-              description="Adjust the quality of the video stream"
+              title={$at("Stream Quality")}
+              description={$at("Adjust the quality of the video stream")}
             >
               <SelectMenuBasic
                 size="SM"
@@ -138,14 +141,14 @@ export default function SettingsVideoRoute() {
 
             {/* Video Enhancement Settings */}
             <SettingsItem
-              title="Video Enhancement"
-              description="Adjust color settings to make the video output more vibrant and colorful"
+              title={$at("Video Enhancement")}
+              description={$at("Adjust color settings to make the video output more vibrant and colorful")}
             />
             
             <div className="space-y-4 pl-4">
               <SettingsItem
-                title="Saturation"
-                description={`Color saturation (${videoSaturation.toFixed(1)}x)`}
+                title={$at("Saturation")}
+                description={`${$at("Color saturation")} (${videoSaturation.toFixed(1)}x)`}
               >
                 <input
                   type="range"
@@ -159,8 +162,8 @@ export default function SettingsVideoRoute() {
               </SettingsItem>
 
               <SettingsItem
-                title="Brightness"
-                description={`Brightness level (${videoBrightness.toFixed(1)}x)`}
+                title={$at("Brightness")}
+                description={`${$at("Brightness level")} (${videoBrightness.toFixed(1)}x)`}
               >
                 <input
                   type="range"
@@ -174,8 +177,8 @@ export default function SettingsVideoRoute() {
               </SettingsItem>
 
               <SettingsItem
-                title="Contrast"
-                description={`Contrast level (${videoContrast.toFixed(1)}x)`}
+                title={$at("Contrast")}
+                description={`${$at("Contrast level")} (${videoContrast.toFixed(1)}x)`}
               >
                 <input
                   type="range"
@@ -192,7 +195,7 @@ export default function SettingsVideoRoute() {
                 <Button
                   size="SM"
                   theme="light"
-                  text="Reset to Default"
+                  text={$at("Reset to Default")}
                   onClick={() => {
                     setVideoSaturation(1.0);
                     setVideoBrightness(1.0);
@@ -204,7 +207,7 @@ export default function SettingsVideoRoute() {
 
             <SettingsItem
               title="EDID"
-              description="Adjust the EDID settings for the display"
+              description={$at("Adjust the EDID settings for the display")}
             >
               <SelectMenuBasic
                 size="SM"
@@ -226,11 +229,11 @@ export default function SettingsVideoRoute() {
             {customEdidValue !== null && (
               <>
                 <SettingsItem
-                  title="Custom EDID"
-                  description="EDID details video mode compatibility. Default settings works in most cases, but unique UEFI/BIOS might need adjustments."
+                  title={$at("Custom EDID")}
+                  description={$at("EDID details video mode compatibility. Default settings works in most cases, but unique UEFI/BIOS might need adjustments.")}
                 />
                 <TextAreaWithLabel
-                  label="EDID File"
+                  label={$at("EDID File")} 
                   placeholder="00F..."
                   rows={3}
                   value={customEdidValue}
@@ -240,13 +243,13 @@ export default function SettingsVideoRoute() {
                   <Button
                     size="SM"
                     theme="primary"
-                    text="Set Custom EDID"
+                    text={$at("Set Custom EDID")}
                     onClick={() => handleEDIDChange(customEdidValue)}
                   />
                   <Button
                     size="SM"
                     theme="light"
-                    text="Restore to default"
+                    text={$at("Restore to default")}
                     onClick={() => {
                       setCustomEdidValue(null);
                       handleEDIDChange(defaultEdid);

@@ -6,8 +6,10 @@ import { SettingsPageHeader } from "@/components/SettingsPageheader";
 import { MacroForm } from "@/components/MacroForm";
 import { DEFAULT_DELAY } from "@/constants/macros";
 import notifications from "@/notifications";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 export default function SettingsMacrosAddRoute() {
+  const { $at }= useReactAt();
   const { macros, saveMacros } = useMacrosStore();
   const [isSaving, setIsSaving] = useState(false);
   const navigate = useNavigate();
@@ -46,8 +48,8 @@ export default function SettingsMacrosAddRoute() {
   return (
     <div className="space-y-4">
       <SettingsPageHeader
-        title="Add New Macro"
-        description="Create a new keyboard macro"
+        title={$at("Add New Macro")}
+        description={$at("Create a new keyboard macro")}
       />
       <MacroForm
         initialData={{

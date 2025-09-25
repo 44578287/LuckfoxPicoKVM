@@ -11,11 +11,13 @@ import { useDeviceUiNavigation } from "../hooks/useAppNavigation";
 import { useDeviceStore } from "../hooks/stores";
 
 import { SettingsItem } from "./devices.$id.settings";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 export default function SettingsGeneralRoute() {
   const [send] = useJsonRpc();
   const { navigateTo } = useDeviceUiNavigation();
   const [autoUpdate, setAutoUpdate] = useState(true);
+  const { $at } = useReactAt();
 
   const currentVersions = useDeviceStore(state => {
     const { appVersion, systemVersion } = state;
@@ -45,44 +47,44 @@ export default function SettingsGeneralRoute() {
   return (
     <div className="space-y-4">
       <SettingsPageHeader
-        title="General"
-        description="Configure device settings and update preferences"
+        title={$at("General")}
+        description={$at("Configure device settings and update preferences")}
       />
 
       <div className="space-y-4">
         <div className="space-y-4 pb-2">
           <div className="mt-2 flex items-center justify-between gap-x-2">
             <SettingsItem
-              title="Version"
+              title={$at("Version")}
               description={
                 currentVersions ? (
                   <>
-                    App: {currentVersions.appVersion}
+                    {$at("App")}: {currentVersions.appVersion}
                     <br />
-                    System: {currentVersions.systemVersion}
+                    {$at("System")}: {currentVersions.systemVersion}
                   </>
                 ) : (
                   <>
-                    App: Loading...
+                    {$at("App: Loading...")}
                     <br />
-                    System: Loading...
+                    {$at("System: Loading...")}
                   </>
                 )
               }
             />
             <div>
-              <Button
+              <Button className="hidden"
                 size="SM"
                 theme="light"
-                text="Check for Updates"
+                text={$at("Check for Updates")}
                 onClick={() => navigateTo("./update")}
               />
             </div>
           </div>
           <div className="hidden space-y-4">
             <SettingsItem
-              title="Auto Update"
-              description="Automatically update the device to the latest version"
+              title={$at("Auto Update")}
+              description={$at("Automatically update the device to the latest version")}
             >
               <Checkbox
                 checked={autoUpdate}
@@ -95,5 +97,5 @@ export default function SettingsGeneralRoute() {
         </div>
       </div>
     </div>
-  );
+);
 }

@@ -23,6 +23,11 @@ import { useVpnStore } from "@/hooks/stores";
 import Checkbox from "../components/Checkbox";
 
 import { LogDialog } from "../components/LogDialog";
+import {useReactAt} from 'i18n-auto-extractor/react'
+
+
+import AutoHeight from "@/components/AutoHeight";
+
 
 export interface TailScaleResponse {
   state: string;
@@ -39,6 +44,16 @@ export interface ZeroTierResponse {
 
 export interface FrpcResponse {
   running: boolean;
+}
+
+export interface EasyTierRunningResponse {
+  running: boolean;
+}
+
+export interface EasyTierResponse {
+  name: string;
+  secret: string;
+  node: string;
 }
 
 
@@ -59,6 +74,7 @@ const loader = async () => {
 };
 
 export default function SettingsAccessIndexRoute() {
+  const { $at }= useReactAt();
   const loaderData = useLoaderData() as LocalDevice | null;
 
   const { navigateTo } = useDeviceUiNavigation();
@@ -94,7 +110,23 @@ export default function SettingsAccessIndexRoute() {
   const [frpcToml, setFrpcToml] = useState<string>("");
   const [frpcLog, setFrpcLog] = useState<string>("");
   const [showFrpcLogModal, setShowFrpcLogModal] = useState(false);
-  const [frpcStatus, setFrpcRunningStatus] = useState<FrpcResponse>({ running: false });
+  const [frpcRunningStatus, setFrpcRunningStatus] = useState<FrpcResponse>({ running: false });
+  
+  const [tempEasyTierNetworkName, setTempEasyTierNetworkName] = useState("");
+  const [tempEasyTierNetworkSecret, setTempEasyTierNetworkSecret] = useState("");
+  const [tempEasyTierNetworkNodeMode, setTempEasyTierNetworkNodeMode] = useState("default");
+  const [tempEasyTierNetworkNode, setTempEasyTierNetworkNode] = useState("tcp://public.easytier.cn:11010");
+  const [easyTierRunningStatus, setEasyTierRunningStatus] = useState<EasyTierRunningResponse>({ running: false });
+  const [showEasyTierLogModal, setShowEasyTierLogModal] = useState(false);
+  const [showEasyTierNodeInfoModal, setShowEasyTierNodeInfoModal] = useState(false);
+  const [easyTierLog, setEasyTierLog] = useState<string>("");
+  const [easyTierNodeInfo, setEasyTierNodeInfo] = useState<string>("");
+  const [easyTierConfig, setEasyTierConfig] = useState<EasyTierResponse>({
+    name: "",
+    secret: "",
+    node: "",
+  });
+
 
   const getTLSState = useCallback(() => {
     send("getTLSState", {}, resp => {
@@ -207,12 +239,12 @@ export default function SettingsAccessIndexRoute() {
     });
   },[send]);
 
-  const handleTailScaleCanel = useCallback(() => { 
+  const handleTailScaleCancel = useCallback(() => { 
     setIsDisconnecting(true);
-    send("canelTailScale", {}, resp => {
+    send("cancelTailScale", {}, resp => {
       if ("error" in resp) {
         notifications.error(
-          `Failed to logout TailScale: ${resp.error.data || "Unknown error"}`,
+          `Failed to cancel TailScale: ${resp.error.data || "Unknown error"}`,
         );  
         setIsDisconnecting(false);
         return;
@@ -289,7 +321,7 @@ export default function SettingsAccessIndexRoute() {
   }, [send, frpcToml]);
   
   const handleStopFrpc = useCallback(() => {
-    send("stopFrpc", { frpcToml }, resp => {
+    send("stopFrpc", {}, resp => {
       if ("error" in resp) {
         notifications.error(
           `Failed to stop frpc: ${resp.error.data || "Unknown error"}`,
@@ -345,25 +377,133 @@ export default function SettingsAccessIndexRoute() {
     getFrpcToml();
   }, [getFrpcStatus, getFrpcToml]);
 
+  const handleStartEasyTier = useCallback(() => {
+    if (!tempEasyTierNetworkName || !tempEasyTierNetworkSecret || !tempEasyTierNetworkNode) {
+      notifications.error("Please enter EasyTier network name, secret and node");
+      return;
+    }
+    setEasyTierConfig({
+      name: tempEasyTierNetworkName,
+      secret: tempEasyTierNetworkSecret,
+      node: tempEasyTierNetworkNode,
+    });
+    send("startEasyTier", { name: tempEasyTierNetworkName, secret: tempEasyTierNetworkSecret, node: tempEasyTierNetworkNode }, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to start EasyTier: ${resp.error.data || "Unknown error"}`,
+        );
+        setEasyTierRunningStatus({ running: false });
+        return;
+      }
+      notifications.success("EasyTier started");
+      setEasyTierRunningStatus({ running: true });
+    });
+  }, [send, tempEasyTierNetworkName, tempEasyTierNetworkSecret, tempEasyTierNetworkNode]);
+
+  const handleStopEasyTier = useCallback(() => {
+    send("stopEasyTier", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to stop EasyTier: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+      notifications.success("EasyTier stopped");
+      setEasyTierRunningStatus({ running: false });
+    });
+  }, [send]);
+
+  const handleGetEasyTierLog = useCallback(() => {
+    send("getEasyTierLog", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to get EasyTier log: ${resp.error.data || "Unknown error"}`,
+        );
+        setEasyTierLog("");
+        return;
+      }
+      setEasyTierLog(resp.result as string);
+      setShowEasyTierLogModal(true);
+    });
+  }, [send]);
+  
+  const handleGetEasyTierNodeInfo = useCallback(() => {
+    send("getEasyTierNodeInfo", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to get EasyTier Node Info: ${resp.error.data || "Unknown error"}`,
+        );
+        setEasyTierNodeInfo("");
+        return;
+      }
+      setEasyTierNodeInfo(resp.result as string);
+      setShowEasyTierNodeInfoModal(true);
+    });
+  }, [send]);
+
+  const getEasyTierConfig = useCallback(() => {
+    send("getEasyTierConfig", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to get EasyTier config: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+      const result = resp.result as EasyTierResponse;
+      setEasyTierConfig({
+        name: result.name,
+        secret: result.secret,
+        node: result.node,
+      });
+    });
+  }, [send]);
+  
+  const getEasyTierStatus = useCallback(() => {
+    console.log("getEasyTierStatus")
+    send("getEasyTierStatus", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to get EasyTier status: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+      setEasyTierRunningStatus(resp.result as EasyTierRunningResponse);
+    });
+  }, [send]);
+ 
+  useEffect(() => {
+    getEasyTierConfig();
+    getEasyTierStatus();
+  }, [getEasyTierStatus, getEasyTierConfig]);
+  
+  useEffect(() => {
+    if (tempEasyTierNetworkNodeMode === 'default') {
+      setTempEasyTierNetworkNode('tcp://public.easytier.cn:11010');
+    } else {
+      setTempEasyTierNetworkNode('');
+    }
+  }, [tempEasyTierNetworkNodeMode]);
+  
+
   return (
     <div className="space-y-4">
       <SettingsPageHeader
-        title="Access"
-        description="Manage the Access Control of the device"
+        title={$at("Access")}
+        description={$at("Manage the Access Control of the device")}
       />
 
       {loaderData?.authMode && (
         <>
           <div className="space-y-4">
             <SettingsSectionHeader
-              title="Local"
-              description="Manage the mode of local access to the device"
+              title={$at("Local")}
+              description={$at("Manage the mode of local access to the device")}
             />
             <>
               <SettingsItem
-                title="HTTPS Mode"
+                title={$at("HTTPS Mode")}
                 badge="Experimental"
-                description="Configure secure HTTPS access to your device"
+                description={$at("Configure secure HTTPS access to your device")}
               >
                 <SelectMenuBasic
                   size="SM"
@@ -371,9 +511,9 @@ export default function SettingsAccessIndexRoute() {
                   onChange={e => handleTlsModeChange(e.target.value)}
                   disabled={tlsMode === "unknown"}
                   options={[
-                    { value: "disabled", label: "Disabled" },
-                    { value: "self-signed", label: "Self-signed" },
-                    { value: "custom", label: "Custom" },
+                    { value: "disabled", label: $at("Disabled") },
+                    { value: "self-signed", label: $at("Self-signed") },
+                    { value: "custom", label: $at("Custom") },
                   ]}
                 />
               </SettingsItem>
@@ -382,15 +522,15 @@ export default function SettingsAccessIndexRoute() {
                 <div className="mt-4 space-y-4">
                   <div className="space-y-4">
                     <SettingsItem
-                      title="TLS Certificate"
-                      description="Paste your TLS certificate below. For certificate chains, include the entire chain (leaf, intermediate, and root certificates)."
+                      title={$at("TLS Certificate")}
+                      description={$at("Paste your TLS certificate below. For certificate chains, include the entire chain (leaf, intermediate, and root certificates).")}
                     />
                     <div className="space-y-4">
                       <TextAreaWithLabel
-                        label="Certificate"
+                        label={$at("Certificate")}
                         rows={3}
                         placeholder={
-                          "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+                          $at("-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----")
                         }
                         value={tlsCert}
                         onChange={e => handleTlsCertChange(e.target.value)}
@@ -400,11 +540,11 @@ export default function SettingsAccessIndexRoute() {
                     <div className="space-y-4">
                       <div className="space-y-4">
                         <TextAreaWithLabel
-                          label="Private Key"
-                          description="For security reasons, it will not be displayed after saving."
+                          label={$at("Private Key")}
+                          description={$at("For security reasons, it will not be displayed after saving.")}
                           rows={3}
                           placeholder={
-                            "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+                            $at("-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----")
                           }
                           value={tlsKey}
                           onChange={e => handleTlsKeyChange(e.target.value)}
@@ -416,7 +556,7 @@ export default function SettingsAccessIndexRoute() {
                     <Button
                       size="SM"
                       theme="primary"
-                      text="Update TLS Settings"
+                      text={$at("Update TLS Settings")}
                       onClick={handleCustomTlsUpdate}
                     />
                   </div>
@@ -424,14 +564,14 @@ export default function SettingsAccessIndexRoute() {
               )}
 
               <SettingsItem
-                title="Authentication Mode"
-                description={`Current mode: ${loaderData.authMode === "password" ? "Password protected" : "No password"}`}
+                title={$at("Authentication Mode")}
+                description={`${$at("Current mode:")} ${loaderData.authMode === "password" ? $at("Password protected") : $at("No password")}`}
               >
                 {loaderData.authMode === "password" ? (
                   <Button
                     size="SM"
                     theme="light"
-                    text="Disable Protection"
+                    text={$at("Disable Protection")}
                     onClick={() => {
                       navigateTo("./local-auth", { state: { init: "deletePassword" } });
                     }}
@@ -440,7 +580,7 @@ export default function SettingsAccessIndexRoute() {
                   <Button
                     size="SM"
                     theme="light"
-                    text="Enable Password"
+                    text={$at("Enable Password")}
                     onClick={() => {
                       navigateTo("./local-auth", { state: { init: "createPassword" } });
                     }}
@@ -451,13 +591,13 @@ export default function SettingsAccessIndexRoute() {
 
             {loaderData.authMode === "password" && (
               <SettingsItem
-                title="Change Password"
-                description="Update your device access password"
+                title={$at("Change Password")}
+                description={$at("Update your device access password")}
               >
                 <Button
                   size="SM"
                   theme="light"
-                  text="Change Password"
+                  text={$at("Change Password")}
                   onClick={() => {
                     navigateTo("./local-auth", { state: { init: "updatePassword" } });
                   }}
@@ -471,224 +611,407 @@ export default function SettingsAccessIndexRoute() {
 
       <div className="space-y-4">
         <SettingsSectionHeader
-          title="Remote"
-          description="Manage the mode of Remote access to the device"
+          title={$at("Remote")}
+          description={$at("Manage the mode of Remote access to the device")}
         />
 
-      <div className="space-y-4">
-        {/* Add TailScale settings item */}
-        <SettingsItem
-          title="TailScale"
-          badge="Experimental"
-          description="Connect to TailScale VPN network"
-        >
-        </SettingsItem>
-        <SettingsItem
-          title=""
-          description="TailScale use xEdge server"
-        >
-          <Checkbox
-            checked={tailScaleXEdge}
-            onChange={e => {
-              if (tailScaleConnectionState !== "disconnected") {
-                notifications.error("TailScale is running and this setting cannot be modified");
-                return;
-              }
-              handleTailScaleXEdgeChange(e.target.checked);
-            }}
-          />
-        </SettingsItem>
-        <SettingsItem
-          title=""
-          description=""
-        >
-          <div className="space-y-4">
-            { ((tailScaleConnectionState === "disconnected") || (tailScaleConnectionState === "closed")) && (
-              <Button
-                size="SM"
-                theme="light"
-                text="Enable"
-                onClick={handleTailScaleLogin}
-              />
-            )}
-          </div>
-        </SettingsItem>
-      </div>
-              
-      <div className="space-y-4">
-        {tailScaleConnectionState === "connecting" && (
-          <div className="flex items-center justify-between gap-x-2">
-            <p>Connecting...</p>
-            <Button
-              size="SM"
-              theme="light"
-              text="Canel"
-              onClick={handleTailScaleCanel}
-            /> 
-          </div>
-        )}
-        {tailScaleConnectionState === "connected" && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-x-2 justify-between">
-              {tailScaleLoginUrl && (
-                <p>Login URL: <a href={tailScaleLoginUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400">LoginUrl</a></p> 
-              )}
-              {!tailScaleLoginUrl && (
-                <p>Wait to obtain the Login URL</p> 
-              )} 
-              <Button
-                size="SM"
-                theme="light"
-                text= { isDisconnecting  ? "Quitting..." : "Quit"}
-                onClick={handleTailScaleLogout}
-                disabled={ isDisconnecting === true }
-              />
-            </div>
-          </div>
-        )}
-        {tailScaleConnectionState === "logined" && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-x-2 justify-between">
-              <p>IP: {tailScaleIP}</p>
-              <Button
-                size="SM"
-                theme="light"
-                text= { isDisconnecting  ? "Quitting..." : "Quit"}
-                onClick={handleTailScaleLogout}
-                disabled={ isDisconnecting === true }
-              />
-            </div>
-          </div>
-        )}
-        {tailScaleConnectionState === "closed" && (
-          <div className="text-sm text-red-600 dark:text-red-400">
-            <p>Connect fail, please retry</p>
-          </div>    
-        )}  
-      </div>
-
-      <div className="space-y-4">
-        {/* Add ZeroTier settings item */}
-        <SettingsItem
-          title="ZeroTier"
-          badge="Experimental"
-          description="Connect to ZeroTier VPN network"
-        >
-        </SettingsItem>
-      </div>
-
-      <div className="space-y-4"> 
-        {zeroTierConnectionState === "connecting" && (
-          <div className="text-sm text-slate-700 dark:text-slate-300">
-            <p>Connecting...</p>
-          </div>
-        )}
-        {zeroTierConnectionState === "connected" && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-x-2 justify-between">
-              <p>Network ID: {zeroTierNetworkID}</p>
-              <Button
-                size="SM"
-                theme="light"
-                text="Quit"
-                onClick={handleZeroTierLogout}
-              />
-            </div>
-          </div>
-        )}
-       {zeroTierConnectionState === "logined" && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-x-2 justify-between">
-              <p>Network ID: {zeroTierNetworkID}</p>
-              <Button
-                size="SM"
-                theme="light"
-                text="Quit"
-                onClick={handleZeroTierLogout}
-              />              
-            </div>
-            <div className="flex items-center gap-x-2 justify-between">
-              <p>Network IP: {zeroTierIP}</p>
-            </div>
-          </div>
-       )} 
-       {zeroTierConnectionState === "closed" && (
-          <div className="flex items-center gap-x-2 justify-between">
-            <p>Connect fail, please retry</p>
-            <Button
-              size="SM"
-              theme="light"
-              text="Retry"
-              onClick={handleZeroTierLogout}
-            /> 
-          </div>
-        )
-       }
-      </div>
-      
-      <div className="space-y-4"> 
-        {(zeroTierConnectionState === "disconnected") && (
-          <div className="flex items-end gap-x-2">
-            <InputFieldWithLabel
-              size="SM"
-              label="Network ID"
-              value={tempNetworkID}
-              onChange={handleZeroTierNetworkIdChange}
-              placeholder="Enter ZeroTier Network ID"
-            /> 
-            <Button
-              size="SM"
-              theme="light"
-              text="Join in"
-              onClick={handleZeroTierLogin}
-            />
-          </div> 
-        )}
-      </div>    
-
-      <div className="space-y-4">
-        <SettingsItem
-          title="Frp"
-          description="Connect to Frp Server"
-        />
-          <div className="space-y-4">
-            <TextAreaWithLabel
-              label="Edit frpc.toml"
-              placeholder="Enter frpc settings"
-              value={frpcToml || ""}
-              rows={3}
-              onChange={e => setFrpcToml(e.target.value)}
-            />
-            <div className="flex items-center gap-x-2">
-              {frpcStatus.running ? (
-                <div className="flex items-center gap-x-2">
-                  <Button
-                    size="SM"
-                    theme="danger"
-                    text="Stop frpc"
-                    onClick={handleStopFrpc}
+        <div className="space-y-4">
+          {/* Add TailScale settings item */}
+          <SettingsItem
+            title="TailScale"
+            badge="Experimental"
+            description={$at("Connect to TailScale VPN network")}
+          >
+          </SettingsItem>
+        </div>
+          
+        <AutoHeight>
+          <GridCard>
+            <div className="p-4">
+              <div className="space-y-4"> 
+                <SettingsItem
+                  title=""
+                  description={$at("TailScale use xEdge server")}
+                >
+                  <Checkbox disabled={tailScaleConnectionState !== "disconnected"}
+                    checked={tailScaleXEdge}
+                    onChange={e => {
+                      if (tailScaleConnectionState !== "disconnected") {
+                        notifications.error("TailScale is running and this setting cannot be modified");
+                        return;
+                      }
+                      handleTailScaleXEdgeChange(e.target.checked);
+                    }}
                   />
+                </SettingsItem>
+
+                {tailScaleConnectionState === "connecting" && (
+                  <div className="flex items-center justify-between gap-x-2">
+                    <p>Connecting...</p>
+                    <Button
+                      size="SM"
+                      theme="light"
+                      text={$at("Cancel")}
+                      onClick={handleTailScaleCancel}
+                    /> 
+                  </div>
+                )}
+                {tailScaleConnectionState === "connected" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-x-2 justify-between">
+                      {tailScaleLoginUrl && (
+                        <p>{$at("Login URL:")} <a href={tailScaleLoginUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400">LoginUrl</a></p> 
+                      )}
+                      {!tailScaleLoginUrl && (
+                        <p>{$at("Wait to obtain the Login URL")}</p> 
+                      )} 
+                      <Button
+                        size="SM"
+                        theme="light"
+                        text= { isDisconnecting  ? $at("Quitting...") : $at("Quit")}
+                        onClick={handleTailScaleLogout}
+                        disabled={ isDisconnecting === true }
+                      />
+                    </div>
+                  </div>
+                )}
+                {tailScaleConnectionState === "logined" && (
+                  <div className="space-y-4">
+                    <div className="flex-1 space-y-2">
+                      <div className="flex justify-between border-slate-800/10 pt-2 dark:border-slate-300/20">
+                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                          {$at("Network IP")}
+                        </span>
+                        <span className="text-right text-sm font-medium">
+                          {tailScaleIP}
+                        </span>
+                      </div> 
+                      <div className="flex items-center gap-x-2">
+                        <Button
+                          size="SM"
+                          theme="light"
+                          text= { isDisconnecting  ? $at("Quitting...") : $at("Quit")}
+                          onClick={handleTailScaleLogout}
+                          disabled={ isDisconnecting === true }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {tailScaleConnectionState === "closed" && (
+                  <div className="text-sm text-red-600 dark:text-red-400">
+                    <p>Connect fail, please retry</p>
+                  </div>    
+                )}   
+                { ((tailScaleConnectionState === "disconnected") || (tailScaleConnectionState === "closed")) && (
                   <Button
                     size="SM"
                     theme="light"
-                    text="Log"
-                    onClick={handleGetFrpcLog}
+                    text={$at("Enable")}
+                    onClick={handleTailScaleLogin}
                   />
-                </div>
-              ) : (
-                <Button
-                  size="SM"
-                  theme="primary"
-                  text="Start frpc"
-                  onClick={handleStartFrpc}
-                />
-              )}
+                )}
+              </div>
             </div>
-          </div>
-      </div>
+          </GridCard> 
+        </AutoHeight>
+
+        <div className="space-y-4">
+          {/* Add ZeroTier settings item */}
+          <SettingsItem
+            title="ZeroTier"
+            badge="Experimental"
+            description={$at("Connect to ZeroTier VPN network")}
+          >
+          </SettingsItem>
+        </div>
+
+        <AutoHeight>
+          <GridCard>
+            <div className="p-4">
+              <div className="space-y-4"> 
+                {zeroTierConnectionState === "connecting" && (
+                  <div className="text-sm text-slate-700 dark:text-slate-300">
+                    <p>{$at("Connecting...")}</p>
+                  </div>
+                )}
+                {zeroTierConnectionState === "connected" && (
+                  <div className="flex-1 space-y-2">
+                    <div className="flex justify-between border-slate-800/10 pt-2 dark:border-slate-300/20">
+                      <span className="text-sm text-slate-600 dark:text-slate-400">
+                        {$at("Network ID")}
+                      </span>
+                      <span className="text-right text-sm font-medium">
+                        {zeroTierNetworkID}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-x-2">
+                      <Button
+                        size="SM"
+                        theme="light"
+                        text={$at("Quit")}
+                        onClick={handleZeroTierLogout}
+                      />
+                    </div>
+                  </div>
+                )}
+                {zeroTierConnectionState === "logined" && (
+                  <div className="flex-1 space-y-2">
+                    <div className="flex justify-between border-slate-800/10 pt-2 dark:border-slate-300/20">
+                      <span className="text-sm text-slate-600 dark:text-slate-400">
+                        {$at("Network ID")}
+                      </span>
+                      <span className="text-right text-sm font-medium">
+                        {zeroTierNetworkID}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-t border-slate-800/10 pt-2 dark:border-slate-300/20">
+                      <span className="text-sm text-slate-600 dark:text-slate-400">
+                        {$at("Network IP")}
+                      </span>
+                      <span className="text-right text-sm font-medium">
+                        {zeroTierIP}
+                      </span>
+                    </div> 
+                    <div className="flex items-center gap-x-2">
+                      <Button
+                        size="SM"
+                        theme="light"
+                        text={$at("Quit")}
+                        onClick={handleZeroTierLogout}
+                      />
+                    </div>                
+                  </div>
+                )} 
+                {zeroTierConnectionState === "closed" && (
+                  <div className="flex items-center gap-x-2 justify-between">
+                    <p>{$at("Connect fail, please retry")}</p>
+                    <Button
+                      size="SM"
+                      theme="light"
+                      text={$at("Retry")}
+                      onClick={handleZeroTierLogout}
+                    /> 
+                  </div>
+                )}
+                {(zeroTierConnectionState === "disconnected") && (
+                  <div className="flex items-end gap-x-2">
+                    <InputFieldWithLabel
+                      size="SM"
+                      label={$at("Network ID")}
+                      value={tempNetworkID}
+                      onChange={handleZeroTierNetworkIdChange}
+                      placeholder={$at("Enter ZeroTier Network ID")}
+                    />
+                    <Button
+                      size="SM"
+                      theme="light"
+                      text={$at("Join in")}
+                      onClick={handleZeroTierLogin}
+                    />
+                </div> 
+                )}
+              </div> 
+            </div>
+          </GridCard> 
+        </AutoHeight>
+        
+        <div className="space-y-4">
+          <SettingsItem
+            title="EasyTier"
+            description={$at("Connect to EasyTier server")}
+          />
+        </div>
+            
+        <AutoHeight>
+          <GridCard>
+            <div className="p-4">
+              <div className="space-y-4">
+               { easyTierRunningStatus.running ? (  
+                <div className="flex-1 space-y-2">
+                  <div className="flex justify-between border-slate-800/10 pt-2 dark:border-slate-300/20">
+                    <span className="text-sm text-slate-600 dark:text-slate-400">
+                      {$at("Network Name")}
+                    </span>
+                    <span className="text-right text-sm font-medium">
+                      {easyTierConfig.name || tempEasyTierNetworkName}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-t border-slate-800/10 pt-2 dark:border-slate-300/20">
+                    <span className="text-sm text-slate-600 dark:text-slate-400">
+                      {$at("Network Secret")}
+                    </span>
+                    <span className="text-right text-sm font-medium">
+                      {easyTierConfig.secret || tempEasyTierNetworkSecret}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-t border-slate-800/10 pt-2 dark:border-slate-300/20">
+                    <span className="text-sm text-slate-600 dark:text-slate-400">
+                      {$at("Network Node")}
+                    </span>
+                    <span className="text-right text-sm font-medium">
+                      {easyTierConfig.node || tempEasyTierNetworkNode}
+                    </span>
+                  </div>
+                   
+                 <div className="flex items-center gap-x-2">
+                   <Button
+                     size="SM"
+                     theme="danger"
+                     text={$at("Stop")}
+                     onClick={handleStopEasyTier}
+                   />
+                   <Button
+                     size="SM"
+                     theme="light"
+                     text={$at("Log")}
+                     onClick={handleGetEasyTierLog}
+                   />
+                   <Button
+                     size="SM"
+                     theme="light"
+                     text={$at("Node Info")}
+                     onClick={handleGetEasyTierNodeInfo}
+                   />
+                 </div>
+                </div>
+               ) : (
+                <div className="space-y-4"> 
+                  <div className="flex items-end gap-x-2">
+                    <InputFieldWithLabel
+                      size="SM"
+                      label={$at("Network Name")}
+                      value={tempEasyTierNetworkName}
+                      onChange={e => setTempEasyTierNetworkName(e.target.value)}
+                      placeholder={$at("Enter EasyTier Network Name")}
+                    />
+                  </div> 
+                  <div className="flex items-end gap-x-2">
+                    <InputFieldWithLabel
+                      size="SM"
+                      label={$at("Network Secret")}
+                      value={tempEasyTierNetworkSecret}
+                      onChange={e => setTempEasyTierNetworkSecret(e.target.value)}
+                      placeholder={$at("Enter EasyTier Network Secret")}
+                    />
+                  </div> 
+
+                  <div className="space-y-4">
+                    <SettingsItem
+                      title={$at("Network Node")}
+                      description=""
+                    >
+                      <SelectMenuBasic
+                        size="SM"
+                        value={tempEasyTierNetworkNodeMode}
+                        onChange={e => setTempEasyTierNetworkNodeMode(e.target.value)}
+                        options={[
+                          { value: "default", label: $at("Default") },
+                          { value: "custom", label: $at("Custom") },
+                        ]}
+                      />
+                    </SettingsItem>
+                  </div>  
+                  
+                  {tempEasyTierNetworkNodeMode === "custom" && (
+                    <div className="flex items-end gap-x-2">
+                      <InputFieldWithLabel
+                        size="SM"
+                        label={$at("Network Node")}
+                        value={tempEasyTierNetworkNode}
+                        onChange={e => setTempEasyTierNetworkNode(e.target.value)}
+                        placeholder={$at("Enter EasyTier Network Node")}
+                      />
+                    </div>
+                  )}
+                  
+                 <div className="flex items-center gap-x-2">
+                   <Button
+                     size="SM"
+                     theme="primary"
+                     text={$at("Start")}
+                     onClick={handleStartEasyTier}
+                   />
+                  </div>
+                </div>
+               )} 
+              </div>
+
+            </div>
+          </GridCard> 
+        </AutoHeight>
+
+
+
+        <div className="space-y-4">
+          <SettingsItem
+            title="Frp"
+            description={$at("Connect to Frp server")}
+          />
+        </div>
+
+        <AutoHeight>
+          <GridCard>
+            <div className="p-4">
+              <div className="space-y-4">
+                <TextAreaWithLabel
+                  label={$at("Edit frpc.toml")}
+                  placeholder={$at("Enter frpc configuration")}
+                  value={frpcToml || ""}
+                  rows={3}
+                  readOnly={frpcRunningStatus.running}
+                  onChange={e => setFrpcToml(e.target.value)}
+                />
+                <div className="flex items-center gap-x-2">
+                  { frpcRunningStatus.running ? (
+                    <div className="flex items-center gap-x-2">
+                      <Button
+                        size="SM"
+                        theme="danger"
+                        text={$at("Stop")}
+                        onClick={handleStopFrpc}
+                      />
+                      <Button
+                        size="SM"
+                        theme="light"
+                        text={$at("Log")}
+                        onClick={handleGetFrpcLog}
+                      />
+                    </div>
+                  ) : (
+                    <Button
+                      size="SM"
+                      theme="primary"
+                      text={$at("Start")}
+                      onClick={handleStartFrpc}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          </GridCard> 
+        </AutoHeight>
 
       </div>
 
+      <LogDialog
+        open={showEasyTierLogModal}
+        onClose={() => {
+          setShowEasyTierLogModal(false);
+        }}
+        title="EasyTier Log"
+        description={easyTierLog}
+      />
+      
+      <LogDialog
+        open={showEasyTierNodeInfoModal}
+        onClose={() => {
+          setShowEasyTierNodeInfoModal(false);
+        }}
+        title="EasyTier Node Info"
+        description={easyTierNodeInfo}
+      />
+        
       <LogDialog
         open={showFrpcLogModal}
         onClose={() => {

@@ -12,6 +12,7 @@ import {
   MAX_KEYS_PER_STEP,
 } from "@/constants/macros";
 import FieldLabel from "@/components/FieldLabel";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 interface ValidationErrors {
   name?: string;
@@ -30,7 +31,6 @@ interface MacroFormProps {
   onSubmit: (macro: Partial<KeySequence>) => Promise<void>;
   onCancel: () => void;
   isSubmitting?: boolean;
-  submitText?: string;
 }
 
 export function MacroForm({
@@ -38,8 +38,8 @@ export function MacroForm({
   onSubmit,
   onCancel,
   isSubmitting = false,
-  submitText = "Save Macro",
 }: MacroFormProps) {
+  const { $at }= useReactAt();
   const [macro, setMacro] = useState<Partial<KeySequence>>(initialData);
   const [keyQueries, setKeyQueries] = useState<Record<number, string>>({});
   const [errors, setErrors] = useState<ValidationErrors>({});
@@ -176,8 +176,8 @@ export function MacroForm({
         <Fieldset>
           <InputFieldWithLabel
             type="text"
-            label="Macro Name"
-            placeholder="Macro Name"
+            label={$at("Macro Name")}
+            placeholder={$at("Macro Name")}
             value={macro.name}
             error={errors.name}
             onChange={e => {
@@ -195,8 +195,8 @@ export function MacroForm({
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-1">
               <FieldLabel
-                label="Steps"
-                description={`Keys/modifiers executed in sequence with a delay between each step.`}
+                label={$at("Steps")}
+                description={$at("Keys/modifiers executed in sequence with a delay between each step.")}
               />
             </div>
             <span className="text-slate-500 dark:text-slate-400">
@@ -245,11 +245,11 @@ export function MacroForm({
               theme="light"
               fullWidth
               LeadingIcon={LuPlus}
-              text={`Add Step ${isMaxStepsReached ? `(${MAX_STEPS_PER_MACRO} max)` : ""}`}
+              text={`${$at("Add Step")} ${isMaxStepsReached ? `(${MAX_STEPS_PER_MACRO} ${$at("max")})` : ""}`}
               onClick={() => {
                 if (isMaxStepsReached) {
                   showTemporaryError(
-                    `You can only add a maximum of ${MAX_STEPS_PER_MACRO} steps per macro.`,
+                    `${$at("You can only add a maximum of")} ${MAX_STEPS_PER_MACRO} ${$at("steps per macro.")}`,
                   );
                   return;
                 }
@@ -277,11 +277,11 @@ export function MacroForm({
             <Button
               size="SM"
               theme="primary"
-              text={isSubmitting ? "Saving..." : submitText}
+              text={isSubmitting ? $at("Saving...") : $at("Save")}
               onClick={handleSubmit}
               disabled={isSubmitting}
             />
-            <Button size="SM" theme="light" text="Cancel" onClick={onCancel} />
+            <Button size="SM" theme="light" text={$at("Cancel")} onClick={onCancel} />
           </div>
         </div>
       </div>

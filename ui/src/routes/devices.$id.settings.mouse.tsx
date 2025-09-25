@@ -16,7 +16,10 @@ import { cx } from "../cva.config";
 
 import { SettingsItem } from "./devices.$id.settings";
 
+import {useReactAt} from 'i18n-auto-extractor/react'
+
 export default function SettingsMouseRoute() {
+  const { $at } = useReactAt();
   const hideCursor = useSettingsStore(state => state.isCursorHidden);
   const setHideCursor = useSettingsStore(state => state.setCursorVisibility);
 
@@ -64,14 +67,14 @@ export default function SettingsMouseRoute() {
   return (
     <div className="space-y-4">
       <SettingsPageHeader
-        title="Mouse"
-        description="Configure cursor behavior and interaction settings for your device"
+        title={$at("Mouse")}
+        description={$at("Configure cursor behavior and interaction settings for your device")}
       />
 
       <div className="space-y-4">
         <SettingsItem
-          title="Hide Cursor"
-          description="Hide the cursor when sending mouse movements"
+          title={$at("Hide Cursor")}
+          description={$at("Hide the cursor when sending mouse movements")}
         >
           <Checkbox
             checked={hideCursor}
@@ -80,8 +83,8 @@ export default function SettingsMouseRoute() {
         </SettingsItem>
 
       <SettingsItem
-        title="Scroll Throttling"
-        description="Reduce the frequency of scroll events"
+        title={$at("Scroll Throttling")}
+        description={$at("Reduce the frequency of scroll events")}
       >
         <SelectMenuBasic
           size="SM"
@@ -95,8 +98,8 @@ export default function SettingsMouseRoute() {
       </SettingsItem>
 
         <SettingsItem
-          title="Jiggler"
-          description="Simulate movement of a computer mouse. Prevents sleep mode, standby mode or the screensaver from activating"
+          title={$at("Jiggler")}
+          description={$at("Simulate movement of a computer mouse. Prevents sleep mode, standby mode or the screensaver from activating")}
         >
           <Checkbox
             checked={jiggler}
@@ -104,7 +107,7 @@ export default function SettingsMouseRoute() {
           />
         </SettingsItem>
         <div className="space-y-4">
-          <SettingsItem title="Modes" description="Choose the mouse input mode" />
+          <SettingsItem title={$at("Modes")} description={$at("Choose the mouse input mode")} />
           <div className="flex items-center gap-4">
             <button
               className="group block grow"
@@ -122,10 +125,10 @@ export default function SettingsMouseRoute() {
                   <div className="flex grow items-center justify-between">
                     <div className="text-left">
                       <h3 className="text-sm font-semibold text-black dark:text-white">
-                        Absolute
+                        { $at("Absolute") }
                       </h3>
                       <p className="text-xs leading-none text-slate-800 dark:text-slate-300">
-                        Most convenient
+                        { $at("Most convenient") }
                       </p>
                     </div>
                     <CheckCircleIcon
@@ -154,10 +157,10 @@ export default function SettingsMouseRoute() {
                   <div className="flex grow items-center justify-between">
                     <div className="text-left">
                       <h3 className="text-sm font-semibold text-black dark:text-white">
-                        Relative
+                        { $at("Relative") }
                       </h3>
                       <p className="text-xs leading-none text-slate-800 dark:text-slate-300">
-                        Most Compatible
+                        { $at("Most Compatible") }
                       </p>
                     </div>
                     <CheckCircleIcon

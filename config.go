@@ -114,6 +114,9 @@ type Config struct {
 	TimeZone             string                 `json:"time_zone"`
 	LEDGreenMode         string                 `json:"led_green_mode"`
 	LEDYellowMode        string                 `json:"led_yellow_mode"`
+	AutoMountSystemInfo  bool                   `json:"auto_mount_system_info_img"`
+	EasytierAutoStart    bool                   `json:"easytier_autostart"`
+	EasytierConfig       EasytierConfig         `json:"easytier_config"`
 }
 
 const configPath = "/userdata/kvm_config.json"
@@ -146,17 +149,18 @@ var defaultConfig = &Config{
 		Audio:         false, //At any given time, only one of Audio and Mtp can be set to true
 		Mtp:           false,
 	},
-	NetworkConfig:      &network.NetworkConfig{},
-	DefaultLogLevel:    "INFO",
-	ZeroTierAutoStart:  false,
-	TailScaleAutoStart: false,
-	TailScaleXEdge:     false,
-	FrpcAutoStart:      false,
-	IO0Status:          true,
-	IO1Status:          true,
-	AudioMode:          "disabled",
-	LEDGreenMode:       "network-rx",
-	LEDYellowMode:      "kernel-activity",
+	NetworkConfig:       &network.NetworkConfig{},
+	DefaultLogLevel:     "INFO",
+	ZeroTierAutoStart:   false,
+	TailScaleAutoStart:  false,
+	TailScaleXEdge:      false,
+	FrpcAutoStart:       false,
+	IO0Status:           true,
+	IO1Status:           true,
+	AudioMode:           "disabled",
+	LEDGreenMode:        "network-rx",
+	LEDYellowMode:       "kernel-activity",
+	AutoMountSystemInfo: true,
 }
 
 var (
@@ -174,15 +178,16 @@ func LoadConfig() {
 	}
 
 	// load the default config
-	config = defaultConfig
-	if config.UsbConfig.SerialNumber == "" {
+	if defaultConfig.UsbConfig.SerialNumber == "" {
 		serialNumber, err := extractSerialNumber()
 		if err != nil {
 			logger.Warn().Err(err).Msg("failed to extract serial number")
 		} else {
-			config.UsbConfig.SerialNumber = serialNumber
+			defaultConfig.UsbConfig.SerialNumber = serialNumber
 		}
 	}
+	loadedConfig := *defaultConfig
+	config = &loadedConfig
 
 	file, err := os.Open(configPath)
 	if err != nil {
@@ -192,7 +197,6 @@ func LoadConfig() {
 	defer file.Close()
 
 	// load and merge the default config with the user config
-	loadedConfig := *defaultConfig
 	if err := json.NewDecoder(file).Decode(&loadedConfig); err != nil {
 		logger.Warn().Err(err).Msg("config file JSON parsing failed")
 		os.Remove(configPath)

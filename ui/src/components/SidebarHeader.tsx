@@ -1,6 +1,7 @@
 import { Button } from "@components/Button";
 import { cx } from "@/cva.config";
 import { AvailableSidebarViews } from "@/hooks/stores";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 export default function SidebarHeader({
   title,
@@ -9,6 +10,7 @@ export default function SidebarHeader({
   title: string;
   setSidebarView: (view: AvailableSidebarViews | null) => void;
 }) {
+  const { $at }= useReactAt();
   return (
     <div className="flex items-center justify-between border-b border-b-slate-800/20 bg-white px-4 py-1.5 font-semibold text-black dark:bg-slate-900 dark:border-b-slate-300/20">
       <div className="min-w-0" style={{ flex: 1 }}>
@@ -17,7 +19,7 @@ export default function SidebarHeader({
       <Button
         size="XS"
         theme="blank"
-        text="Hide"
+        text={$at("Hide")}
         LeadingIcon={({ className }) => (
           <svg
             className={cx(className, "rotate-180")}

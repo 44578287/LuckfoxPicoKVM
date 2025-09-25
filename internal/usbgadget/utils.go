@@ -82,6 +82,9 @@ func compareFileContent(oldContent []byte, newContent []byte, looserMatch bool) 
 }
 
 func (u *UsbGadget) logWithSupression(counterName string, every int, logger *zerolog.Logger, err error, msg string, args ...interface{}) {
+	u.logLock.Lock()
+	defer u.logLock.Unlock()
+
 	if _, ok := u.logSuppressionCounter[counterName]; !ok {
 		u.logSuppressionCounter[counterName] = 0
 	} else {

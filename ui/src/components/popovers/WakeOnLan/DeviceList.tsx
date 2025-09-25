@@ -3,6 +3,7 @@ import { LuPlus, LuSend, LuTrash2 } from "react-icons/lu";
 import { Button } from "@/components/Button";
 import Card from "@/components/Card";
 import { FieldError } from "@/components/InputField";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 export interface StoredDevice {
   name: string;
@@ -26,6 +27,8 @@ export default function DeviceList({
   onCancelWakeOnLanModal,
   setShowAddForm,
 }: DeviceListProps) {
+  const { $at }= useReactAt();
+
   return (
     <div className="space-y-4">
       <Card className="animate-fadeIn opacity-0">
@@ -46,7 +49,7 @@ export default function DeviceList({
                 <Button
                   size="XS"
                   theme="light"
-                  text="Wake"
+                  text={ $at("Wake") }
                   LeadingIcon={LuSend}
                   onClick={() => onSendMagicPacket(device.macAddress)}
                 />
@@ -55,7 +58,7 @@ export default function DeviceList({
                   theme="danger"
                   LeadingIcon={LuTrash2}
                   onClick={() => onDeleteDevice(index)}
-                  aria-label="Delete device"
+                  aria-label={ $at("Delete device") }
                 />
               </div>
             </div>
@@ -69,11 +72,11 @@ export default function DeviceList({
           animationDelay: "0.2s",
         }}
       >
-        <Button size="SM" theme="blank" text="Close" onClick={onCancelWakeOnLanModal} />
+        <Button size="SM" theme="blank" text={$at("Close")} onClick={onCancelWakeOnLanModal} />
         <Button
           size="SM"
           theme="primary"
-          text="Add New Device"
+          text={ $at("Add New Device") }
           onClick={() => setShowAddForm(true)}
           LeadingIcon={LuPlus}
         />

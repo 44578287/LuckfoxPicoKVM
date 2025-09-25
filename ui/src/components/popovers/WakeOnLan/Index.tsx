@@ -11,6 +11,7 @@ import notifications from "@/notifications";
 import EmptyStateCard from "./EmptyStateCard";
 import DeviceList, { StoredDevice } from "./DeviceList";
 import AddDeviceForm from "./AddDeviceForm";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 export default function WakeOnLanModal() {
   const [storedDevices, setStoredDevices] = useState<StoredDevice[]>([]);
@@ -23,6 +24,7 @@ export default function WakeOnLanModal() {
   const close = useClose();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [addDeviceErrorMessage, setAddDeviceErrorMessage] = useState<string | null>(null);
+  const { $at } = useReactAt();
 
   const onCancelWakeOnLanModal = useCallback(() => {
     close();
@@ -117,8 +119,8 @@ export default function WakeOnLanModal() {
         <div className="grid h-full grid-rows-(--grid-headerBody)">
           <div className="space-y-4">
             <SettingsPageHeader
-              title="Wake On USB"
-              description="Send a Signal to wake up the device connected via USB."
+              title={$at("Wake On USB")}
+              description={$at("Send a Signal to wake up the device connected via USB.")}
             />
  
             <div
@@ -131,14 +133,14 @@ export default function WakeOnLanModal() {
               <Button
                 size="SM"
                 theme="primary"
-                text="Wake"
+                text={$at("Wake")}
                 onClick={onSendUsbWakeupSignal}
               />
             </div>
 
             <SettingsPageHeader
-              title="Wake On LAN"
-              description="Send a Magic Packet to wake up a remote device."
+              title={$at("Wake On LAN")}
+              description={$at("Send a Magic Packet to wake up a remote device.")}
             />
 
             {showAddForm ? (

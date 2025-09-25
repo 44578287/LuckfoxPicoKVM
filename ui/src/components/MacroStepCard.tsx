@@ -7,6 +7,7 @@ import Card from "@/components/Card";
 import { keys, modifiers, keyDisplayMap } from "@/keyboardMappings";
 import { MAX_KEYS_PER_STEP, DEFAULT_DELAY } from "@/constants/macros";
 import FieldLabel from "@/components/FieldLabel";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 // Filter out modifier keys since they're handled in the modifiers section
 const modifierKeyPrefixes = ['Alt', 'Control', 'Shift', 'Meta'];
@@ -86,6 +87,8 @@ export function MacroStepCard({
   onDelayChange,
   isLastStep
 }: MacroStepCardProps) {
+  const { $at }= useReactAt();
+
   const getFilteredKeys = () => {
     const selectedKeys = ensureArray(step.keys);
     const availableKeys = keyOptions.filter(option => !selectedKeys.includes(option.value));
@@ -128,7 +131,7 @@ export function MacroStepCard({
               size="XS"
               theme="light"
               className="text-red-500 dark:text-red-400"
-              text="Delete"
+              text={$at("Delete")}
               LeadingIcon={LuTrash2}
               onClick={onDelete}
             />
@@ -138,7 +141,7 @@ export function MacroStepCard({
 
       <div className="space-y-4 mt-2">
         <div className="w-full flex flex-col gap-2">
-          <FieldLabel label="Modifiers" />
+          <FieldLabel label={$at("Modifiers")} />
           <div className="inline-flex flex-wrap gap-3">
             {Object.entries(groupedModifiers).map(([group, mods]) => (
               <div key={group} className="relative min-w-[120px] rounded-md border border-slate-200 dark:border-slate-700 p-2">
@@ -170,7 +173,7 @@ export function MacroStepCard({
         
         <div className="w-full flex flex-col gap-1">
           <div className="flex items-center gap-1">
-            <FieldLabel label="Keys" description={`Maximum ${MAX_KEYS_PER_STEP} keys per step.`} />
+            <FieldLabel label={$at("Keys")} description={`${$at("Maximum")} ${MAX_KEYS_PER_STEP} ${$at("keys per step.")}`} />
           </div>
           {ensureArray(step.keys) && step.keys.length > 0 && (
             <div className="flex flex-wrap gap-1 pb-2">
@@ -205,19 +208,19 @@ export function MacroStepCard({
               displayValue={() => keyQuery}
               onInputChange={onKeyQueryChange}
               options={getFilteredKeys}
-              disabledMessage="Max keys reached"
+              disabledMessage={$at("Max keys reached")}
               size="SM"
               immediate
               disabled={ensureArray(step.keys).length >= MAX_KEYS_PER_STEP}
-              placeholder={ensureArray(step.keys).length >= MAX_KEYS_PER_STEP ? "Max keys reached" : "Search for key..."}
-              emptyMessage="No matching keys found"
+              placeholder={ensureArray(step.keys).length >= MAX_KEYS_PER_STEP ? $at("Max keys reached") : $at("Search for key...")}
+              emptyMessage={$at("No matching keys found")}
             />
           </div>
         </div>
         
         <div className="w-full flex flex-col gap-1">
           <div className="flex items-center gap-1">
-            <FieldLabel label="Step Duration" description="Time to wait before executing the next step." />
+            <FieldLabel label={$at("Step Duration")} description={$at("Time to wait before executing the next step.")} />
           </div>
           <div className="flex items-center gap-3">
             <SelectMenuBasic

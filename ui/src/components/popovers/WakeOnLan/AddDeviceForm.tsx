@@ -3,6 +3,7 @@ import { LuPlus, LuArrowLeft } from "react-icons/lu";
 
 import { InputFieldWithLabel } from "@/components/InputField";
 import { Button } from "@/components/Button";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 interface AddDeviceFormProps {
   onAddDevice: (name: string, macAddress: string) => void;
@@ -22,6 +23,7 @@ export default function AddDeviceForm({
 
   const nameInputRef = useRef<HTMLInputElement>(null);
   const macInputRef = useRef<HTMLInputElement>(null);
+  const { $at }= useReactAt();
 
   return (
     <div className="space-y-4">
@@ -35,7 +37,7 @@ export default function AddDeviceForm({
         <InputFieldWithLabel
           ref={nameInputRef}
           placeholder="Plex Media Server"
-          label="Device Name"
+          label={ $at("Device Name") }
           required
           onChange={e => {
             setIsDeviceNameValid(e.target.validity.valid);
@@ -46,7 +48,7 @@ export default function AddDeviceForm({
         <InputFieldWithLabel
           ref={macInputRef}
           placeholder="00:b0:d0:63:c2:26"
-          label="MAC Address"
+          label={ $at("MAC Address") }
           onKeyUp={e => e.stopPropagation()}
           required
           pattern="^([0-9a-fA-F][0-9a-fA-F]:){5}([0-9a-fA-F][0-9a-fA-F])$"
@@ -82,14 +84,14 @@ export default function AddDeviceForm({
         <Button
           size="SM"
           theme="light"
-          text="Back"
+          text={ $at("Back") }
           LeadingIcon={LuArrowLeft}
           onClick={() => setShowAddForm(false)}
         />
         <Button
           size="SM"
           theme="primary"
-          text="Save Device"
+          text={$at("Save Device")}
           disabled={!isDeviceNameValid || !isMacAddressValid}
           onClick={() => {
             const deviceName = nameInputRef.current?.value || "";

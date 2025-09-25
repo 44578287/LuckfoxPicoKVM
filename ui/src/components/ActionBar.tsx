@@ -22,6 +22,7 @@ import ExtensionPopover from "@/components/popovers/ExtensionPopover";
 import { useDeviceUiNavigation } from "@/hooks/useAppNavigation";
 import VolumeControl from "./VolumeControl";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 export default function Actionbar({
   requestFullscreen,
@@ -45,6 +46,7 @@ export default function Actionbar({
   const [send] = useJsonRpc();
   const audioMode = useAudioModeStore(state => state.audioMode);
   const setAudioMode = useAudioModeStore(state => state.setAudioMode);
+  const { $at }= useReactAt();
    
   // This is the only way to get a reliable state change for the popover
   // at time of writing this there is no mount, or unmount event for the popover
@@ -82,7 +84,7 @@ export default function Actionbar({
           <Button
             size="XS"
             theme="light"
-            text="Terminal"
+            text={$at("Terminal")}
             LeadingIcon={({ className }) => <CommandLineIcon className={className} />}
             onClick={() => setTerminalType(terminalType === "kvm" ? "none" : "kvm")}
           />    
@@ -91,7 +93,7 @@ export default function Actionbar({
               <Button
                 size="XS"
                 theme="light"
-                text="Paste text"
+                text={$at("Paste Text")}
                 LeadingIcon={MdOutlineContentPasteGo}
                 onClick={() => {
                   setDisableFocusTrap(true);
@@ -122,7 +124,7 @@ export default function Actionbar({
                 <Button
                   size="XS"
                   theme="light"
-                  text="Virtual Media"
+                  text={$at("Virtual Media")}
                   LeadingIcon={({ className }) => {
                     return (
                       <>
@@ -165,7 +167,7 @@ export default function Actionbar({
                 <Button
                   size="XS"
                   theme="light"
-                  text="Wake"
+                  text={$at("Wake")}
                   onClick={() => {
                     setDisableFocusTrap(true);
                   }}
@@ -215,7 +217,7 @@ export default function Actionbar({
             <Button
               size="XS"
               theme="light"
-              text="Virtual Keyboard"
+              text={$at("Virtual Keyboard")}
               LeadingIcon={FaKeyboard}
               onClick={() => setVirtualKeyboard(!virtualKeyboard)}
             />
@@ -238,7 +240,7 @@ export default function Actionbar({
               <Button
                 size="XS"
                 theme="light"
-                text="Extension"
+                text={$at("Extensions")}
                 LeadingIcon={LuCable}
                 onClick={() => {
                   setDisableFocusTrap(true);
@@ -264,7 +266,7 @@ export default function Actionbar({
             <Button
               size="XS"
               theme="light"
-              text="Virtual Keyboard"
+              text={$at("Virtual Keyboard")}
               LeadingIcon={FaKeyboard}
               onClick={() => setVirtualKeyboard(!virtualKeyboard)}
             />
@@ -273,7 +275,7 @@ export default function Actionbar({
             <Button
               size="XS"
               theme="light"
-              text="Connection State"
+              text={$at("Connection")}
               LeadingIcon={({ className }) => (
                 <LuSignal
                   className={cx(className, "mb-0.5 text-green-500")}
@@ -306,7 +308,7 @@ export default function Actionbar({
             <Button
               size="XS"
               theme="light"
-              text="Settings"
+              text={$at("Settings")}
               LeadingIcon={LuSettings}
               onClick={() => navigateTo("/settings")}
             />
@@ -317,7 +319,7 @@ export default function Actionbar({
             <Button
               size="XS"
               theme="light"
-              text="Fullscreen"
+              text={$at("Fullscreen")}
               LeadingIcon={LuMaximize}
               onClick={() => requestFullscreen()}
             />

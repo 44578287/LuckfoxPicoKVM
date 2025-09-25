@@ -2,25 +2,27 @@ import { NetworkState } from "../hooks/stores";
 import { LifeTimeLabel } from "../routes/devices.$id.settings.network";
 
 import { GridCard } from "./Card";
+import { useReactAt } from 'i18n-auto-extractor/react'
 
 export default function Ipv6NetworkCard({
   networkState,
 }: {
   networkState: NetworkState;
 }) {
+  const { $at } = useReactAt();
   return (
     <GridCard>
       <div className="animate-fadeIn p-4 text-black opacity-0 animation-duration-500 dark:text-white">
         <div className="space-y-4">
           <h3 className="text-base font-bold text-slate-900 dark:text-white">
-            IPv6 Information
+            {$at("IPv6 Information")}
           </h3>
 
           <div className="grid grid-cols-2 gap-x-6 gap-y-2">
             {networkState?.dhcp_lease?.ip && (
               <div className="flex flex-col justify-between">
                 <span className="text-sm text-slate-600 dark:text-slate-400">
-                  Link-local
+                  {$at("Link-local")}
                 </span>
                 <span className="text-sm font-medium">
                   {networkState?.ipv6_link_local}

@@ -6,14 +6,15 @@ import { useJsonRpc } from "@/hooks/useJsonRpc";
 import { useEffect, useState } from "react";
 import notifications from "@/notifications";
 import { cx } from "@/cva.config";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 interface IOSettings {
   io0Status: boolean;
   io1Status: boolean;
 }
 
-
 export function IOControl() {
+  const { $at }= useReactAt();
   const [send] = useJsonRpc();
   const [settings, setSettings] = useState<IOSettings>({
     io0Status: true,
@@ -49,8 +50,8 @@ export function IOControl() {
   return (
     <div className="space-y-4">
       <SettingsPageHeader
-        title="IO Control"
-        description="Configure your io control settings"
+        title={$at("IO Control")}
+        description={$at("Configure your io control settings")}
       />
 
       <hr className="border-slate-700/30 dark:border-slate-600/30" />
@@ -68,7 +69,7 @@ export function IOControl() {
               size="SM"
               theme="primary"
               LeadingIcon={LuSun}
-              text="High"
+              text={$at("Up")}
               onClick={() => {
                 handleSettingChange("io0Status", true);
               }}
@@ -77,7 +78,7 @@ export function IOControl() {
               size="SM"
               theme="primary"
               LeadingIcon={LuSunset}
-              text="Low"
+              text={$at("Down")}
               onClick={() => {
                 handleSettingChange("io0Status", false);
               }}
@@ -98,7 +99,7 @@ export function IOControl() {
               size="SM"
               theme="primary"
               LeadingIcon={LuSun}
-              text="High"
+              text={$at("Up")}
               onClick={() => {
                 handleSettingChange("io1Status", true);
               }}
@@ -107,7 +108,7 @@ export function IOControl() {
               size="SM"
               theme="primary"
               LeadingIcon={LuSunset}
-              text="Low"
+              text={$at("Down")}
               onClick={() => {
                 handleSettingChange("io1Status", false);
               }}

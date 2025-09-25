@@ -31,7 +31,7 @@ import {
 import { UploadDialog } from "@/components/UploadDialog";
 import { sync } from "framer-motion";
 import Fieldset from "@/components/Fieldset";
-
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 export default function MtpRoute() {
   const navigate = useNavigate();
@@ -166,32 +166,33 @@ function MtpModeSelectionView({
   selectedMode: "mtp_device" | "mtp_sd";
   setSelectedMode: (mode: "mtp_device" | "mtp_sd") => void;
 }) {
+  const { $at } = useReactAt();
   const { setModalView } = useMountMediaStore();
 
   return (
     <div className="w-full space-y-4">
       <div className="animate-fadeIn space-y-0 opacity-0">
         <h2 className="text-lg leading-tight font-bold dark:text-white">
-          Virtual Media Source
+          {$at("Shared Folders")}
         </h2>
         <div className="text-sm leading-snug text-slate-600 dark:text-slate-400">
-          Choose how you want to mount your virtual media
+          {$at("Select the shared folder that you want to manage")}
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         {[
           {
-            label: "KVM Storage Manager",
+            label: "KVM Storage",
             value: "mtp_device",
-            description: "Manage the shared folder located on eMMC",
+            description: "",
             icon: LuRadioReceiver,
             tag: null,
             disabled: false,
           },
           {
-            label: "KVM MicroSD Manager",
+            label: "KVM MicroSD",
             value: "mtp_sd",
-            description: "Manage the shared folder located on MicroSD",
+            description: "",
             icon: LuRadioReceiver,
             tag: null,
             disabled: false,
@@ -259,14 +260,14 @@ function MtpModeSelectionView({
         }}
       >
         <div className="flex gap-x-2 pt-2">
-          <Button size="MD" theme="blank" onClick={onClose} text="Cancel" />
+          <Button size="MD" theme="blank" onClick={onClose} text={$at("Cancel")} />
           <Button
             size="MD"
             theme="primary"
             onClick={() => {
               setModalView(selectedMode);
             }}
-            text="Continue"
+            text={$at("Continue")}
           />
         </div>
       </div>
@@ -288,7 +289,7 @@ function DeviceFileView({
       createdAt: string;
     }[]
   >([]);
-
+  const { $at }= useReactAt();
   const [selected, setSelected] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const filesPerPage = 5;
@@ -402,8 +403,8 @@ function DeviceFileView({
   return (
     <div className="w-full space-y-4">
       <ViewHeader
-        title="Mount from KVM Storage"
-        description="Select an image to mount from the KVM storage"
+        title={$at("Manage Shared Folders in KVM Storage")}
+        description=""
       />
       <div
         className="w-full animate-fadeIn opacity-0"
@@ -419,17 +420,17 @@ function DeviceFileView({
                 <div className="space-y-1">
                   <PlusCircleIcon className="mx-auto h-6 w-6 text-blue-700 dark:text-blue-500" />
                   <h3 className="text-sm leading-none font-semibold text-black dark:text-white">
-                    No images available
+                    {$at("No files")}
                   </h3>
                   <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-                    Upload an image to start virtual media mounting.
+                    {$at("Upload a new file")}
                   </p>
                 </div>
                 <div>
                   <Button
                     size="SM"
                     theme="primary"
-                    text="Upload a new File"
+                    text={$at("Upload a New File")}
                     onClick={() => onNewImageClick()}
                   />
                 </div>
@@ -512,7 +513,7 @@ function DeviceFileView({
           }}
         >
           <div className="flex items-center gap-x-2">
-            <Button size="MD" theme="blank" text="Back" onClick={() => onBack()} />
+            <Button size="MD" theme="blank" text={$at("Back")} onClick={() => onBack()} />
           </div>
         </div>
       ) : (
@@ -524,7 +525,7 @@ function DeviceFileView({
           }}
         >
           <div className="flex items-center gap-x-2">
-            <Button size="MD" theme="light" text="Back" onClick={() => onBack()} />
+            <Button size="MD" theme="light" text={$at("Back")} onClick={() => onBack()} />
           </div>
         </div>
       )}
@@ -538,10 +539,10 @@ function DeviceFileView({
       >
         <div className="flex justify-between text-sm">
           <span className="font-medium text-black dark:text-white">
-            Available Storage
+            {$at("Available Storage")}
           </span>
           <span className="text-slate-700 dark:text-slate-300">
-            {percentageUsed}% used
+            {percentageUsed}% {$at("used")}
           </span>
         </div>
         <div className="h-3.5 w-full overflow-hidden rounded-xs bg-slate-200 dark:bg-slate-700">
@@ -552,10 +553,10 @@ function DeviceFileView({
         </div>
         <div className="flex justify-between text-sm text-slate-600">
           <span className="text-slate-700 dark:text-slate-300">
-            {formatters.bytes(bytesUsed)} used
+            {formatters.bytes(bytesUsed)} {$at("used")}
           </span>
           <span className="text-slate-700 dark:text-slate-300">
-            {formatters.bytes(bytesFree)} free
+            {formatters.bytes(bytesFree)} {$at("free")}
           </span>
         </div>
       </div>
@@ -572,7 +573,7 @@ function DeviceFileView({
             size="MD"
             theme="light"
             fullWidth
-            text="Upload a new File"
+            text={$at("Upload a New File")}
             onClick={() => onNewImageClick()}
           />
         </div>
@@ -715,6 +716,7 @@ function SDFileView({
     a.remove();
   }
 
+  const { $at }= useReactAt();
   const indexOfLastFile = currentPage * filesPerPage;
   const indexOfFirstFile = indexOfLastFile - filesPerPage;
   const currentFiles = onStorageFiles.slice(indexOfFirstFile, indexOfLastFile);
@@ -777,8 +779,8 @@ function SDFileView({
     return (
       <div className="w-full space-y-4">
         <ViewHeader
-          title="Mount from KVM MicroSD Card"
-          description="Select an image to mount from the KVM storage"
+          title={$at("Manage Shared Folder in KVM Storage")}
+          description=""
         />
         <div className="flex items-center justify-center py-8 text-center">
           <div className="space-y-3">
@@ -809,8 +811,8 @@ function SDFileView({
   return (    
     <div className="w-full space-y-4">
       <ViewHeader
-        title="Mount from KVM MicroSD Card"
-        description="Select an image to mount from the KVM storage"
+        title={$at("Manage Shared Folder in KVM Storage")}
+        description=""
       />
       <div
         className="w-full animate-fadeIn opacity-0"
@@ -826,10 +828,10 @@ function SDFileView({
                 <div className="space-y-1">
                   <PlusCircleIcon className="mx-auto h-6 w-6 text-blue-700 dark:text-blue-500" />
                   <h3 className="text-sm font-semibold leading-none text-black dark:text-white">
-                    No images available
+                    {$at("No files")}
                   </h3>
                   <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-                    Upload a file.
+                    {$at("Upload a new file")}
                   </p>
                 </div>
                 <div>
@@ -837,7 +839,7 @@ function SDFileView({
                     size="SM"
                     disabled={loading}
                     theme="primary"
-                    text="Upload a new File"
+                    text={$at("Upload a New File")}
                     onClick={() => onNewImageClick()}
                   />
                 </div>
@@ -858,7 +860,7 @@ function SDFileView({
                     if (!selectedFile) return;
                     if (
                       window.confirm(
-                        "Are you sure you want to download " + selectedFile.name + "?",
+                        $at("Are you sure you want to download " + selectedFile.name + "?"),
                       )
                     ) {
                       handleSDDownloadFile(selectedFile);
@@ -867,7 +869,7 @@ function SDFileView({
                   onDelete={() => {
                     const selectedFile = onStorageFiles.find(f => f.name === file.name);
                     if (!selectedFile) return;
-                    if (window.confirm("Are you sure you want to delete " + selectedFile.name + "?")) {
+                    if (window.confirm($at("Are you sure you want to delete " + selectedFile.name + "?"))) {
                       handleSDDeleteFile(selectedFile);
                     }
                   }}
@@ -916,7 +918,7 @@ function SDFileView({
           }}
         >
           <div className="flex items-center gap-x-2"> 
-            <Button size="MD" theme="blank" text="Back" onClick={() => onBack()} />
+            <Button size="MD" theme="blank" text={$at("Back")} onClick={() => onBack()} />
             <Button
                 size="MD"
                 disabled={loading}
@@ -935,7 +937,7 @@ function SDFileView({
           }}
         >
           <div className="flex items-center gap-x-2 ml-auto ml-auto">
-            <Button size="MD" theme="light" text="Back" onClick={() => onBack()} />
+            <Button size="MD" theme="light" text={$at("Back")} onClick={() => onBack()} />
             <Button
                 size="MD"
                 theme="light"
@@ -955,10 +957,10 @@ function SDFileView({
       >
         <div className="flex justify-between text-sm">
           <span className="font-medium text-black dark:text-white">
-            Available Storage
+            {$at("Available Storage")}
           </span>
           <span className="text-slate-700 dark:text-slate-300">
-            {percentageUsed}% used
+            {percentageUsed}% {$at("used")}
           </span>
         </div>
         <div className="h-3.5 w-full overflow-hidden rounded-sm bg-slate-200 dark:bg-slate-700">
@@ -969,10 +971,10 @@ function SDFileView({
         </div>
         <div className="flex justify-between text-sm text-slate-600">
           <span className="text-slate-700 dark:text-slate-300">
-            {formatters.bytes(bytesUsed)} used
+            {formatters.bytes(bytesUsed)} {$at("used")}
           </span>
           <span className="text-slate-700 dark:text-slate-300">
-            {formatters.bytes(bytesFree)} free
+            {formatters.bytes(bytesFree)} {$at("free")}
           </span>
         </div>
       </div>
@@ -990,7 +992,7 @@ function SDFileView({
             disabled={loading}
             theme="light"
             fullWidth
-            text="Upload a new File"
+            text={$at("Upload a New File")}
             onClick={() => onNewImageClick()}
           />
         </div>
@@ -1008,7 +1010,7 @@ function SDFileView({
           disabled={loading}
           theme="light"
           fullWidth
-          text="Unmount SD Card"
+          text={$at("Unmount Micro SD Card")}
           onClick={() => handleUnmountSDStorage()}
           className="text-red-500 dark:text-red-400"
         />
@@ -1029,6 +1031,7 @@ function UploadFileView({
   incompleteFileName?: string;
   media?: string;
 }) {
+  const { $at }= useReactAt();
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "success">(
     "idle",
   );
@@ -1315,11 +1318,11 @@ function UploadFileView({
     <div className="w-full space-y-4">
       <UploadDialog
         open={true}
-        title="Upload New Image"
+        title={$at("Upload a New File")}
         description={
           incompleteFileName
-            ? `Continue uploading "${incompleteFileName}"`
-            : "Select an image file to upload to KVM storage"
+            ? $at(`Continue uploading "${incompleteFileName}"`)
+            : $at("Select a file to upload")
         }
       >
         <div
@@ -1356,11 +1359,11 @@ function UploadFileView({
                         </div>
                         <h3 className="text-sm leading-none font-semibold text-black dark:text-white">
                           {incompleteFileName
-                            ? `Click to select "${incompleteFileName.replace(".incomplete", "")}"`
-                            : "Click to select a file"}
+                            ? $at(`Click to select "${incompleteFileName.replace(".incomplete", "")}"`)
+                            : $at("Click to select a file")}
                         </h3>
                         <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-                          Do not support directory
+                          {$at("Do not support directories")}
                         </p>
                       </div>
                     )}
@@ -1375,7 +1378,7 @@ function UploadFileView({
                           </Card>
                         </div>
                         <h3 className="leading-non text-lg font-semibold text-black dark:text-white">
-                          Uploading {formatters.truncateMiddle(uploadedFileName, 30)}
+                          {$at("Uploading")} {formatters.truncateMiddle(uploadedFileName, 30)}
                         </h3>
                         <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
                           {formatters.bytes(uploadedFileSize || 0)}
@@ -1388,11 +1391,11 @@ function UploadFileView({
                             ></div>
                           </div>
                           <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
-                            <span>Uploading...</span>
+                            <span>{$at("Uploading...")}...</span>
                             <span>
                               {uploadSpeed !== null
                                 ? `${formatters.bytes(uploadSpeed)}/s`
-                                : "Calculating..."}
+                                : $at("Calculating...")}
                             </span>
                           </div>
                         </div>
@@ -1409,11 +1412,10 @@ function UploadFileView({
                           </Card>
                         </div>
                         <h3 className="text-sm leading-none font-semibold text-black dark:text-white">
-                          Upload successful
+                          {$at("Upload Successful")}
                         </h3>
                         <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-                          {formatters.truncateMiddle(uploadedFileName, 40)} has been
-                          uploaded
+                          {formatters.truncateMiddle(uploadedFileName, 40)} {$at("Uploaded")}
                         </p>
                       </div>
                     )}
@@ -1455,7 +1457,7 @@ function UploadFileView({
               <Button
                 size="MD"
                 theme="light"
-                text="Cancel Upload"
+                text={$at("Cancel Upload")}
                 onClick={() => {
                   onCancelUpload();
                   setUploadState("idle");
@@ -1532,6 +1534,7 @@ function PreUploadedImageItem({
   onDelete: () => void;
   onContinueUpload: () => void;
 }) {
+  const { $at }= useReactAt();
   const [isHovering, setIsHovering] = useState(false);
   return (
     <label
@@ -1571,7 +1574,7 @@ function PreUploadedImageItem({
             size="XS"
             theme="light"
             LeadingIcon={LuDownload}
-            text="Download"
+            text={$at("Download")}
             onClick={e => {
               e.stopPropagation();
               onDownload();
@@ -1588,7 +1591,7 @@ function PreUploadedImageItem({
             size="XS"
             theme="light"
             LeadingIcon={TrashIcon}
-            text="Delete"
+            text={$at("Delete")}
             onClick={e => {
               e.stopPropagation();
               onDelete();
@@ -1600,7 +1603,7 @@ function PreUploadedImageItem({
           <Button
             size="XS"
             theme="light"
-            text="Continue uploading"
+            text={$at("Continue Uploading")}
             onClick={e => {
               e.stopPropagation();
               onContinueUpload();

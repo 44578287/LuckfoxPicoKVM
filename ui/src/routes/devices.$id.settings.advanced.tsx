@@ -13,8 +13,10 @@ import { isOnDevice } from "../main";
 import notifications from "../notifications";
 
 import { SettingsItem } from "./devices.$id.settings";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 export default function SettingsAdvancedRoute() {
+  const { $at }= useReactAt();
   const [send] = useJsonRpc();
 
   const [sshKey, setSSHKey] = useState<string>("");
@@ -135,14 +137,14 @@ export default function SettingsAdvancedRoute() {
   return (
     <div className="space-y-4">
       <SettingsPageHeader
-        title="Advanced"
-        description="Access additional settings for troubleshooting and customization"
+        title={$at("Advanced")}
+        description={$at("Access additional settings for troubleshooting and customization")}
       />
 
       <div className="space-y-4">
         <SettingsItem
-          title="Loopback-Only Mode"
-          description="Restrict web interface access to localhost only (127.0.0.1)"
+          title={$at("Loopback-Only Mode")}
+          description={$at("Restrict web interface access to localhost only (127.0.0.1)")}
         >
           <Checkbox
             checked={localLoopbackOnly}
@@ -153,25 +155,25 @@ export default function SettingsAdvancedRoute() {
         {isOnDevice && (
           <div className="space-y-4">
             <SettingsItem
-              title="SSH Access"
-              description="Add your SSH public key to enable secure remote access to the device"
+              title={$at("SSH Access")}
+              description={$at("Add your SSH public key to enable secure remote access to the device")}
             />
             <div className="space-y-4">
               <TextAreaWithLabel
-                label="SSH Public Key"
+                label={$at("SSH Public Key")}
                 value={sshKey || ""}
                 rows={3}
                 onChange={e => setSSHKey(e.target.value)}
-                placeholder="Enter your SSH public key"
+                placeholder={$at("Enter your SSH public key")}
               />
               <p className="text-xs text-slate-600 dark:text-slate-400">
-                The default SSH user is <strong>root</strong>.
+                {$at("The default SSH user is ")} <strong>root</strong>.
               </p>
               <div className="flex items-center gap-x-2">
                 <Button
                   size="SM"
                   theme="primary"
-                  text="Update SSH Key"
+                  text={$at("Update SSH Key")}
                   onClick={handleUpdateSSHKey}
                 />
               </div>
@@ -180,8 +182,8 @@ export default function SettingsAdvancedRoute() {
         )}
 
         <SettingsItem
-          title="Troubleshooting Mode"
-          description="Diagnostic tools and additional controls for troubleshooting and development purposes"
+          title={$at("Troubleshooting Mode")}
+          description={$at("Diagnostic tools and additional controls for troubleshooting and development purposes")}
         >
           <Checkbox
             defaultChecked={settings.debugMode}
@@ -194,27 +196,27 @@ export default function SettingsAdvancedRoute() {
         {settings.debugMode && (
           <>
             <SettingsItem
-              title="USB Emulation"
-              description="Control the USB emulation state"
+              title={$at("USB Emulation")}
+              description={$at("Control the USB emulation state")}
             >
               <Button
                 size="SM"
                 theme="light"
                 text={
-                  usbEmulationEnabled ? "Disable USB Emulation" : "Enable USB Emulation"
+                  usbEmulationEnabled ? $at("Disable USB Emulation") : $at("Enable USB Emulation")
                 }
                 onClick={() => handleUsbEmulationToggle(!usbEmulationEnabled)}
               />
             </SettingsItem>
 
             <SettingsItem
-              title="Reset Configuration"
-              description="Reset configuration to default. This will log you out."
+              title={$at("Reset Configuration")}
+              description={$at("Reset configuration to default. This will log you out.Some configuration changes will take effect after restart system.")}
             >
               <Button
                 size="SM"
                 theme="light"
-                text="Reset Config"
+                text={$at("Reset Config")}
                 onClick={() => {
                   handleResetConfig();
                   window.location.reload();

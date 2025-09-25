@@ -22,6 +22,7 @@ const USBStateMap: Record<USBStates, string> = {
   attached: "Connecting",
   addressed: "Connecting",
   "not attached": "Disconnected",
+  default: "Disconnected",
   suspended: "Low power mode",
 };
 
@@ -51,6 +52,13 @@ export default function USBStateStatus({
       statusIndicatorClassName: "bg-slate-300 border-slate-400",
     },
     "not attached": {
+      icon: ({ className }) => (
+        <img className={cx(className)} src={KeyboardAndMouseConnectedIcon} alt="" />
+      ),
+      iconClassName: "h-5 w-5 opacity-50 grayscale filter",
+      statusIndicatorClassName: "bg-slate-300 border-slate-400",
+    },
+    default: {
       icon: ({ className }) => (
         <img className={cx(className)} src={KeyboardAndMouseConnectedIcon} alt="" />
       ),

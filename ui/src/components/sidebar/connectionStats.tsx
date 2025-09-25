@@ -4,6 +4,7 @@ import SidebarHeader from "@/components/SidebarHeader";
 import { GridCard } from "@/components/Card";
 import { useRTCStore, useUiStore } from "@/hooks/stores";
 import StatChart from "@/components/StatChart";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 function createChartArray<T, K extends keyof T>(
   stream: Map<number, T>,
@@ -62,6 +63,7 @@ export default function ConnectionStatsSidebar() {
   const peerConnection = useRTCStore(state => state.peerConnection);
   const mediaStream = useRTCStore(state => state.mediaStream);
   const sidebarView = useUiStore(state => state.sidebarView);
+  const { $at }= useReactAt();
 
   useInterval(function collectWebRTCStats() {
     (async () => {
@@ -100,7 +102,7 @@ export default function ConnectionStatsSidebar() {
 
   return (
     <div className="grid h-full grid-rows-(--grid-headerBody) shadow-xs">
-      <SidebarHeader title="Connection State" setSidebarView={setSidebarView} />
+      <SidebarHeader title={$at("Connection Stats")} setSidebarView={setSidebarView} />
       <div className="h-full space-y-4 overflow-y-scroll bg-white px-4 py-2 pb-8 dark:bg-slate-900">
         <div className="space-y-4">
           {/*
@@ -112,10 +114,10 @@ export default function ConnectionStatsSidebar() {
               <div className="space-y-2">
                 <div>
                   <h2 className="text-lg font-semibold text-black dark:text-white">
-                    Packets Lost
+                    {$at("Packet Loss")}
                   </h2>
                   <p className="text-sm text-slate-700 dark:text-slate-300">
-                    Number of data packets lost during transmission.
+                    {$at("Number of packets lost during transmission")}
                   </p>
                 </div>
                 <GridCard>
@@ -141,10 +143,10 @@ export default function ConnectionStatsSidebar() {
               <div className="space-y-2">
                 <div>
                   <h2 className="text-lg font-semibold text-black dark:text-white">
-                    Round-Trip Time
+                    {$at("Round Trip Time")}
                   </h2>
                   <p className="text-sm text-slate-700 dark:text-slate-300">
-                    Time taken for data to travel from source to destination and back
+                    {$at("Time taken for data to travel from source to destination and back")}
                   </p>
                 </div>
                 <GridCard>
@@ -178,10 +180,10 @@ export default function ConnectionStatsSidebar() {
               <div className="space-y-2">
                 <div>
                   <h2 className="text-lg font-semibold text-black dark:text-white">
-                    Jitter
+                    {$at("Jitter")}
                   </h2>
                   <p className="text-sm text-slate-700 dark:text-slate-300">
-                    Variation in packet delay, affecting video smoothness.{" "}
+                    {$at("Variation in packet delay, affecting video smoothness.")}{" "}
                   </p>
                 </div>
                 <GridCard>
@@ -208,10 +210,10 @@ export default function ConnectionStatsSidebar() {
               <div className="space-y-2">
                 <div>
                   <h2 className="text-lg font-semibold text-black dark:text-white">
-                    Frames per second
+                    {$at("Frame per second")}
                   </h2>
                   <p className="text-sm text-slate-700 dark:text-slate-300">
-                    Number of video frames displayed per second.
+                    {$at("Number of video frames displayed per second.")}
                   </p>
                 </div>
                 <GridCard>

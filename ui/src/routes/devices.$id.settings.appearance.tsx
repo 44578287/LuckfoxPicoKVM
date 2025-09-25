@@ -4,8 +4,10 @@ import { SettingsPageHeader } from "../components/SettingsPageheader";
 import { SelectMenuBasic } from "../components/SelectMenuBasic";
 
 import { SettingsItem } from "./devices.$id.settings";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 export default function SettingsAppearanceRoute() {
+  const { $at }= useReactAt();
   const [currentTheme, setCurrentTheme] = useState(() => {
     return localStorage.theme || "system";
   });
@@ -31,18 +33,18 @@ export default function SettingsAppearanceRoute() {
   return (
     <div className="space-y-4">
       <SettingsPageHeader
-        title="Appearance"
-        description="Customize the look and feel of your KVM interface"
+        title={$at("Appearance")}
+        description={$at("Customize the look and feel of your KVM interface")}
       />
-      <SettingsItem title="Theme" description="Choose your preferred color theme">
+      <SettingsItem title={$at("Theme")} description={$at("Choose your preferred color theme")}>
         <SelectMenuBasic
           size="SM"
           label=""
           value={currentTheme}
           options={[
-            { value: "system", label: "System" },
-            { value: "light", label: "Light" },
-            { value: "dark", label: "Dark" },
+            { value: "system", label: $at("System") },
+            { value: "light", label: $at("Light") },
+            { value: "dark", label: $at("Dark") },
           ]}
           onChange={e => {
             setCurrentTheme(e.target.value);

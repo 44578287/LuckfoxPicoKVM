@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeftEndOnRectangleIcon, ChevronDownIcon } from "@heroicons/react/16/solid";
 import { Button, Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
@@ -11,12 +11,18 @@ import LogoLuckfox from "@/assets/logo-luckfox.png";
 import USBStateStatus from "@components/USBStateStatus";
 import PeerConnectionStatusCard from "@components/PeerConnectionStatusCard";
 import VpnConnectionStatusCard from "@components/VpnConnectionStatusCard";
+import { SelectMenuBasic } from "./SelectMenuBasic";
 import { DEVICE_API } from "@/ui.config";
+import { useSettingsStore } from "@/hooks/stores";
 
 import api from "../api";
 import { isOnDevice } from "../main";
 
 import { LinkButton } from "./Button";
+
+import { useReactAt } from 'i18n-auto-extractor/react'
+import enJSON from '../locales/en.json'
+import zhJSON from '../locales/zh.json'
 
 interface NavbarProps {
   isLoggedIn: boolean;
@@ -51,6 +57,26 @@ export default function DashboardNavbar({
   }, [navigate, setUser]);
 
   const usbState = useHidStore(state => state.usbState);
+
+  const language = useSettingsStore(state => state.language);
+  const setLanguage = useSettingsStore(state => state.setLanguage);
+  
+  const LangOptions = [
+    { value: "en", label: "English"},
+    { value: "zh", label: "中文"},
+  ];
+  
+  // default language
+  const {setCurrentLang,$at,langSet}= useReactAt();
+
+  const handleLangChange = (lang: string) => {
+      setLanguage(lang)
+      setCurrentLang(lang, lang === 'en' ? enJSON : zhJSON)
+  };
+
+  useEffect(() => {
+    setCurrentLang(language, language === 'en' ? enJSON : zhJSON)
+  }, [language, setCurrentLang])
 
   // for testing
   //userEmail = "user@example.org";
@@ -94,6 +120,22 @@ export default function DashboardNavbar({
           <div className="flex w-full items-center justify-end gap-x-2">
             <div className="flex shrink-0 items-center space-x-4">
               <div className="hidden items-stretch gap-x-2 md:flex">
+
+                <div className="flex items-center gap-x-2"> 
+                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"  className="text-gray-700 dark:text-gray-300" >
+                    <path fill="currentColor" 
+                    d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z" >
+                    </path>
+                  </svg>
+                  <SelectMenuBasic
+                    size="SM"
+                    label=""
+                    value={language}
+                    onChange={(e) => handleLangChange(e.target.value)}
+                    options={LangOptions}
+                  />
+                </div>
+
                 {showConnectionStatus && (
                   <>
                     <div className="w-[159px]">

@@ -8,6 +8,7 @@ import { useJsonRpc } from "@/hooks/useJsonRpc";
 import notifications from "@/notifications";
 import { useUiStore } from "@/hooks/stores";
 import { SelectMenuBasic } from "@components/SelectMenuBasic";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 interface SerialSettings {
   baudRate: string;
@@ -17,6 +18,7 @@ interface SerialSettings {
 }
 
 export function SerialConsole() {
+  const { $at }= useReactAt();
   const [send] = useJsonRpc();
   const [settings, setSettings] = useState<SerialSettings>({
     baudRate: "9600",
@@ -54,8 +56,8 @@ export function SerialConsole() {
   return (
     <div className="space-y-4">
       <SettingsPageHeader
-        title="Serial Console"
-        description="Configure your serial console settings"
+        title={$at("Serial Console")}
+        description={$at("Configure your serial console settings")}
       />
 
       <Card className="animate-fadeIn opacity-0">
@@ -66,7 +68,7 @@ export function SerialConsole() {
               size="SM"
               theme="primary"
               LeadingIcon={LuTerminal}
-              text="Open Console"
+              text={$at("Open Console")}
               onClick={() => {
                 setTerminalType("serial");
                 console.log("Opening serial console with settings: ", settings);
@@ -77,7 +79,7 @@ export function SerialConsole() {
           {/* Settings */}
           <div className="grid grid-cols-2 gap-4">
             <SelectMenuBasic
-              label="Baud Rate"
+              label={$at("Baud Rate")}
               options={[
                 { label: "1200", value: "1200" },
                 { label: "2400", value: "2400" },
@@ -93,7 +95,7 @@ export function SerialConsole() {
             />
 
             <SelectMenuBasic
-              label="Data Bits"
+              label={$at("Data Bits")}
               options={[
                 { label: "8", value: "8" },
                 { label: "7", value: "7" },
@@ -103,7 +105,7 @@ export function SerialConsole() {
             />
 
             <SelectMenuBasic
-              label="Stop Bits"
+              label={$at("Stop Bits")}
               options={[
                 { label: "1", value: "1" },
                 { label: "1.5", value: "1.5" },
@@ -114,7 +116,7 @@ export function SerialConsole() {
             />
 
             <SelectMenuBasic
-              label="Parity"
+              label={$at("Parity")}
               options={[
                 { label: "None", value: "none" },
                 { label: "Even", value: "even" },

@@ -18,7 +18,7 @@ type TailScaleSettings struct {
 	XEdge    bool   `json:"xEdge"`
 }
 
-func rpcCanelTailScale() error {
+func rpcCancelTailScale() error {
 	_, err := CallVpnCtrlAction("cancel_tailscale", map[string]interface{}{"type": "no_param"})
 	if err != nil {
 		return err
@@ -381,6 +381,129 @@ func rpcGetFrpcStatus() (FrpcStatus, error) {
 	return FrpcStatus{Running: frpcRunning()}, nil
 }
 
+type EasytierStatus struct {
+	Running bool `json:"running"`
+}
+
+type EasytierConfig struct {
+	Name   string `json:"name"`
+	Secret string `json:"secret"`
+	Node   string `json:"node"`
+}
+
+var (
+	easytierLogPath = "/tmp/easytier.log"
+)
+
+func easytierRunning() bool {
+	cmd := exec.Command("pgrep", "-x", "easytier-core")
+	return cmd.Run() == nil
+}
+
+func rpcGetEasyTierLog() (string, error) {
+	f, err := os.Open(easytierLogPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("easytier log file not exist")
+		}
+		return "", err
+	}
+	defer f.Close()
+
+	const want = 30
+	lines := make([]string, 0, want+10)
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		lines = append(lines, sc.Text())
+		if len(lines) > want {
+			lines = lines[1:]
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return "", err
+	}
+
+	var buf []byte
+	for _, l := range lines {
+		buf = append(buf, l...)
+		buf = append(buf, '\n')
+	}
+	return string(buf), nil
+}
+
+func rpcGetEasyTierNodeInfo() (string, error) {
+	cmd := exec.Command("easytier-cli", "node")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get easytier node info: %w", err)
+	}
+
+	return string(output), nil
+}
+
+func rpcGetEasyTierConfig() (EasytierConfig, error) {
+	return config.EasytierConfig, nil
+}
+
+func rpcStartEasyTier(name, secret, node string) error {
+	if easytierRunning() {
+		_ = exec.Command("pkill", "-x", "easytier-core").Run()
+	}
+
+	if name == "" || secret == "" || node == "" {
+		return fmt.Errorf("easytier config is invalid")
+	}
+
+	cmd := exec.Command("easytier-core", "-d", "--network-name", name, "--network-secret", secret, "-p", node)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	logFile, err := os.OpenFile(easytierLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open easytier log file: %w", err)
+	}
+	defer logFile.Close()
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start easytier failed: %w", err)
+	} else {
+		config.EasytierAutoStart = true
+		config.EasytierConfig = EasytierConfig{
+			Name:   name,
+			Secret: secret,
+			Node:   node,
+		}
+		if err := SaveConfig(); err != nil {
+			return fmt.Errorf("failed to save config: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func rpcStopEasyTier() error {
+	if easytierRunning() {
+		err := exec.Command("pkill", "-x", "easytier-core").Run()
+		if err != nil {
+			return fmt.Errorf("failed to stop easytier: %w", err)
+		}
+	}
+
+	config.EasytierAutoStart = false
+	err := SaveConfig()
+	if err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+	return nil
+}
+
+func rpcGetEasyTierStatus() (EasytierStatus, error) {
+	return EasytierStatus{Running: easytierRunning()}, nil
+}
+
 func initVPN() {
 	waitVpnCtrlClientConnected()
 	go func() {
@@ -409,6 +532,12 @@ func initVPN() {
 		if config.FrpcAutoStart && config.FrpcToml != "" {
 			if err := rpcStartFrpc(config.FrpcToml); err != nil {
 				vpnLogger.Error().Err(err).Msg("Failed to auto start frpc")
+			}
+		}
+
+		if config.EasytierAutoStart && config.EasytierConfig.Name != "" && config.EasytierConfig.Secret != "" && config.EasytierConfig.Node != "" {
+			if err := rpcStartEasyTier(config.EasytierConfig.Name, config.EasytierConfig.Secret, config.EasytierConfig.Node); err != nil {
+				vpnLogger.Error().Err(err).Msg("Failed to auto start easytier")
 			}
 		}
 	}()

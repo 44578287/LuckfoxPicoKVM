@@ -16,6 +16,7 @@ import { cx } from "@/cva.config";
 import { useHidStore, useSettingsStore, useUiStore } from "@/hooks/stores";
 import useKeyboard from "@/hooks/useKeyboard";
 import { keyDisplayMap, keys, modifiers } from "@/keyboardMappings";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 export const DetachIcon = ({ className }: { className?: string }) => {
   return <img src={DetachIconRaw} alt="Detach Icon" className={className} />;
@@ -26,6 +27,7 @@ const AttachIcon = ({ className }: { className?: string }) => {
 };
 
 function KeyboardWrapper() {
+  const { $at }= useReactAt();
   const [layoutName, setLayoutName] = useState("default");
 
   const keyboardRef = useRef<HTMLDivElement>(null);
@@ -244,27 +246,27 @@ function KeyboardWrapper() {
                       <Button
                         size="XS"
                         theme="light"
-                        text="Detach"
+                        text={$at("Detach")}
                         onClick={() => setShowAttachedVirtualKeyboard(false)}
                       />
                     ) : (
                       <Button
                         size="XS"
                         theme="light"
-                        text="Attach"
+                        text={$at("Attach")}
                         LeadingIcon={AttachIcon}
                         onClick={() => setShowAttachedVirtualKeyboard(true)}
                       />
                     )}
                   </div>
                   <h2 className="select-none self-center font-sans text-[12px] text-slate-700 dark:text-slate-300">
-                    Virtual Keyboard
+                    {$at("Virtual Keyboard")}
                   </h2>
                   <div className="absolute right-2">
                     <Button
                       size="XS"
                       theme="light"
-                      text="Hide"
+                      text={$at("Hide")}
                       LeadingIcon={ChevronDownIcon}
                       onClick={() => setVirtualKeyboard(false)}
                     />

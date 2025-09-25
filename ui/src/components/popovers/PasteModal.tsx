@@ -12,6 +12,7 @@ import { useHidStore, useRTCStore, useUiStore, useSettingsStore } from "@/hooks/
 import { keys, modifiers } from "@/keyboardMappings";
 import { layouts, chars } from "@/keyboardLayouts";
 import notifications from "@/notifications";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 const hidKeyboardPayload = (keys: number[], modifier: number) => {
   return { keys, modifier };
@@ -38,6 +39,7 @@ export default function PasteModal() {
   const setKeyboardLayout = useSettingsStore(
     state => state.setKeyboardLayout,
   );
+  const { $at } = useReactAt();
 
   // this ensures we always get the original en_US if it hasn't been set yet
   const safeKeyboardLayout = useMemo(() => {
@@ -119,8 +121,8 @@ export default function PasteModal() {
           <div className="h-full space-y-4">
             <div className="space-y-4">
               <SettingsPageHeader
-                title="Paste text"
-                description="Paste text from your client to the remote host"
+                title={$at("Paste text")}
+                description={$at("Paste text from your client to the remote host")}
               />
 
               <div
@@ -134,7 +136,7 @@ export default function PasteModal() {
                   <div className="w-full" onKeyUp={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
                     <TextAreaWithLabel
                       ref={TextAreaRef}
-                      label="Paste from host"
+                      label={$at("Paste from host")}
                       rows={4}
                       onKeyUp={e => e.stopPropagation()}
                       onKeyDown={e => {
@@ -166,8 +168,7 @@ export default function PasteModal() {
                       <div className="mt-2 flex items-center gap-x-2">
                         <ExclamationCircleIcon className="h-4 w-4 text-red-500 dark:text-red-400" />
                         <span className="text-xs text-red-500 dark:text-red-400">
-                          The following characters won&apos;t be pasted:{" "}
-                          {invalidChars.join(", ")}
+                          {$at("The following characters will not be pasted:")} {invalidChars.join(", ")}
                         </span>
                       </div>
                     )}
@@ -175,7 +176,7 @@ export default function PasteModal() {
                 </div>
                 <div className="space-y-4">
                   <p className="text-xs text-slate-600 dark:text-slate-400">
-                    Sending text using keyboard layout: {layouts[safeKeyboardLayout]}
+                    {$at("Sending text using keyboard layout:")} {layouts[safeKeyboardLayout]}
                   </p>
                 </div>
               </div>
@@ -192,7 +193,7 @@ export default function PasteModal() {
           <Button
             size="SM"
             theme="blank"
-            text="Cancel"
+            text={$at("Cancel")}
             onClick={() => {
               onCancelPasteMode();
               close();
@@ -201,7 +202,7 @@ export default function PasteModal() {
           <Button
             size="SM"
             theme="primary"
-            text="Confirm Paste"
+            text={$at("Confirm paste")}
             onClick={onConfirmPaste}
             LeadingIcon={LuCornerDownLeft}
           />

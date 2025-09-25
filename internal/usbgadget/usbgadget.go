@@ -84,6 +84,7 @@ type UsbGadget struct {
 	log *zerolog.Logger
 
 	logSuppressionCounter map[string]int
+	logLock               sync.Mutex
 }
 
 const configFSPath = "/sys/kernel/config"

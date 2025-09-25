@@ -11,6 +11,8 @@ import LogoLuckfox from "@/assets/logo-luckfox.png";
 import { DEVICE_API } from "@/ui.config";
 
 import api from "../api";
+import { useReactAt } from 'i18n-auto-extractor/react'
+import DashboardNavbar from "@/components/Header";
 
 import { DeviceStatus } from "./welcome-local";
 
@@ -50,6 +52,7 @@ const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function WelcomeLocalPasswordRoute() {
+  const { $at }= useReactAt();
   const actionData = useActionData() as { error?: string };
   const [showPassword, setShowPassword] = useState(false);
   const passwordInputRef = useRef<HTMLInputElement>(null);
@@ -65,11 +68,17 @@ export default function WelcomeLocalPasswordRoute() {
 
   return (
     <>
+      <DashboardNavbar
+        primaryLinks={[]}
+        showConnectionStatus={false}
+        isLoggedIn={false}
+        kvmName={"PicoKVM Device"}
+      />
       <GridBackground />
       <div className="grid min-h-screen">
         <Container>
           <div className="isolate flex h-full w-full items-center justify-center">
-            <div className="max-w-2xl space-y-8">
+            <div className="max-w-2xl space-y-8"> 
               <div className="animate-fadeIn flex items-center justify-center opacity-0">
                 <img
                   src={LogoLuckfox}
@@ -84,10 +93,10 @@ export default function WelcomeLocalPasswordRoute() {
                 style={{ animationDelay: "200ms" }}
               >
                 <h1 className="text-4xl font-semibold text-black dark:text-white">
-                  Set a Password
+                  {$at("Set a Password")}
                 </h1>
                 <p className="font-medium text-slate-600 dark:text-slate-400">
-                  Create a strong password to secure your KVM device locally.
+                  {$at("Create a strong password to secure your KVM device locally.")}
                 </p>
               </div>
 
@@ -99,10 +108,10 @@ export default function WelcomeLocalPasswordRoute() {
                       style={{ animationDelay: "400ms" }}
                     >
                       <InputFieldWithLabel
-                        label="Password"
+                        label={$at("Password")}
                         type={showPassword ? "text" : "password"}
                         name="password"
-                        placeholder="Enter a password"
+                        placeholder={$at("Enter a password")}
                         autoComplete="new-password"
                         ref={passwordInputRef}
                         TrailingElm={
@@ -129,11 +138,11 @@ export default function WelcomeLocalPasswordRoute() {
                       style={{ animationDelay: "400ms" }}
                     >
                       <InputFieldWithLabel
-                        label="Confirm Password"
+                        label={$at("Confirm Password")}
                         autoComplete="new-password"
                         type={showPassword ? "text" : "password"}
                         name="confirmPassword"
-                        placeholder="Confirm your password"
+                        placeholder={$at("Confirm your password")}
                         error={actionData?.error}
                       />
                     </div>
@@ -150,7 +159,7 @@ export default function WelcomeLocalPasswordRoute() {
                       theme="primary"
                       fullWidth
                       type="submit"
-                      text="Set Password"
+                      text={$at("Set Password")}
                       textAlign="center"
                     />
                   </div>
@@ -161,15 +170,15 @@ export default function WelcomeLocalPasswordRoute() {
                 className="animate-fadeIn max-w-md text-center text-xs text-slate-500 opacity-0 dark:text-slate-400"
                 style={{ animationDelay: "800ms" }}
               >
-                This password will be used to secure your device data and protect against
-                unauthorized access.{" "}
-                <span className="font-bold">All data remains on your local device.</span>
+                {$at("This password will be used to secure your device data and protect against unauthorized access.")}{" "}
+                <span className="font-bold">{$at("All data remains on your local device.")}</span>
               </p>
             </div>
           </div>
         </Container>
       </div>
     </>
+
   );
 }
 

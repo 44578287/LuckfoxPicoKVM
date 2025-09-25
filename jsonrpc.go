@@ -628,9 +628,9 @@ func rpcGetUsbEmulationState() (bool, error) {
 
 func rpcSetUsbEmulationState(enabled bool) error {
 	if enabled {
-		return gadget.BindUDC()
+		return gadget.BindUDCToDWC3()
 	} else {
-		return gadget.UnbindUDC()
+		return gadget.UnbindUDCToDWC3()
 	}
 }
 
@@ -663,7 +663,8 @@ func rpcSetWakeOnLanDevices(params SetWakeOnLanDevicesParams) error {
 }
 
 func rpcResetConfig() error {
-	config = defaultConfig
+	loadedConfig := *defaultConfig
+	config = &loadedConfig
 	if err := SaveConfig(); err != nil {
 		return fmt.Errorf("failed to reset config: %w", err)
 	}
@@ -1029,6 +1030,18 @@ func rpcGetLedYellowMode() (string, error) {
 	return config.LEDYellowMode, nil
 }
 
+func rpcGetAutoMountSystemInfo() (bool, error) {
+	return config.AutoMountSystemInfo, nil
+}
+
+func rpcSetAutoMountSystemInfo(enabled bool) error {
+	config.AutoMountSystemInfo = enabled
+	if err := SaveConfig(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+	return nil
+}
+
 var rpcHandlers = map[string]RPCHandler{
 	"ping":                     {Func: rpcPing},
 	"reboot":                   {Func: rpcReboot, Params: []string{"force"}},
@@ -1084,6 +1097,8 @@ var rpcHandlers = map[string]RPCHandler{
 	"mountWithWebRTC":          {Func: rpcMountWithWebRTC, Params: []string{"filename", "size", "mode"}},
 	"mountWithStorage":         {Func: rpcMountWithStorage, Params: []string{"filename", "mode"}},
 	"mountWithSDStorage":       {Func: rpcMountWithSDStorage, Params: []string{"filename", "mode"}},
+	"setAutoMountSystemInfo":   {Func: rpcSetAutoMountSystemInfo, Params: []string{"enabled"}},
+	"getAutoMountSystemInfo":   {Func: rpcGetAutoMountSystemInfo},
 	"listStorageFiles":         {Func: rpcListStorageFiles},
 	"deleteStorageFile":        {Func: rpcDeleteStorageFile, Params: []string{"filename"}},
 	"startStorageFileUpload":   {Func: rpcStartStorageFileUpload, Params: []string{"filename", "size"}},
@@ -1121,7 +1136,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"getSDMountStatus":         {Func: rpcGetSDMountStatus},
 	"loginTailScale":           {Func: rpcLoginTailScale, Params: []string{"xEdge"}},
 	"logoutTailScale":          {Func: rpcLogoutTailScale},
-	"canelTailScale":           {Func: rpcCanelTailScale},
+	"cancelTailScale":          {Func: rpcCancelTailScale},
 	"getTailScaleSettings":     {Func: rpcGetTailScaleSettings},
 	"loginZeroTier":            {Func: rpcLoginZeroTier, Params: []string{"networkID"}},
 	"logoutZeroTier":           {Func: rpcLogoutZeroTier, Params: []string{"networkID"}},
@@ -1134,4 +1149,10 @@ var rpcHandlers = map[string]RPCHandler{
 	"getFrpcStatus":            {Func: rpcGetFrpcStatus},
 	"getFrpcToml":              {Func: rpcGetFrpcToml},
 	"getFrpcLog":               {Func: rpcGetFrpcLog},
+	"startEasyTier":            {Func: rpcStartEasyTier, Params: []string{"name", "secret", "node"}},
+	"stopEasyTier":             {Func: rpcStopEasyTier},
+	"getEasyTierStatus":        {Func: rpcGetEasyTierStatus},
+	"getEasyTierConfig":        {Func: rpcGetEasyTierConfig},
+	"getEasyTierLog":           {Func: rpcGetEasyTierLog},
+	"getEasyTierNodeInfo":      {Func: rpcGetEasyTierNodeInfo},
 }

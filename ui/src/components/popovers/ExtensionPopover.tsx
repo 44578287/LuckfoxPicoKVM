@@ -8,6 +8,7 @@ import { SerialConsole } from "@components/extensions/SerialConsole";
 import { IOControl } from "@components/extensions/IOControl";
 import { Button } from "@components/Button";
 import notifications from "@/notifications";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 interface Extension {
   id: string;
@@ -34,7 +35,8 @@ const AVAILABLE_EXTENSIONS: Extension[] = [
 export default function ExtensionPopover() {
   const [send] = useJsonRpc();
   const [activeExtension, setActiveExtension] = useState<Extension | null>(null);
-
+  const { $at }= useReactAt();
+  
   // Load active extension on component mount
   useEffect(() => {
     send("getActiveExtension", {}, resp => {
@@ -92,7 +94,7 @@ export default function ExtensionPopover() {
                   <Button
                     size="SM"
                     theme="light"
-                    text="Quit"
+                    text={$at("Quit")}
                     onClick={() => handleSetActiveExtension(null)}
                   />
                 </div>
@@ -101,8 +103,8 @@ export default function ExtensionPopover() {
               // Extensions List View
               <div className="space-y-4">
                 <SettingsPageHeader
-                  title="Extensions"
-                  description="Load and manage your extensions"
+                  title={$at("Extensions")}
+                  description={$at("Load and manage your extensions")}
                 />
                 <Card className="animate-fadeIn opacity-0" >
                   <div className="w-full divide-y divide-slate-700/30 dark:divide-slate-600/30">
@@ -122,7 +124,7 @@ export default function ExtensionPopover() {
                         <Button
                           size="XS"
                           theme="light"
-                          text="Load"
+                          text={$at("Load")}
                           onClick={() => handleSetActiveExtension(extension)}
                         />
                       </div>

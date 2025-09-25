@@ -24,8 +24,10 @@ import notifications from "@/notifications";
 import { SelectMenuBasic } from "../SelectMenuBasic";
 import { SettingsItem } from "../../routes/devices.$id.settings";
 import { UsbDeviceConfig  } from "@components/UsbEpModeSetting";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
+  const { $at }= useReactAt();
   const diskDataChannelStats = useRTCStore(state => state.diskDataChannelStats);
   const [send] = useJsonRpc();
   const { remoteVirtualMediaState, setModalView, setRemoteVirtualMediaState } =
@@ -113,10 +115,10 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
           </div>
           <div className="space-y-1">
             <h3 className="text-sm font-semibold leading-none text-black dark:text-white">
-              No mounted media
+              {$at("No mounted media")}
             </h3>
             <p className="text-xs leading-none text-slate-700 dark:text-slate-300">
-              Add a file to get started
+              {$at("Add a file to get started")}
             </p>
           </div>
         </div>
@@ -197,7 +199,7 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
               </Card>
             </div>
             <h3 className="text-base font-semibold text-black dark:text-white">
-              Mounted from KVM Storage
+              {$at("Mounted from KVM storage")}
             </h3>
             <p className="text-sm text-slate-900 dark:text-slate-100">
               {formatters.truncateMiddle(path, 50)}
@@ -231,12 +233,12 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
           <div className="h-full space-y-4">
             <div className="space-y-4">
               <SettingsPageHeader
-                title="Virtual Media"
-                description="Mount an image to boot from or install an operating system."
+                title={$at("Virtual Media")}
+                description={$at("Mount an image to boot from or install an operating system.")}
               />
 
               <SettingsItem
-                title="USB Storage Mode"
+                title={$at("USB Storage Mode")}
                 description=""
               >
                 <SelectMenuBasic
@@ -245,7 +247,9 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
                   value={usbStorageMode}
                   fullWidth
                   onChange={(e) => handleUsbStorageModeChange(e.target.value)}
-                  options={usbStorageModeOptions}
+                  options={[
+                    { value: "ums", label: "UMS"},
+                    { value: "mtp", label: "MTP"},]}
                 />
               </SettingsItem>
 
@@ -283,7 +287,7 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
                   {remoteVirtualMediaState ? (
                     <div className="flex select-none items-center justify-between text-xs">
                       <div className="select-none text-white dark:text-slate-300">
-                        <span>Mounted as</span>{" "}
+                        <span>{$at("Mounted as")}</span>{" "}
                         <span className="font-semibold">
                           {remoteVirtualMediaState.mode === "Disk" ? "Disk" : "CD-ROM"}
                         </span>
@@ -293,7 +297,7 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
                         <Button
                           size="SM"
                           theme="blank"
-                          text="Close"
+                          text={$at("Close")}
                           onClick={() => {
                             close();
                           }}
@@ -301,7 +305,7 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
                         <Button
                           size="SM"
                           theme="light"
-                          text="Unmount"
+                          text={$at("Unmount")}
                           LeadingIcon={({ className }) => (
                             <svg
                               className={`${className} h-2.5 w-2.5 shrink-0`}
@@ -357,7 +361,7 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
                               </div>
                               <div className="space-y-1">
                                 <h3 className="text-sm font-semibold leading-none text-black dark:text-white">
-                                  The MTP function has not been activated.
+                                  {$at("The MTP function has not been activated.")}
                                 </h3>
                               </div>
                             </div>
@@ -384,7 +388,7 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
             <Button
               size="SM"
               theme="blank"
-              text="Close"
+              text={$at("Close")}
               onClick={() => {
                 close();
               }}
@@ -392,7 +396,7 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
             <Button
               size="SM"
               theme="primary"
-              text="Add New Media"
+              text={$at("Add New Media")}
               onClick={() => {
                 setModalView("mode");
                 navigateTo("/mount");
@@ -413,7 +417,7 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
             <Button
               size="SM"
               theme="blank"
-              text="Close"
+              text={$at("Close")}
               onClick={() => {
                 close();
               }}
@@ -421,7 +425,7 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
             <Button
               size="SM"
               theme="primary"
-              text="Manager"
+              text={$at("Manager")}
               onClick={() => {
                 setModalView("mode");
                 navigateTo("/mtp");

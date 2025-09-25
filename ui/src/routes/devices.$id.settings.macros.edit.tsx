@@ -8,6 +8,7 @@ import { MacroForm } from "@/components/MacroForm";
 import notifications from "@/notifications";
 import { Button } from "@/components/Button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import {useReactAt} from 'i18n-auto-extractor/react'
 
 const normalizeSortOrders = (macros: KeySequence[]): KeySequence[] => {
   return macros.map((macro, index) => ({
@@ -17,6 +18,7 @@ const normalizeSortOrders = (macros: KeySequence[]): KeySequence[] => {
 };
 
 export default function SettingsMacrosEditRoute() {
+  const { $at }= useReactAt();
   const { macros, saveMacros } = useMacrosStore();
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -95,13 +97,13 @@ export default function SettingsMacrosEditRoute() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <SettingsPageHeader
-          title="Edit Macro"
-          description="Modify your keyboard macro"
+          title={$at("Edit Macro")}
+          description={$at("Modify your keyboard macro")}
         />
         <Button
           size="SM"
           theme="light"
-          text="Delete Macro"
+          text={$at("Delete Macro")}
           className="text-red-500 dark:text-red-400"
           LeadingIcon={LuTrash2}
           onClick={() => setShowDeleteConfirm(true)}
@@ -113,7 +115,7 @@ export default function SettingsMacrosEditRoute() {
         onSubmit={handleUpdateMacro}
         onCancel={() => navigate("../")}
         isSubmitting={isUpdating}
-        submitText="Save Changes"
+
       />
 
       <ConfirmDialog
@@ -122,7 +124,8 @@ export default function SettingsMacrosEditRoute() {
         title="Delete Macro"
         description="Are you sure you want to delete this macro? This action cannot be undone."
         variant="danger"
-        confirmText={isDeleting ? "Deleting" : "Delete"}
+        confirmText={isDeleting ? $at("Deleting") : $at("Delete")}
+        cancelText={$at("Cancel")}
         onConfirm={() => {
           handleDeleteMacro();
           setShowDeleteConfirm(false);
