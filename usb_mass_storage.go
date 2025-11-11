@@ -997,7 +997,7 @@ func updateMtpWithSDStatus() error {
 	}
 
 	if config.UsbDevices.Mtp {
-		if err := gadget.UnbindUDC(); err != nil {
+		if err := gadget.UnbindUDCToDWC3(); err != nil {
 			logger.Error().Err(err).Msg("failed to unbind UDC")
 		}
 

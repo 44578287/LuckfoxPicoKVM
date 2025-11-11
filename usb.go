@@ -1,6 +1,7 @@
 package kvm
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -40,6 +41,21 @@ func initUsbGadget() {
 	gadget.SetOnKeyboardStateChange(func(state usbgadget.KeyboardState) {
 		if currentSession != nil {
 			writeJSONRPCEvent("keyboardLedState", state, currentSession)
+		}
+	})
+
+	// Set callback for HID device missing errors
+	gadget.SetOnHidDeviceMissing(func(device string, err error) {
+		usbLogger.Error().
+			Str("device", device).
+			Err(err).
+			Msg("HID device missing, sending notification to client")
+
+		if currentSession != nil {
+			writeJSONRPCEvent("hidDeviceMissing", map[string]interface{}{
+				"device": device,
+				"error":  err.Error(),
+			}, currentSession)
 		}
 	})
 
@@ -134,5 +150,98 @@ func rpcSendUsbWakeupSignal() error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+// rpcReinitializeUsbGadget reinitializes the USB gadget
+func rpcReinitializeUsbGadget() error {
+	usbLogger.Info().Msg("reinitializing USB gadget (hard)")
+
+	if gadget == nil {
+		return fmt.Errorf("USB gadget not initialized")
+	}
+
+	mediaState, _ := rpcGetVirtualMediaState()
+	if mediaState != nil && (mediaState.Filename != "" || mediaState.URL != "") {
+		usbLogger.Info().Interface("mediaState", mediaState).Msg("virtual media mounted, unmounting before USB reinit")
+		if err := rpcUnmountImage(); err != nil {
+			usbLogger.Warn().Err(err).Msg("failed to unmount virtual media before USB reinit")
+		}
+	}
+
+	// Recreate the gadget instance similar to program restart
+	gadget = usbgadget.NewUsbGadget(
+		"kvm",
+		config.UsbDevices,
+		config.UsbConfig,
+		usbLogger,
+	)
+
+	// Reapply callbacks
+	gadget.SetOnKeyboardStateChange(func(state usbgadget.KeyboardState) {
+		if currentSession != nil {
+			writeJSONRPCEvent("keyboardLedState", state, currentSession)
+		}
+	})
+	gadget.SetOnHidDeviceMissing(func(device string, err error) {
+		usbLogger.Error().
+			Str("device", device).
+			Err(err).
+			Msg("HID device missing, sending notification to client")
+
+		if currentSession != nil {
+			writeJSONRPCEvent("hidDeviceMissing", map[string]interface{}{
+				"device": device,
+				"error":  err.Error(),
+			}, currentSession)
+		}
+	})
+
+	// Reopen keyboard HID file
+	if err := gadget.OpenKeyboardHidFile(); err != nil {
+		usbLogger.Warn().Err(err).Msg("failed to open keyboard hid file after reinit")
+	}
+
+	// Force a USB state update notification
+	triggerUSBStateUpdate()
+
+	initSystemInfo()
+
+	usbLogger.Info().Msg("USB gadget reinitialized successfully")
+	return nil
+}
+
+// rpcReinitializeUsbGadgetSoft performs a lightweight refresh:
+// reapply configuration and rebind without recreating the gadget instance.
+func rpcReinitializeUsbGadgetSoft() error {
+	usbLogger.Info().Msg("reinitializing USB gadget (soft)")
+
+	if gadget == nil {
+		return fmt.Errorf("USB gadget not initialized")
+	}
+
+	mediaState, _ := rpcGetVirtualMediaState()
+	if mediaState != nil && (mediaState.Filename != "" || mediaState.URL != "") {
+		usbLogger.Info().Interface("mediaState", mediaState).Msg("virtual media mounted, unmounting before USB soft reinit")
+		if err := rpcUnmountImage(); err != nil {
+			usbLogger.Warn().Err(err).Msg("failed to unmount virtual media before USB soft reinit")
+		}
+	}
+
+	// Update gadget configuration (will rebind USB inside)
+	if err := gadget.UpdateGadgetConfig(); err != nil {
+		usbLogger.Error().Err(err).Msg("failed to soft reinitialize USB gadget")
+		return fmt.Errorf("failed to soft reinitialize USB gadget: %w", err)
+	}
+
+	// Reopen keyboard HID file
+	if err := gadget.OpenKeyboardHidFile(); err != nil {
+		usbLogger.Warn().Err(err).Msg("failed to reopen keyboard hid file after soft reinit")
+	}
+
+	// Force a USB state update notification
+	triggerUSBStateUpdate()
+
+	usbLogger.Info().Msg("USB gadget soft reinitialized successfully")
 	return nil
 }

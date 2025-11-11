@@ -59,7 +59,7 @@ var UpdateMetadataUrls = []string{
 	"https://api.github.com/repos/luckfox-eng29/kvm/releases/latest",
 }
 
-var builtAppVersion = "0.0.3+dev"
+var builtAppVersion = "0.0.4+dev"
 
 var updateSource = "github"
 

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { LuEthernetPort } from "react-icons/lu";
 
 import {
   IPv4Mode,
+  IPv4StaticConfig,
   IPv6Mode,
   LLDPMode,
   mDNSMode,
@@ -84,11 +86,25 @@ export default function SettingsNetworkRoute() {
 
   // We use this to determine whether the settings have changed
   const firstNetworkSettings = useRef<NetworkSettings | undefined>(undefined);
+  // We use this to indicate whether saved settings differ from initial (effective) settings
+  const initialNetworkSettings = useRef<NetworkSettings | undefined>(undefined);
 
   const [networkSettingsLoaded, setNetworkSettingsLoaded] = useState(false);
 
   const [customDomain, setCustomDomain] = useState<string>("");
   const [selectedDomainOption, setSelectedDomainOption] = useState<string>("local");
+  const { id } = useParams();
+  const baselineKey = id ? `network_baseline_${id}` : "network_baseline";
+  const baselineResetKey = id ? `network_baseline_reset_${id}` : "network_baseline_reset";
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("networkChanged") === "true") {
+      localStorage.setItem(baselineResetKey, "1");
+      url.searchParams.delete("networkChanged");
+      window.history.replaceState(null, "", url.toString());
+    }
+  }, [baselineResetKey]);
 
   useEffect(() => {
     if (networkSettings.domain && networkSettingsLoaded) {
@@ -109,9 +125,32 @@ export default function SettingsNetworkRoute() {
       if ("error" in resp) return;
       console.log(resp.result);
       setNetworkSettings(resp.result as NetworkSettings);
-
       if (!firstNetworkSettings.current) {
         firstNetworkSettings.current = resp.result as NetworkSettings;
+      }
+      const resetFlag = localStorage.getItem(baselineResetKey);
+      const stored = localStorage.getItem(baselineKey);
+      if (resetFlag) {
+        initialNetworkSettings.current = resp.result as NetworkSettings;
+        localStorage.setItem(baselineKey, JSON.stringify(resp.result));
+        localStorage.removeItem(baselineResetKey);
+      } else if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as NetworkSettings;
+          const server = resp.result as NetworkSettings;
+          if (JSON.stringify(parsed) !== JSON.stringify(server)) {
+            initialNetworkSettings.current = server;
+            localStorage.setItem(baselineKey, JSON.stringify(server));
+          } else {
+            initialNetworkSettings.current = parsed;
+          }
+        } catch {
+          initialNetworkSettings.current = resp.result as NetworkSettings;
+          localStorage.setItem(baselineKey, JSON.stringify(resp.result));
+        }
+      } else {
+        initialNetworkSettings.current = resp.result as NetworkSettings;
+        localStorage.setItem(baselineKey, JSON.stringify(resp.result));
       }
       setNetworkSettingsLoaded(true);
     });
@@ -164,7 +203,41 @@ export default function SettingsNetworkRoute() {
   }, [getNetworkState, getNetworkSettings]);
 
   const handleIpv4ModeChange = (value: IPv4Mode | string) => {
-    setNetworkSettings({ ...networkSettings, ipv4_mode: value as IPv4Mode });
+    const newMode = value as IPv4Mode;
+    const updatedSettings: NetworkSettings = { ...networkSettings, ipv4_mode: newMode };
+
+    // Initialize static config if switching to static mode
+    if (newMode === "static" && !updatedSettings.ipv4_static) {
+      updatedSettings.ipv4_static = {
+        address: "",
+        netmask: "",
+        gateway: "",
+        dns: [],
+      };
+    }
+    
+    setNetworkSettings(updatedSettings);
+  };
+
+  const handleIpv4RequestAddressChange = (value: string) => {
+    setNetworkSettings({ ...networkSettings, ipv4_request_address: value });
+  };
+
+  const handleIpv4StaticChange = (field: keyof IPv4StaticConfig, value: string | string[]) => {
+    const staticConfig = networkSettings.ipv4_static || {
+      address: "",
+      netmask: "",
+      gateway: "",
+      dns: [],
+    };
+    
+    setNetworkSettings({
+      ...networkSettings,
+      ipv4_static: {
+        ...staticConfig,
+        [field]: value,
+      },
+    });
   };
 
   const handleIpv6ModeChange = (value: IPv6Mode | string) => {
@@ -212,6 +285,55 @@ export default function SettingsNetworkRoute() {
   );
 
   const [showRenewLeaseConfirm, setShowRenewLeaseConfirm] = useState(false);
+  const [applyingRequestAddr, setApplyingRequestAddr] = useState(false);
+  const [showRequestAddrConfirm, setShowRequestAddrConfirm] = useState(false);
+  const [showApplyStaticConfirm, setShowApplyStaticConfirm] = useState(false);
+  const [showIpv4RestartConfirm, setShowIpv4RestartConfirm] = useState(false);
+  const [pendingIpv4Mode, setPendingIpv4Mode] = useState<IPv4Mode | null>(null);
+  const [ipv4StaticDnsText, setIpv4StaticDnsText] = useState("");
+
+  const isIPv4StaticEqual = (a?: IPv4StaticConfig, b?: IPv4StaticConfig) => {
+    const na = a || { address: "", netmask: "", gateway: "", dns: [] };
+    const nb = b || { address: "", netmask: "", gateway: "", dns: [] };
+    const adns = (na.dns || []).map(x => x.trim()).filter(x => x.length > 0).sort();
+    const bdns = (nb.dns || []).map(x => x.trim()).filter(x => x.length > 0).sort();
+    if ((na.address || "").trim() !== (nb.address || "").trim()) return false;
+    if ((na.netmask || "").trim() !== (nb.netmask || "").trim()) return false;
+    if ((na.gateway || "").trim() !== (nb.gateway || "").trim()) return false;
+    if (adns.length !== bdns.length) return false;
+    for (let i = 0; i < adns.length; i++) {
+      if (adns[i] !== bdns[i]) return false;
+    }
+    return true;
+  };
+
+  const handleApplyRequestAddress = useCallback(() => {
+    const requested = (networkSettings.ipv4_request_address || "").trim();
+    if (!requested) {
+      notifications.error("Please enter a valid Request Address");
+      return;
+    }
+    if (networkSettings.ipv4_mode !== "dhcp") {
+      notifications.error("Request Address is only available in DHCP mode");
+      return;
+    }
+    setApplyingRequestAddr(true);
+    send("setNetworkSettings", { settings: networkSettings }, resp => {
+      if ("error" in resp) {
+        setApplyingRequestAddr(false);
+        return notifications.error(
+          "Failed to save Request Address: " + (resp.error.data ? resp.error.data : resp.error.message),
+        );
+      }
+      setApplyingRequestAddr(false);
+      notifications.success("Request Address saved. Changes will take effect after restart.");
+    });
+  }, [networkSettings, send]);
+
+  useEffect(() => {
+    const dns = (networkSettings.ipv4_static?.dns || []).join(", ");
+    setIpv4StaticDnsText(dns);
+  }, [networkSettings.ipv4_static?.dns]);
 
   return (
     <>
@@ -337,7 +459,10 @@ export default function SettingsNetworkRoute() {
           <Button
             size="SM"
             theme="primary"
-            disabled={firstNetworkSettings.current === networkSettings}
+            disabled={
+              firstNetworkSettings.current === networkSettings ||
+              (networkSettings.ipv4_mode === "static" && firstNetworkSettings.current?.ipv4_mode !== "static")
+            }
             text={$at("Save settings")}
             onClick={() => setNetworkSettingsRemote(networkSettings)}
           />
@@ -346,46 +471,135 @@ export default function SettingsNetworkRoute() {
         <div className="h-px w-full bg-slate-800/10 dark:bg-slate-300/20" />
 
         <div className="space-y-4">
-          <SettingsItem title={$at("IPv4 Mode")} description={$at("Configure IPv4 mode")}>
+          <SettingsItem 
+            title={$at("IPv4 Mode")}
+            description={$at("Configure IPv4 mode")} 
+            // badge={networkSettings.pending_reboot ? $at("Effective Upon Reboot") : undefined}
+          >
             <SelectMenuBasic
               size="SM"
               value={networkSettings.ipv4_mode}
-              onChange={e => handleIpv4ModeChange(e.target.value)}
+              onChange={e => {
+                const next = e.target.value as IPv4Mode;
+                setPendingIpv4Mode(next);
+                setShowIpv4RestartConfirm(true);
+              }}
               options={filterUnknown([
                 { value: "dhcp", label: "DHCP" },
-                // { value: "static", label: "Static" },
+                { value: "static", label: "Static" },
               ])}
             />
           </SettingsItem>
-          <AutoHeight>
-            {!networkSettingsLoaded && !networkState?.dhcp_lease ? (
+          
+          {networkSettings.ipv4_mode === "dhcp" && (   
+            <div className="flex items-end gap-x-2">
+              <InputFieldWithLabel
+                size="SM"
+                type="text"
+                label={$at("Request Address")}
+                placeholder="192.168.1.100"
+                value={networkSettings.ipv4_request_address || ""}
+                onChange={e => {
+                  handleIpv4RequestAddressChange(e.target.value);
+                }}
+              />
+              <Button
+                size="SM"
+                theme="primary"
+                text={$at("Save")}
+                disabled={applyingRequestAddr || !networkSettings.ipv4_request_address}
+                onClick={() => setShowRequestAddrConfirm(true)}
+              />
+            </div>
+          )}
+
+          {networkSettings.ipv4_mode === "static" && (
+            <AutoHeight>
               <GridCard>
-                <div className="p-4">
-                  <div className="space-y-4">
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                      {$at("DHCP Lease Information")}
-                    </h3>
-                    <div className="animate-pulse space-y-3">
-                      <div className="h-4 w-1/3 rounded bg-slate-200 dark:bg-slate-700" />
-                      <div className="h-4 w-1/2 rounded bg-slate-200 dark:bg-slate-700" />
-                      <div className="h-4 w-1/3 rounded bg-slate-200 dark:bg-slate-700" />
+                <div className="p-4 mt-1 space-y-4 border-l border-slate-800/10 pl-4 dark:border-slate-300/20 items-end gap-x-2">
+                  <InputFieldWithLabel
+                    size="SM"
+                    type="text"
+                    label={$at("IP Address")}
+                    placeholder="192.168.1.100"
+                    value={networkSettings.ipv4_static?.address || ""}
+                    onChange={e => {
+                      handleIpv4StaticChange("address", e.target.value);
+                    }}
+                  />
+                  <InputFieldWithLabel
+                    size="SM"
+                    type="text"
+                    label={$at("Netmask")}
+                    placeholder="255.255.255.0"
+                    value={networkSettings.ipv4_static?.netmask || ""}
+                    onChange={e => {
+                      handleIpv4StaticChange("netmask", e.target.value);
+                    }}
+                  />
+                  <InputFieldWithLabel
+                    size="SM"
+                    type="text"
+                    label={$at("Gateway")}
+                    placeholder="192.168.1.1"
+                    value={networkSettings.ipv4_static?.gateway || ""}
+                    onChange={e => {
+                      handleIpv4StaticChange("gateway", e.target.value);
+                    }}
+                  />
+                  <InputFieldWithLabel
+                    size="SM"
+                    type="text"
+                    label={$at("DNS Servers")}
+                    placeholder="8.8.8.8,8.8.4.4"
+                    value={ipv4StaticDnsText}
+                    onChange={e => setIpv4StaticDnsText(e.target.value)}
+                  />
+
+                  <div className="flex items-center gap-x-2">
+                    <Button
+                      size="SM"
+                      theme="primary"
+                      text={$at("Save")}
+                      onClick={() => setShowApplyStaticConfirm(true)}
+                    />
+                  </div> 
+                </div> 
+              </GridCard>
+            </AutoHeight>
+          )}
+
+          {networkSettings.ipv4_mode === "dhcp" && (
+            <AutoHeight>
+              {!networkSettingsLoaded && !networkState?.dhcp_lease ? (
+                <GridCard>
+                  <div className="p-4">
+                    <div className="space-y-4">
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                        {$at("DHCP Lease Information")}
+                      </h3>
+                      <div className="animate-pulse space-y-3">
+                        <div className="h-4 w-1/3 rounded bg-slate-200 dark:bg-slate-700" />
+                        <div className="h-4 w-1/2 rounded bg-slate-200 dark:bg-slate-700" />
+                        <div className="h-4 w-1/3 rounded bg-slate-200 dark:bg-slate-700" />
+                      </div>
                     </div>
                   </div>
-                </div>
-              </GridCard>
-            ) : networkState?.dhcp_lease && networkState.dhcp_lease.ip ? (
-              <DhcpLeaseCard
-                networkState={networkState}
-                setShowRenewLeaseConfirm={setShowRenewLeaseConfirm}
-              />
-            ) : (
-              <EmptyCard
-                IconElm={LuEthernetPort}
-                headline={$at("DHCP Information")}
-                description={$at("No DHCP lease information available")}
-              />
-            )}
-          </AutoHeight>
+                </GridCard>
+              ) : networkState?.dhcp_lease && networkState.dhcp_lease.ip ? (
+                <DhcpLeaseCard
+                  networkState={networkState}
+                  setShowRenewLeaseConfirm={setShowRenewLeaseConfirm}
+                />
+              ) : (
+                <EmptyCard
+                  IconElm={LuEthernetPort}
+                  headline={$at("DHCP Information")}
+                  description={$at("No DHCP lease information available")}
+                />
+              )}
+            </AutoHeight>
+          )}
         </div>
         <div className="space-y-4">
           <SettingsItem title={$at("IPv6 Mode")} description={$at("Configure the IPv6 mode")}>
@@ -453,13 +667,71 @@ export default function SettingsNetworkRoute() {
         open={showRenewLeaseConfirm}
         onClose={() => setShowRenewLeaseConfirm(false)}
         title={$at("Renew DHCP Lease")}
-        description={$at("This will request your DHCP server to assign a new IP address. Your device may lose network connectivity during the process.")}
+        description={$at("Changes will take effect after a restart.")}
         variant="danger"
         confirmText={$at("Renew DHCP Lease")}
         cancelText={$at("Cancel")}
         onConfirm={() => {
           handleRenewLease();
           setShowRenewLeaseConfirm(false);
+        }}
+      />
+      <ConfirmDialog
+        open={showApplyStaticConfirm}
+        onClose={() => setShowApplyStaticConfirm(false)} 
+        title={$at("Save Static IPv4 Settings?")}
+        description={$at("Changes will take effect after a restart.")}
+        variant="warning"
+        confirmText={$at("Confirm")}
+        cancelText={$at("Cancel")}
+        onConfirm={() => {
+          setShowApplyStaticConfirm(false);
+          const dnsArray = ipv4StaticDnsText
+            .split(",")
+            .map(d => d.trim())
+            .filter(d => d.length > 0);
+          const updatedSettings: NetworkSettings = {
+            ...networkSettings,
+            ipv4_static: {
+              ...(networkSettings.ipv4_static || { address: "", netmask: "", gateway: "", dns: [] }),
+              dns: dnsArray,
+            },
+          };
+          setNetworkSettingsRemote(updatedSettings);
+        }}
+      />
+      <ConfirmDialog
+        open={showRequestAddrConfirm}
+        onClose={() => setShowRequestAddrConfirm(false)}
+        title={$at("Save Request Address?")}
+        description={$at("This will save the requested IPv4 address. Changes take effect after a restart.")}
+        variant="warning"
+        confirmText={$at("Save")}
+        cancelText={$at("Cancel")}
+        onConfirm={() => {
+          setShowRequestAddrConfirm(false);
+          handleApplyRequestAddress();
+        }}
+      />
+      <ConfirmDialog
+        open={showIpv4RestartConfirm}
+        onClose={() => setShowIpv4RestartConfirm(false)}
+        title={$at("Change IPv4 Mode?")}
+        description={$at("IPv4 mode changes will take effect after a restart.")}
+        variant="warning"
+        confirmText={$at("Confirm")}
+        cancelText={$at("Cancel")}
+        onConfirm={() => {
+          setShowIpv4RestartConfirm(false);
+          if (pendingIpv4Mode) {
+            const updatedSettings: NetworkSettings = { ...networkSettings, ipv4_mode: pendingIpv4Mode };
+            if (pendingIpv4Mode === "static" && !updatedSettings.ipv4_static) {
+              updatedSettings.ipv4_static = { address: "", netmask: "", gateway: "", dns: [] };
+            }
+            setNetworkSettings(updatedSettings);
+            setNetworkSettingsRemote(updatedSettings);
+            setPendingIpv4Mode(null);
+          }
         }}
       />
     </>

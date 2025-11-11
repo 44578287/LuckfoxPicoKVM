@@ -381,6 +381,95 @@ func rpcGetFrpcStatus() (FrpcStatus, error) {
 	return FrpcStatus{Running: frpcRunning()}, nil
 }
 
+type CloudflaredStatus struct {
+	Running bool `json:"running"`
+}
+
+func cloudflaredRunning() bool {
+	cmd := exec.Command("pgrep", "-x", "cloudflared")
+	return cmd.Run() == nil
+}
+
+var (
+	cloudflaredLogPath = "/tmp/cloudflared.log"
+)
+
+func rpcStartCloudflared(token string) error {
+	if cloudflaredRunning() {
+		_ = exec.Command("pkill", "-x", "cloudflared").Run()
+	}
+	if token == "" {
+		return fmt.Errorf("cloudflared token is empty")
+	}
+	cmd := exec.Command("cloudflared", "tunnel", "run", "--token", token)
+	logFile, err := os.OpenFile(cloudflaredLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer logFile.Close()
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start cloudflared failed: %w", err)
+	}
+	config.CloudflaredAutoStart = true
+	config.CloudflaredToken = token
+	if err := SaveConfig(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+	return nil
+}
+
+func rpcStopCloudflared() error {
+	if cloudflaredRunning() {
+		err := exec.Command("pkill", "-x", "cloudflared").Run()
+		if err != nil {
+			return fmt.Errorf("failed to stop cloudflared: %w", err)
+		}
+	}
+	config.CloudflaredAutoStart = false
+	if err := SaveConfig(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+	return nil
+}
+
+func rpcGetCloudflaredStatus() (CloudflaredStatus, error) {
+	return CloudflaredStatus{Running: cloudflaredRunning()}, nil
+}
+
+func rpcGetCloudflaredLog() (string, error) {
+	f, err := os.Open(cloudflaredLogPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("cloudflared log file not exist")
+		}
+		return "", err
+	}
+	defer f.Close()
+
+	const want = 30
+	lines := make([]string, 0, want+10)
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		lines = append(lines, sc.Text())
+		if len(lines) > want {
+			lines = lines[1:]
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return "", err
+	}
+
+	var buf []byte
+	for _, l := range lines {
+		buf = append(buf, l...)
+		buf = append(buf, '\n')
+	}
+	return string(buf), nil
+}
+
 type EasytierStatus struct {
 	Running bool `json:"running"`
 }
@@ -504,6 +593,175 @@ func rpcGetEasyTierStatus() (EasytierStatus, error) {
 	return EasytierStatus{Running: easytierRunning()}, nil
 }
 
+type VntStatus struct {
+	Running bool `json:"running"`
+}
+
+var (
+	vntLogPath        = "/tmp/vnt.log"
+	vntConfigFilePath = "/userdata/vnt/vnt.ini"
+)
+
+func vntRunning() bool {
+	cmd := exec.Command("pgrep", "-x", "vnt-cli")
+	return cmd.Run() == nil
+}
+
+func rpcGetVntLog() (string, error) {
+	f, err := os.Open(vntLogPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("vnt log file not exist")
+		}
+		return "", err
+	}
+	defer f.Close()
+
+	const want = 30
+	lines := make([]string, 0, want+10)
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		lines = append(lines, sc.Text())
+		if len(lines) > want {
+			lines = lines[1:]
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return "", err
+	}
+
+	var buf []byte
+	for _, l := range lines {
+		buf = append(buf, l...)
+		buf = append(buf, '\n')
+	}
+	return string(buf), nil
+}
+
+func rpcGetVntInfo() (string, error) {
+	cmd := exec.Command("vnt-cli", "--info")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get vnt info: %w", err)
+	}
+
+	return string(output), nil
+}
+
+func rpcGetVntConfig() (VntConfig, error) {
+	return config.VntConfig, nil
+}
+
+func rpcGetVntConfigFile() (string, error) {
+	return config.VntConfig.ConfigFile, nil
+}
+
+func rpcStartVnt(configMode, token, deviceId, name, serverAddr, configFile string, model string, password string) error {
+	if vntRunning() {
+		_ = exec.Command("pkill", "-x", "vnt-cli").Run()
+	}
+
+	var args []string
+
+	if configMode == "file" {
+		// Use config file mode
+		if configFile == "" {
+			return fmt.Errorf("vnt config file is required in file mode")
+		}
+
+		// Save config file
+		_ = os.MkdirAll(filepath.Dir(vntConfigFilePath), 0700)
+		if err := os.WriteFile(vntConfigFilePath, []byte(configFile), 0600); err != nil {
+			return fmt.Errorf("failed to write vnt config file: %w", err)
+		}
+
+		args = []string{"-f", vntConfigFilePath}
+	} else {
+		// Use params mode (default)
+		if token == "" {
+			return fmt.Errorf("vnt token is required in params mode")
+		}
+
+		args = []string{"-k", token}
+
+		if deviceId != "" {
+			args = append(args, "-d", deviceId)
+		}
+
+		if name != "" {
+			args = append(args, "-n", name)
+		}
+
+		if serverAddr != "" {
+			args = append(args, "-s", serverAddr)
+		}
+
+		// Encryption model and password
+		if model != "" {
+			args = append(args, "--model", model)
+		}
+		if password != "" {
+			args = append(args, "-w", password)
+		}
+
+		args = append(args, "--compressor", "lz4")
+	}
+
+	cmd := exec.Command("vnt-cli", args...)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	logFile, err := os.OpenFile(vntLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open vnt log file: %w", err)
+	}
+	defer logFile.Close()
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start vnt failed: %w", err)
+	} else {
+		config.VntAutoStart = true
+		config.VntConfig = VntConfig{
+			ConfigMode: configMode,
+			Token:      token,
+			DeviceId:   deviceId,
+			Name:       name,
+			ServerAddr: serverAddr,
+			ConfigFile: configFile,
+			Model:      model,
+			Password:   password,
+		}
+		if err := SaveConfig(); err != nil {
+			return fmt.Errorf("failed to save config: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func rpcStopVnt() error {
+	if vntRunning() {
+		err := exec.Command("pkill", "-x", "vnt-cli").Run()
+		if err != nil {
+			return fmt.Errorf("failed to stop vnt: %w", err)
+		}
+	}
+
+	config.VntAutoStart = false
+	err := SaveConfig()
+	if err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+	return nil
+}
+
+func rpcGetVntStatus() (VntStatus, error) {
+	return VntStatus{Running: vntRunning()}, nil
+}
+
 func initVPN() {
 	waitVpnCtrlClientConnected()
 	go func() {
@@ -540,6 +798,25 @@ func initVPN() {
 				vpnLogger.Error().Err(err).Msg("Failed to auto start easytier")
 			}
 		}
+
+		if config.VntAutoStart {
+			if config.VntConfig.ConfigMode == "file" && config.VntConfig.ConfigFile != "" {
+				if err := rpcStartVnt("file", "", "", "", "", config.VntConfig.ConfigFile, config.VntConfig.Model, config.VntConfig.Password); err != nil {
+					vpnLogger.Error().Err(err).Msg("Failed to auto start vnt (file mode)")
+				}
+			} else if config.VntConfig.Token != "" {
+				if err := rpcStartVnt("params", config.VntConfig.Token, config.VntConfig.DeviceId, config.VntConfig.Name, config.VntConfig.ServerAddr, "", config.VntConfig.Model, config.VntConfig.Password); err != nil {
+					vpnLogger.Error().Err(err).Msg("Failed to auto start vnt (params mode)")
+				}
+			}
+		}
+
+		if config.CloudflaredAutoStart && config.CloudflaredToken != "" {
+			if err := rpcStartCloudflared(config.CloudflaredToken); err != nil {
+				vpnLogger.Error().Err(err).Msg("Failed to auto start cloudflared")
+			}
+		}
+
 	}()
 
 	go func() {

@@ -2,9 +2,11 @@ package usbgadget
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 )
 
@@ -118,6 +120,10 @@ func (u *UsbGadget) SetOnKeyboardStateChange(f func(state KeyboardState)) {
 	u.onKeyboardStateChange = &f
 }
 
+func (u *UsbGadget) SetOnHidDeviceMissing(f func(device string, err error)) {
+	u.onHidDeviceMissing = &f
+}
+
 func (u *UsbGadget) GetKeyboardState() KeyboardState {
 	u.keyboardStateLock.Lock()
 	defer u.keyboardStateLock.Unlock()
@@ -177,6 +183,16 @@ func (u *UsbGadget) openKeyboardHidFile() error {
 	var err error
 	u.keyboardHidFile, err = os.OpenFile("/dev/hidg0", os.O_RDWR, 0666)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "no such device") {
+			u.log.Error().
+				Str("device", "hidg0").
+				Str("device_name", "keyboard").
+				Err(err).
+				Msg("HID device file missing, gadget may need reinitialization")
+			if u.onHidDeviceMissing != nil {
+				(*u.onHidDeviceMissing)("keyboard", err)
+			}
+		}
 		return fmt.Errorf("failed to open hidg0: %w", err)
 	}
 

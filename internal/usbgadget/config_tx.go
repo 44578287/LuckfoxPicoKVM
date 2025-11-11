@@ -5,6 +5,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/rs/zerolog"
 )
@@ -151,7 +152,10 @@ func (tx *UsbGadgetTransaction) CreateConfigPath() {
 }
 
 func (tx *UsbGadgetTransaction) WriteGadgetConfig() {
+	tx.log.Info().Msg("=== Building USB gadget configuration ===")
+
 	// create kvm gadget path
+	tx.log.Info().Str("path", tx.kvmGadgetPath).Msg("creating kvm gadget path")
 	tx.mkdirAll(
 		"gadget",
 		tx.kvmGadgetPath,
@@ -162,22 +166,43 @@ func (tx *UsbGadgetTransaction) WriteGadgetConfig() {
 	deps := make([]string, 0)
 	deps = append(deps, tx.kvmGadgetPath)
 
+	enabledCount := 0
+	disabledCount := 0
 	for _, val := range tx.orderedConfigItems {
 		key := val.key
 		item := val.item
 
 		// check if the item is enabled in the config
 		if !tx.isGadgetConfigItemEnabled(key) {
+			tx.log.Debug().
+				Str("key", key).
+				Str("device", item.device).
+				Msg("disabling gadget item (not enabled in config)")
 			tx.DisableGadgetItemConfig(item)
+			disabledCount++
 			continue
 		}
+
+		tx.log.Info().
+			Str("key", key).
+			Str("device", item.device).
+			Uint("order", item.order).
+			Msg("configuring gadget item")
 		deps = tx.writeGadgetItemConfig(item, deps)
+		enabledCount++
 	}
 
+	tx.log.Info().
+		Int("enabled_items", enabledCount).
+		Int("disabled_items", disabledCount).
+		Msg("gadget items configuration completed")
+
 	if tx.isGadgetConfigItemEnabled("mtp") {
+		tx.log.Info().Msg("MTP enabled, mounting functionfs and binding UDC")
 		tx.MountFunctionFS()
 		tx.WriteUDC(true)
 	} else {
+		tx.log.Info().Msg("MTP disabled, binding UDC directly")
 		tx.WriteUDC(false)
 	}
 }
@@ -224,6 +249,22 @@ func (tx *UsbGadgetTransaction) writeGadgetItemConfig(item gadgetConfigItem, dep
 	disableGadgetItemKey := fmt.Sprintf("disable-%s", item.device)
 	if item.configPath != nil && item.configAttrs == nil {
 		beforeChange = append(beforeChange, tx.getDisableKeys()...)
+	}
+
+	// 对于 mass storage LUN 属性，需要确保 UDC 未绑定
+	needsUnbind := strings.Contains(gadgetItemPath, "mass_storage") && strings.Contains(gadgetItemPath, "lun.")
+	if needsUnbind {
+		// 添加一个 unbind UDC 的步骤（如果已绑定）
+		udcPath := path.Join(tx.kvmGadgetPath, "UDC")
+		tx.addFileChange("udc-unbind", RequestedFileChange{
+			Key:           "udc-unbind-check",
+			Path:          udcPath,
+			ExpectedState: FileStateFile,
+			Description:   "check and unbind UDC if needed",
+			DependsOn:     files,
+			When:          "beforeChange", // 只在需要时执行
+		})
+		beforeChange = append(beforeChange, "udc-unbind-check")
 	}
 
 	if len(item.attrs) > 0 {
@@ -355,9 +396,12 @@ func (tx *UsbGadgetTransaction) WriteUDC(mtpServer bool) {
 }
 
 func (tx *UsbGadgetTransaction) RebindUsb(ignoreUnbindError bool) {
+	unbindPath := path.Join(tx.dwc3Path, "unbind")
+	bindPath := path.Join(tx.dwc3Path, "bind")
+
 	// remove the gadget from the UDC
 	tx.addFileChange("udc", RequestedFileChange{
-		Path:            path.Join(tx.dwc3Path, "unbind"),
+		Path:            unbindPath,
 		ExpectedState:   FileStateFileWrite,
 		ExpectedContent: []byte(tx.udc),
 		Description:     "unbind UDC",
@@ -366,10 +410,10 @@ func (tx *UsbGadgetTransaction) RebindUsb(ignoreUnbindError bool) {
 	})
 	// bind the gadget to the UDC
 	tx.addFileChange("udc", RequestedFileChange{
-		Path:            path.Join(tx.dwc3Path, "bind"),
+		Path:            bindPath,
 		ExpectedState:   FileStateFileWrite,
 		ExpectedContent: []byte(tx.udc),
 		Description:     "bind UDC",
-		DependsOn:       []string{path.Join(tx.dwc3Path, "unbind")},
+		DependsOn:       []string{unbindPath},
 	})
 }

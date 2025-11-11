@@ -32,6 +32,7 @@ type DHCPClient struct {
 	logger         *zerolog.Logger
 	process        *os.Process
 	onLeaseChange  func(lease *Lease)
+	enabled        bool
 }
 
 type DHCPClientOptions struct {
@@ -57,6 +58,7 @@ func NewDHCPClient(options *DHCPClientOptions) *DHCPClient {
 		pidFile:        options.PidFile,
 		onLeaseChange:  options.OnLeaseChange,
 		requestAddress: options.RequestAddress,
+		enabled:        true,
 	}
 }
 
@@ -87,8 +89,12 @@ func (c *DHCPClient) watchLink() {
 	for update := range ch {
 		if update.Link.Attrs().Name == c.InterfaceName {
 			if update.Flags&unix.IFF_RUNNING != 0 {
-				c.logger.Info().Msg("link is up, starting udhcpc")
-				go c.runUDHCPC()
+				if c.enabled {
+					c.logger.Info().Msg("link is up, starting udhcpc")
+					go c.runUDHCPC()
+				} else {
+					c.logger.Debug().Msg("link is up, DHCP disabled")
+				}
 			} else {
 				c.logger.Info().Msg("link is down")
 			}
@@ -110,6 +116,10 @@ func (w *udhcpcOutput) Write(p []byte) (n int, err error) {
 }
 
 func (c *DHCPClient) runUDHCPC() {
+	if !c.enabled {
+		c.logger.Debug().Msg("DHCP disabled; skipping udhcpc start")
+		return
+	}
 	cmd := exec.Command("udhcpc", "-i", c.InterfaceName, "-t", "1")
 	if c.requestAddress != "" {
 		ip := net.ParseIP(c.requestAddress)
@@ -272,4 +282,30 @@ func (c *DHCPClient) loadLeaseFile() error {
 
 func (c *DHCPClient) GetLease() *Lease {
 	return c.lease
+}
+
+// RequestAddress updates the requested IPv4 address and restarts udhcpc with -r <ip>.
+func (c *DHCPClient) RequestAddress(ip string) error {
+	parsed := net.ParseIP(ip)
+	if parsed == nil || parsed.To4() == nil {
+		return fmt.Errorf("invalid IPv4 address: %s", ip)
+	}
+	c.requestAddress = ip
+	_ = c.KillProcess()
+	go c.runUDHCPC()
+	return nil
+}
+
+// SetEnabled toggles DHCP client behavior. When enabling, it will attempt to start udhcpc.
+// When disabling, it kills any running udhcpc process.
+func (c *DHCPClient) SetEnabled(enable bool) {
+	if c.enabled == enable {
+		return
+	}
+	c.enabled = enable
+	if enable {
+		go c.runUDHCPC()
+	} else {
+		_ = c.KillProcess()
+	}
 }

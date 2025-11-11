@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/prometheus/procfs"
@@ -406,33 +407,79 @@ func (c *ChangeSet) ApplyChanges() error {
 }
 
 func (c *ChangeSet) applyChange(change *FileChange) error {
+	// 记录操作详情
+	contentPreview := ""
+	if len(change.ExpectedContent) > 0 && len(change.ExpectedContent) <= 64 {
+		contentPreview = string(change.ExpectedContent)
+	} else if len(change.ExpectedContent) > 64 {
+		contentPreview = string(change.ExpectedContent[:64]) + "..."
+	}
+
+	defaultLogger.Debug().
+		Str("operation", FileChangeResolvedActionString[change.Action()]).
+		Str("path", change.Path).
+		Str("content_preview", contentPreview).
+		Int("content_length", len(change.ExpectedContent)).
+		Msg("executing file operation")
+
 	switch change.Action() {
 	case FileChangeResolvedActionWriteFile:
+		defaultLogger.Debug().Str("path", change.Path).Msg("writing file")
 		return os.WriteFile(change.Path, change.ExpectedContent, 0644)
 	case FileChangeResolvedActionUpdateFile:
-		return os.WriteFile(change.Path, change.ExpectedContent, 0644)
+		defaultLogger.Debug().Str("path", change.Path).Msg("updating file")
+		err := os.WriteFile(change.Path, change.ExpectedContent, 0644)
+		if err != nil && strings.Contains(err.Error(), "device or resource busy") {
+			defaultLogger.Error().
+				Str("path", change.Path).
+				Str("content", contentPreview).
+				Msg("device or resource busy - gadget may be bound to UDC")
+			return fmt.Errorf("%w (hint: gadget may be bound to UDC, try unbinding first)", err)
+		}
+		return err
 	case FileChangeResolvedActionCreateFile:
+		defaultLogger.Debug().Str("path", change.Path).Msg("creating file")
 		return os.WriteFile(change.Path, change.ExpectedContent, 0644)
 	case FileChangeResolvedActionCreateSymlink:
-		return os.Symlink(string(change.ExpectedContent), change.Path)
+		target := string(change.ExpectedContent)
+		defaultLogger.Debug().
+			Str("path", change.Path).
+			Str("target", target).
+			Msg("creating symlink")
+		return os.Symlink(target, change.Path)
 	case FileChangeResolvedActionRecreateSymlink:
+		target := string(change.ExpectedContent)
+		defaultLogger.Debug().
+			Str("path", change.Path).
+			Str("target", target).
+			Msg("recreating symlink")
 		if err := os.Remove(change.Path); err != nil {
 			return fmt.Errorf("failed to remove symlink: %w", err)
 		}
-		return os.Symlink(string(change.ExpectedContent), change.Path)
+		return os.Symlink(target, change.Path)
 	case FileChangeResolvedActionReorderSymlinks:
+		defaultLogger.Debug().
+			Str("path", change.Path).
+			Int("symlink_count", len(change.ParamSymlinks)).
+			Msg("reordering symlinks")
 		return recreateSymlinks(change, nil)
 	case FileChangeResolvedActionCreateDirectory:
+		defaultLogger.Debug().Str("path", change.Path).Msg("creating directory")
 		return os.MkdirAll(change.Path, 0755)
 	case FileChangeResolvedActionRemove:
+		defaultLogger.Debug().Str("path", change.Path).Msg("removing file")
 		return os.Remove(change.Path)
 	case FileChangeResolvedActionRemoveDirectory:
+		defaultLogger.Debug().Str("path", change.Path).Msg("removing directory")
 		return os.RemoveAll(change.Path)
 	case FileChangeResolvedActionTouch:
+		defaultLogger.Debug().Str("path", change.Path).Msg("touching file")
 		return os.Chtimes(change.Path, time.Now(), time.Now())
 	case FileChangeResolvedActionMountConfigFS:
+		defaultLogger.Debug().Str("path", change.Path).Msg("mounting configfs")
 		return mountConfigFS(change.Path)
 	case FileChangeResolvedActionMountFunctionFS:
+		defaultLogger.Debug().Str("path", change.Path).Msg("mounting functionfs")
 		return mountFunctionFS(change.Path)
 	case FileChangeResolvedActionDoNothing:
 		return nil

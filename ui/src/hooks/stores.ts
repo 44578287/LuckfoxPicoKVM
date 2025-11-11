@@ -346,6 +346,9 @@ interface SettingsState {
   showPressedKeys: boolean;
   setShowPressedKeys: (show: boolean) => void;
 
+  overrideCtrlV: boolean;
+  setOverrideCtrlV: (enabled: boolean) => void;
+
   // Video enhancement settings
   videoSaturation: number;
   setVideoSaturation: (value: number) => void;
@@ -408,6 +411,9 @@ export const useSettingsStore = create(
 
       showPressedKeys: true,
       setShowPressedKeys: show => set({ showPressedKeys: show }),
+
+      overrideCtrlV: false,
+      setOverrideCtrlV: enabled => set({ overrideCtrlV: enabled }),
 
       // Video enhancement settings with default values (1.0 = normal)
       videoSaturation: 1.0,
@@ -524,6 +530,9 @@ export interface HidState {
 
   usbState: "configured" | "attached" | "not attached" | "suspended" | "addressed" | "default";
   setUsbState: (state: HidState["usbState"]) => void;
+
+  isReinitializingGadget: boolean;
+  setIsReinitializingGadget: (reinitializing: boolean) => void;
 }
 
 export const useHidStore = create<HidState>((set, get) => ({
@@ -571,6 +580,9 @@ export const useHidStore = create<HidState>((set, get) => ({
   // Add these new properties for USB state
   usbState: "not attached",
   setUsbState: state => set({ usbState: state }),
+
+  isReinitializingGadget: false,
+  setIsReinitializingGadget: reinitializing => set({ isReinitializingGadget: reinitializing }),
 }));
 
 
@@ -808,15 +820,25 @@ export type TimeSyncMode =
   | "custom"
   | "unknown";
 
+export interface IPv4StaticConfig {
+  address?: string;
+  netmask?: string;
+  gateway?: string;
+  dns?: string[];
+}
+
 export interface NetworkSettings {
   hostname: string;
   domain: string;
   ipv4_mode: IPv4Mode;
+  ipv4_request_address?: string;
+  ipv4_static?: IPv4StaticConfig;
   ipv6_mode: IPv6Mode;
   lldp_mode: LLDPMode;
   lldp_tx_tlvs: string[];
   mdns_mode: mDNSMode;
   time_sync_mode: TimeSyncMode;
+  pending_reboot?: boolean;
 }
 
 export const useNetworkStateStore = create<NetworkState>((set, get) => ({

@@ -10,6 +10,7 @@ import useKeyboard from "@/hooks/useKeyboard";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
 import { cx } from "@/cva.config";
 import { keys, modifiers } from "@/keyboardMappings";
+import { chars } from "@/keyboardLayouts";
 import {
   useHidStore,
   useMouseStore,
@@ -30,15 +31,25 @@ export default function WebRTCVideo() {
   // Video and stream related refs and states
   const videoElm = useRef<HTMLVideoElement>(null);
   const audioElm = useRef<HTMLAudioElement>(null);
+  const pasteCaptureRef = useRef<HTMLTextAreaElement>(null);
   const mediaStream = useRTCStore(state => state.mediaStream);
   const [isPlaying, setIsPlaying] = useState(false);
   const peerConnectionState = useRTCStore(state => state.peerConnectionState);
   const [isPointerLockActive, setIsPointerLockActive] = useState(false);
+  const [mobileScale, setMobileScale] = useState(1);
+  const [mobileTx, setMobileTx] = useState(0);
+  const [mobileTy, setMobileTy] = useState(0);
+  const activeTouchPointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const initialPinchDistance = useRef<number | null>(null);
+  const initialPinchScale = useRef<number>(1);
+  const lastPanPoint = useRef<{ x: number; y: number } | null>(null);
+  const lastTapAt = useRef<number>(0);
   // Store hooks
   const settings = useSettingsStore();
   const { sendKeyboardEvent, resetKeyboardState } = useKeyboard();
   const setMousePosition = useMouseStore(state => state.setMousePosition);
   const setMouseMove = useMouseStore(state => state.setMouseMove);
+  const isReinitializingGadget = useHidStore(state => state.isReinitializingGadget);
   const {
     setClientSize: setVideoClientSize,
     setSize: setVideoSize,
@@ -77,6 +88,66 @@ export default function WebRTCVideo() {
 
   // Misc states and hooks
   const [send] = useJsonRpc();
+
+  const overrideCtrlV = useSettingsStore(state => state.overrideCtrlV);
+  const keyboardLayout = useSettingsStore(state => state.keyboardLayout);
+  const safeKeyboardLayout = useMemo(() => {
+    if (keyboardLayout && keyboardLayout.length > 0) return keyboardLayout;
+    return "en_US";
+  }, [keyboardLayout]);
+
+  const sendTextViaHID = useCallback(async (t: string) => {
+    for (const ch of t) {
+      const mapping = chars[safeKeyboardLayout][ch];
+      if (!mapping || !mapping.key) continue;
+      const { key, shift, altRight, deadKey, accentKey } = mapping;
+      const keyz = [keys[key]];
+      const modz = [(shift ? modifiers["ShiftLeft"] : 0) | (altRight ? modifiers["AltRight"] : 0)];
+      if (deadKey) {
+        keyz.push(keys["Space"]);
+        modz.push(0);
+      }
+      if (accentKey) {
+        keyz.unshift(keys[accentKey.key as keyof typeof keys]);
+        modz.unshift(((accentKey.shift ? modifiers["ShiftLeft"] : 0) | (accentKey.altRight ? modifiers["AltRight"] : 0)));
+      }
+      for (const [index, kei] of keyz.entries()) {
+        await new Promise<void>((resolve, reject) => {
+          send("keyboardReport", { keys: [kei], modifier: modz[index] }, params => {
+            if ("error" in params) return reject(params.error as unknown as Error);
+            send("keyboardReport", { keys: [], modifier: 0 }, params => {
+              if ("error" in params) return reject(params.error as unknown as Error);
+              resolve();
+            });
+          });
+        });
+      }
+    }
+  }, [send, safeKeyboardLayout]);
+
+  const handleGlobalPaste = useCallback(async (e: ClipboardEvent) => {
+    if (!overrideCtrlV) return;
+    e.preventDefault();
+    const txt = e.clipboardData?.getData("text") || "";
+    if (!txt) return;
+    const invalid = [
+      ...new Set(
+        // @ts-expect-error
+        [...new Intl.Segmenter().segment(txt)].map(x => x.segment).filter(ch => !chars[safeKeyboardLayout][ch]),
+      ),
+    ];
+    if (invalid.length > 0) {
+      notifications.error(`Invalid characters: ${invalid.join(", ")}`);
+      return;
+    }
+    if (isReinitializingGadget) return;
+    try {
+      await sendTextViaHID(txt);
+      notifications.success(`Pasted: "${txt}"`);
+    } catch {
+      notifications.error("Failed to paste text");
+    }
+  }, [overrideCtrlV, safeKeyboardLayout, isReinitializingGadget, sendTextViaHID]);
 
   // Video-related
   useResizeObserver({
@@ -223,7 +294,7 @@ export default function WebRTCVideo() {
       }
     };
 
-    document.addEventListener("fullscreenchange ", handleFullscreenChange);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
   }, [releaseKeyboardLock]);
 
   // Mouse-related
@@ -232,16 +303,24 @@ export default function WebRTCVideo() {
   const sendRelMouseMovement = useCallback(
     (x: number, y: number, buttons: number) => {
       if (settings.mouseMode !== "relative") return;
+      // Don't send mouse events while reinitializing gadget
+      if (isReinitializingGadget) return;
       // if we ignore the event, double-click will not work
       // if (x === 0 && y === 0 && buttons === 0) return;
       send("relMouseReport", { dx: calcDelta(x), dy: calcDelta(y), buttons });
       setMouseMove({ x, y, buttons });
     },
-    [send, setMouseMove, settings.mouseMode],
+    [send, setMouseMove, settings.mouseMode, isReinitializingGadget],
   );
 
   const relMouseMoveHandler = useCallback(
     (e: MouseEvent) => {
+      const pt = (e as unknown as PointerEvent).pointerType as unknown as string;
+      if (pt === "touch") {
+        const touchCount = activeTouchPointers.current.size;
+        if (touchCount >= 2) return;
+        if (mobileScale > 1 && lastPanPoint.current) return;
+      }
       if (settings.mouseMode !== "relative") return;
       if (isPointerLockActive === false && isPointerLockPossible) return;
 
@@ -255,15 +334,25 @@ export default function WebRTCVideo() {
   const sendAbsMouseMovement = useCallback(
     (x: number, y: number, buttons: number) => {
       if (settings.mouseMode !== "absolute") return;
+      // Don't send mouse events while reinitializing gadget
+      if (isReinitializingGadget) return;
       send("absMouseReport", { x, y, buttons });
       // We set that for the debug info bar
       setMousePosition(x, y);
     },
-    [send, setMousePosition, settings.mouseMode],
+    [send, setMousePosition, settings.mouseMode, isReinitializingGadget],
   );
 
   const absMouseMoveHandler = useCallback(
     (e: MouseEvent) => {
+      const pt = (e as unknown as PointerEvent).pointerType as unknown as string;
+      if (pt === "touch") {
+        const touchCount = activeTouchPointers.current.size;
+        if (touchCount >= 2) return;
+        if (mobileScale > 1) {
+          return;
+        }
+      }
       if (!videoClientWidth || !videoClientHeight) return;
       if (settings.mouseMode !== "absolute") return;
 
@@ -287,9 +376,13 @@ export default function WebRTCVideo() {
         offsetY = (videoClientHeight - effectiveHeight) / 2;
       }
 
+      // Determine input point (reverse transform for touch when zoomed)
+      const inputOffsetX = pt === "touch" ? Math.max(0, Math.min(videoClientWidth, (e.offsetX - mobileTx) / mobileScale)) : e.offsetX;
+      const inputOffsetY = pt === "touch" ? Math.max(0, Math.min(videoClientHeight, (e.offsetY - mobileTy) / mobileScale)) : e.offsetY;
+
       // Clamp mouse position within the effective video boundaries
-      const clampedX = Math.min(Math.max(offsetX, e.offsetX), offsetX + effectiveWidth);
-      const clampedY = Math.min(Math.max(offsetY, e.offsetY), offsetY + effectiveHeight);
+      const clampedX = Math.min(Math.max(offsetX, inputOffsetX), offsetX + effectiveWidth);
+      const clampedY = Math.min(Math.max(offsetY, inputOffsetY), offsetY + effectiveHeight);
 
       // Map clamped mouse position to the video stream's coordinate system
       const relativeX = (clampedX - offsetX) / effectiveWidth;
@@ -303,11 +396,13 @@ export default function WebRTCVideo() {
       const { buttons } = e;
       sendAbsMouseMovement(x, y, buttons);
     },
-    [settings.mouseMode, videoClientWidth, videoClientHeight, videoWidth, videoHeight, sendAbsMouseMovement],
+    [settings.mouseMode, videoClientWidth, videoClientHeight, videoWidth, videoHeight, sendAbsMouseMovement, mobileScale, mobileTx, mobileTy],
   );
 
   const mouseWheelHandler = useCallback(
     (e: WheelEvent) => {
+      // Don't send wheel events while reinitializing gadget
+      if (isReinitializingGadget) return;
 
       if (settings.scrollThrottling && blockWheelEvent) {
         return;
@@ -339,7 +434,7 @@ export default function WebRTCVideo() {
         setTimeout(() => setBlockWheelEvent(false), settings.scrollThrottling);
       }
     },
-    [send, blockWheelEvent, settings],
+    [send, blockWheelEvent, settings, isReinitializingGadget],
   );
 
   const resetMousePosition = useCallback(() => {
@@ -414,6 +509,16 @@ export default function WebRTCVideo() {
 
   const keyDownHandler = useCallback(
     async (e: KeyboardEvent) => {
+      if (overrideCtrlV && (e.code === "KeyV" || e.key.toLowerCase() === "v") && (e.ctrlKey || e.metaKey)) {
+        console.log("Override Ctrl V");
+        if (isReinitializingGadget) return;
+        if (pasteCaptureRef.current) {
+          pasteCaptureRef.current.value = "";
+          pasteCaptureRef.current.focus();
+        }
+        return;
+      }
+      
       e.preventDefault();
       const prev = useHidStore.getState();
       let code = e.code;
@@ -456,10 +561,15 @@ export default function WebRTCVideo() {
     [
       handleModifierKeys,
       sendKeyboardEvent,
+      send,
       isKeyboardLedManagedByHost,
       setIsNumLockActive,
       setIsCapsLockActive,
       setIsScrollLockActive,
+      overrideCtrlV,
+      pasteCaptureRef,
+      safeKeyboardLayout,
+      isReinitializingGadget,
     ],
   );
 
@@ -568,23 +678,20 @@ export default function WebRTCVideo() {
   );
 
   // Setup Keyboard Events
-  useEffect(
-    function setupKeyboardEvents() {
-      const abortController = new AbortController();
-      const signal = abortController.signal;
+  useEffect(function setupKeyboardEvents() {
+    const abortController = new AbortController();
+    const signal = abortController.signal;
 
-      document.addEventListener("keydown", keyDownHandler, { signal });
-      document.addEventListener("keyup", keyUpHandler, { signal });
+    document.addEventListener("keydown", keyDownHandler, { signal });
+    document.addEventListener("keyup", keyUpHandler, { signal });
 
-      window.addEventListener("blur", resetKeyboardState, { signal });
-      document.addEventListener("visibilitychange", resetKeyboardState, { signal });
+    window.addEventListener("blur", resetKeyboardState, { signal });
+    document.addEventListener("visibilitychange", resetKeyboardState, { signal });
 
-      return () => {
-        abortController.abort();
-      };
-    },
-    [keyDownHandler, keyUpHandler, resetKeyboardState],
-  );
+    return () => {
+      abortController.abort();
+    };
+  }, [keyDownHandler, keyUpHandler, resetKeyboardState]);
 
   // Setup Video Event Listeners
   useEffect(
@@ -607,6 +714,14 @@ export default function WebRTCVideo() {
     },
     [onVideoPlaying, videoKeyUpHandler],
   );
+
+  // Setup Global Paste Listener (register after handleGlobalPaste is defined)
+  useEffect(function setupPasteListener() {
+    const abortController = new AbortController();
+    const signal = abortController.signal;
+    document.addEventListener("paste", handleGlobalPaste, { signal });
+    return () => abortController.abort();
+  }, [handleGlobalPaste]);
 
   // Setup Mouse Events
   useEffect(
@@ -652,6 +767,90 @@ export default function WebRTCVideo() {
   );
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const zoomLayerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = zoomLayerRef.current;
+    if (!el) return;
+    const abortController = new AbortController();
+    const signal = abortController.signal;
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      try { el.setPointerCapture(e.pointerId); } catch {}
+      activeTouchPointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activeTouchPointers.current.size === 1) {
+        const now = Date.now();
+        if (now - lastTapAt.current < 300) {
+          setMobileScale(1);
+          setMobileTx(0);
+          setMobileTy(0);
+        }
+        lastTapAt.current = now;
+        lastPanPoint.current = { x: e.clientX, y: e.clientY };
+      } else if (activeTouchPointers.current.size === 2) {
+        const pts = Array.from(activeTouchPointers.current.values());
+        const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        initialPinchDistance.current = d;
+        initialPinchScale.current = mobileScale;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      const prev = activeTouchPointers.current.get(e.pointerId);
+      activeTouchPointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const pts = Array.from(activeTouchPointers.current.values());
+      if (pts.length === 2 && initialPinchDistance.current) {
+        const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        const factor = d / initialPinchDistance.current;
+        const next = Math.max(1, Math.min(4, initialPinchScale.current * factor));
+        setMobileScale(next);
+      } else if (pts.length === 1 && lastPanPoint.current && prev) {
+        const dx = e.clientX - lastPanPoint.current.x;
+        const dy = e.clientY - lastPanPoint.current.y;
+        lastPanPoint.current = { x: e.clientX, y: e.clientY };
+        setMobileTx(v => v + dx);
+        setMobileTy(v => v + dy);
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      activeTouchPointers.current.delete(e.pointerId);
+      if (activeTouchPointers.current.size < 2) {
+        initialPinchDistance.current = null;
+      }
+      if (activeTouchPointers.current.size === 0) {
+        lastPanPoint.current = null;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    el.addEventListener("pointerdown", onPointerDown, { signal });
+    el.addEventListener("pointermove", onPointerMove, { signal });
+    el.addEventListener("pointerup", onPointerUp, { signal });
+    el.addEventListener("pointercancel", onPointerUp, { signal });
+
+    return () => abortController.abort();
+  }, [mobileScale]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    if (!cw || !ch) return;
+    const maxX = (cw * (mobileScale - 1)) / 2;
+    const maxY = (ch * (mobileScale - 1)) / 2;
+    setMobileTx(x => Math.max(-maxX, Math.min(maxX, x)));
+    setMobileTy(y => Math.max(-maxY, Math.min(maxY, y)));
+  }, [mobileScale]);
 
   const hasNoAutoPlayPermissions = useMemo(() => {
     if (peerConnection?.connectionState !== "connected") return false;
@@ -710,7 +909,15 @@ export default function WebRTCVideo() {
                   {/* In relative mouse mode and under https, we enable the pointer lock, and to do so we need a bar to show the user to click on the video to enable mouse control */}
                   <PointerLockBar show={showPointerLockBar} />
                   <div className="relative mx-4 my-2 flex items-center justify-center overflow-hidden">
-                    <div className="relative flex h-full w-full items-center justify-center">
+                    <div
+                      ref={zoomLayerRef}
+                      className="relative flex h-full w-full items-center justify-center"
+                      style={{
+                        transform: `translate(${mobileTx}px, ${mobileTy}px) scale(${mobileScale})`,
+                        transformOrigin: "center center",
+                        touchAction: "none",
+                      }}
+                    >
                         <video
                           ref={videoElm}
                           autoPlay={true}
@@ -767,6 +974,37 @@ export default function WebRTCVideo() {
       <div>
         <InfoBar />
       </div>
+      <textarea
+        ref={pasteCaptureRef}
+        aria-hidden="true"
+        style={{ position: "fixed", left: -9999, top: -9999, width: 1, height: 1, opacity: 0 }}
+        onPaste={async e => {
+          console.log("Paste event");
+          if (!overrideCtrlV) return;
+          e.preventDefault();
+          const txt = e.clipboardData?.getData("text") || e.currentTarget.value || "";
+          e.currentTarget.blur();
+          if (txt) {
+            const invalid = [
+              ...new Set(
+                // @ts-expect-error
+                [...new Intl.Segmenter().segment(txt)].map(x => x.segment).filter(ch => !chars[safeKeyboardLayout][ch]),
+              ),
+            ];
+            if (invalid.length > 0) {
+              notifications.error(`Invalid characters: ${invalid.join(", ")}`);
+              return;
+            }
+            if (isReinitializingGadget) return;
+            try {
+              await sendTextViaHID(txt);
+              notifications.success(`Pasted: "${txt}"`);
+            } catch {
+              notifications.error("Failed to paste text");
+            }
+          }
+        }}
+      />
     </div>
   );
 }

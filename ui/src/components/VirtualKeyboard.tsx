@@ -44,6 +44,30 @@ function KeyboardWrapper() {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [newPosition, setNewPosition] = useState({ x: 0, y: 0 });
 
+  // State for locked modifier keys
+  const [lockedModifiers, setLockedModifiers] = useState({
+    ctrl: false,
+    alt: false,
+    meta: false,
+    shift: false,
+  });
+
+  // Toggle for modifier key behavior: true = lock mode, false = direct trigger mode
+  const [modifierLockMode, setModifierLockMode] = useState(true);
+
+  // Clear locked modifiers when switching to direct mode
+  useEffect(() => {
+    if (!modifierLockMode) {
+      setLockedModifiers({
+        ctrl: false,
+        alt: false,
+        meta: false,
+        shift: false,
+      });
+      setLayoutName("default");
+    }
+  }, [modifierLockMode]);
+
   const isCapsLockActive = useHidStore(useShallow(state => state.keyboardLedState?.caps_lock));
 
   // HID related states
@@ -132,10 +156,61 @@ function KeyboardWrapper() {
       const cleanKey = key.replace(/[()]/g, "");
       const keyHasShiftModifier = key.includes("(");
 
+      // Check if this is a modifier key press
+      const isModifierKey = key === "ControlLeft" || key === "AltLeft" || key === "MetaLeft" || 
+                           key === "AltRight" || key === "MetaRight" || isKeyShift;
+
       // Handle toggle of layout for shift or caps lock
       const toggleLayout = () => {
         setLayoutName(prevLayout => (prevLayout === "default" ? "shift" : "default"));
       };
+
+      // Handle modifier key press
+      if (key === "ControlLeft") {
+        if (modifierLockMode) {
+          // Lock mode: toggle lock state
+          setLockedModifiers(prev => ({ ...prev, ctrl: !prev.ctrl }));
+        } else {
+          // Direct trigger mode: send key press and release immediately
+          sendKeyboardEvent([], [modifiers["ControlLeft"]]);
+          setTimeout(resetKeyboardState, 100);
+        }
+        return;
+      }
+      if (key === "AltLeft" || key === "AltRight") {
+        if (modifierLockMode) {
+          setLockedModifiers(prev => ({ ...prev, alt: !prev.alt }));
+        } else {
+          sendKeyboardEvent([], [modifiers[key]]);
+          setTimeout(resetKeyboardState, 100);
+        }
+        return;
+      }
+      if (key === "MetaLeft" || key === "MetaRight") {
+        if (modifierLockMode) {
+          setLockedModifiers(prev => ({ ...prev, meta: !prev.meta }));
+        } else {
+          sendKeyboardEvent([], [modifiers[key]]);
+          setTimeout(resetKeyboardState, 100);
+        }
+        return;
+      }
+      if (isKeyShift) {
+        if (modifierLockMode) {
+          setLockedModifiers(prev => ({ ...prev, shift: !prev.shift }));
+          if (lockedModifiers.shift) {
+            // If unlocking shift, return to default layout
+            setLayoutName("default");
+          } else {
+            // If locking shift, switch to shift layout
+            toggleLayout();
+          }
+        } else {
+          sendKeyboardEvent([], [modifiers["ShiftLeft"]]);
+          setTimeout(resetKeyboardState, 100);
+        }
+        return;
+      }
 
       if (key === "CtrlAltDelete") {
         sendKeyboardEvent(
@@ -166,7 +241,7 @@ function KeyboardWrapper() {
         return;
       }
 
-      if (isKeyShift || isKeyCaps) {
+      if (isKeyCaps) {
         toggleLayout();
 
         if (isCapsLockActive) {
@@ -185,24 +260,60 @@ function KeyboardWrapper() {
 
       // Collect new active keys and modifiers
       const newKeys = keys[cleanKey] ? [keys[cleanKey]] : [];
-      const newModifiers =
-        keyHasShiftModifier && !isCapsLockActive ? [modifiers["ShiftLeft"]] : [];
+      const newModifiers: number[] = [];
+
+      // Add locked modifiers
+      if (lockedModifiers.ctrl) {
+        newModifiers.push(modifiers["ControlLeft"]);
+      }
+      if (lockedModifiers.alt) {
+        newModifiers.push(modifiers["AltLeft"]);
+      }
+      if (lockedModifiers.meta) {
+        newModifiers.push(modifiers["MetaLeft"]);
+      }
+      if (lockedModifiers.shift && !isCapsLockActive) {
+        newModifiers.push(modifiers["ShiftLeft"]);
+      }
+
+      // Add shift modifier for keys with parentheses (if not caps lock and shift not locked)
+      if (keyHasShiftModifier && !isCapsLockActive && !lockedModifiers.shift) {
+        newModifiers.push(modifiers["ShiftLeft"]);
+      }
 
       // Update current keys and modifiers
       sendKeyboardEvent(newKeys, newModifiers);
 
-      // If shift was used as a modifier and caps lock is not active, revert to default layout
-      if (keyHasShiftModifier && !isCapsLockActive) {
+      // If shift was used as a modifier and caps lock is not active and shift is not locked, revert to default layout
+      if (keyHasShiftModifier && !isCapsLockActive && !lockedModifiers.shift) {
+        setLayoutName("default");
+      }
+
+      // Auto-unlock modifiers after regular key press (not for combination keys)
+      if (!isModifierKey && newKeys.length > 0) {
+        setLockedModifiers({
+          ctrl: false,
+          alt: false,
+          meta: false,
+          shift: false,
+        });
         setLayoutName("default");
       }
 
       setTimeout(resetKeyboardState, 100);
     },
-    [isCapsLockActive, isKeyboardLedManagedByHost, sendKeyboardEvent, resetKeyboardState, setIsCapsLockActive],
+    [isCapsLockActive, isKeyboardLedManagedByHost, sendKeyboardEvent, resetKeyboardState, setIsCapsLockActive, lockedModifiers, modifierLockMode],
   );
 
   const virtualKeyboard = useHidStore(state => state.isVirtualKeyboardEnabled);
   const setVirtualKeyboard = useHidStore(state => state.setVirtualKeyboardEnabled);
+
+  const modifierLockButtons = [
+    lockedModifiers.ctrl ? "ControlLeft" : "",
+    lockedModifiers.alt ? "AltLeft AltRight" : "",
+    lockedModifiers.meta ? "MetaLeft MetaRight" : "",
+    lockedModifiers.shift ? "ShiftLeft ShiftRight" : "",
+  ].filter(Boolean).join(" ").trim();
 
   return (
     <div
@@ -259,9 +370,11 @@ function KeyboardWrapper() {
                       />
                     )}
                   </div>
-                  <h2 className="select-none self-center font-sans text-[12px] text-slate-700 dark:text-slate-300">
-                    {$at("Virtual Keyboard")}
-                  </h2>
+                  <div className="flex flex-col items-center gap-y-1">
+                    <h2 className="select-none self-center font-sans text-[12px] text-slate-700 dark:text-slate-300">
+                      {$at("Virtual Keyboard")}
+                    </h2>
+                  </div>
                   <div className="absolute right-2">
                     <Button
                       size="XS"
@@ -274,21 +387,64 @@ function KeyboardWrapper() {
                 </div>
 
                 <div>
+                  {/* First row with Lock Mode and combination keys */}
+                  <div className="flex items-center bg-blue-50/80 md:flex-row dark:bg-slate-700 gap-x-2 px-2 py-1">
+                    {/* Lock Mode toggle - positioned before Ctrl+Alt+Delete */}
+                    <div className="flex items-center gap-x-2">
+                      <span className="text-[10px] text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        {$at("Lock Mode")}
+                      </span>
+                      <button
+                        onClick={() => setModifierLockMode(!modifierLockMode)}
+                        className={cx(
+                          "relative inline-flex h-4 w-8 items-center rounded-full transition-colors",
+                          modifierLockMode ? "bg-blue-500" : "bg-slate-300 dark:bg-slate-600"
+                        )}
+                        title={modifierLockMode ? $at("Click to switch to direct trigger mode") : $at("Click to switch to lock mode")}
+                      >
+                        <span
+                          className={cx(
+                            "inline-block h-3 w-3 transform rounded-full bg-white transition-transform",
+                            modifierLockMode ? "translate-x-4" : "translate-x-1"
+                          )}
+                        />
+                      </button>
+                    </div>
+                    {/* Combination keys */}
+                    <div className="flex items-center gap-x-1">
+                      <button
+                        className="hg-button combination-key inline-flex h-auto w-auto grow-0 py-1 px-2 text-xs border border-b border-slate-800/25 border-b-slate-800/25 shadow-xs dark:bg-slate-800 dark:text-white"
+                        onClick={() => onKeyDown("CtrlAltDelete")}
+                      >
+                        Ctrl + Alt + Delete
+                      </button>
+                      <button
+                        className="hg-button combination-key inline-flex h-auto w-auto grow-0 py-1 px-2 text-xs border border-b border-slate-800/25 border-b-slate-800/25 shadow-xs dark:bg-slate-800 dark:text-white"
+                        onClick={() => onKeyDown("AltMetaEscape")}
+                      >
+                        Alt + Meta + Escape
+                      </button>
+                      <button
+                        className="hg-button combination-key inline-flex h-auto w-auto grow-0 py-1 px-2 text-xs border border-b border-slate-800/25 border-b-slate-800/25 shadow-xs dark:bg-slate-800 dark:text-white"
+                        onClick={() => onKeyDown("CtrlAltBackspace")}
+                      >
+                        Ctrl + Alt + Backspace
+                      </button>
+                    </div>
+                  </div>
                   <div className="flex flex-col bg-blue-50/80 md:flex-row dark:bg-slate-700">
                     <Keyboard
                       baseClass="simple-keyboard-main"
                       layoutName={layoutName}
                       onKeyPress={onKeyDown}
-                      buttonTheme={[
-                        {
-                          class: "combination-key",
-                          buttons: "CtrlAltDelete AltMetaEscape CtrlAltBackspace",
-                        },
-                      ]}
+                      buttonTheme={
+                        modifierLockMode && modifierLockButtons
+                          ? [{ class: "modifier-locked", buttons: modifierLockButtons }]
+                          : []
+                      }
                       display={keyDisplayMap}
                       layout={{
                         default: [
-                          "CtrlAltDelete AltMetaEscape CtrlAltBackspace",
                           "Escape F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12",
                           "Backquote Digit1 Digit2 Digit3 Digit4 Digit5 Digit6 Digit7 Digit8 Digit9 Digit0 Minus Equal Backspace",
                           "Tab KeyQ KeyW KeyE KeyR KeyT KeyY KeyU KeyI KeyO KeyP BracketLeft BracketRight Backslash",
@@ -297,7 +453,6 @@ function KeyboardWrapper() {
                           "ControlLeft AltLeft MetaLeft Space MetaRight AltRight",
                         ],
                         shift: [
-                          "CtrlAltDelete AltMetaEscape CtrlAltBackspace",
                           "Escape F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12",
                           "(Backquote) (Digit1) (Digit2) (Digit3) (Digit4) (Digit5) (Digit6) (Digit7) (Digit8) (Digit9) (Digit0) (Minus) (Equal) (Backspace)",
                           "Tab (KeyQ) (KeyW) (KeyE) (KeyR) (KeyT) (KeyY) (KeyU) (KeyI) (KeyO) (KeyP) (BracketLeft) (BracketRight) (Backslash)",

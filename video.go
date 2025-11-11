@@ -49,3 +49,8 @@ func HandleVideoStateMessage(event CtrlResponse) {
 func rpcGetVideoState() (VideoInputState, error) {
 	return lastVideoState, nil
 }
+
+func setForceHpd() error {
+	err := rpcSetForceHpd(config.ForceHpd)
+	return err
+}

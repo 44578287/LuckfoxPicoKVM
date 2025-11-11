@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import notifications from "@/notifications";
 
 import { useHidStore, useRTCStore } from "@/hooks/stores";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
@@ -11,18 +12,31 @@ export default function useKeyboard() {
   const updateActiveKeysAndModifiers = useHidStore(
     state => state.updateActiveKeysAndModifiers,
   );
+  const isReinitializingGadget = useHidStore(state => state.isReinitializingGadget);
+  const usbState = useHidStore(state => state.usbState);
 
   const sendKeyboardEvent = useCallback(
     (keys: number[], modifiers: number[]) => {
       if (rpcDataChannel?.readyState !== "open") return;
+      // Don't send keyboard events while reinitializing gadget
+      if (isReinitializingGadget) return;
+      if (usbState !== "configured") return;
+      
       const accModifier = modifiers.reduce((acc, val) => acc + val, 0);
 
-      send("keyboardReport", { keys, modifier: accModifier });
+      send("keyboardReport", { keys, modifier: accModifier }, resp => {
+        if ("error" in resp) {
+          const msg = (resp.error.data as string) || resp.error.message || "";
+          if (msg.includes("cannot send after transport endpoint shutdown") && usbState === "configured") {
+            notifications.error("Please check if the cable and connection are stable.", { duration: 5000 });
+          }
+        }
+      });
 
       // We do this for the info bar to display the currently pressed keys for the user
       updateActiveKeysAndModifiers({ keys: keys, modifiers: modifiers });
     },
-    [rpcDataChannel?.readyState, send, updateActiveKeysAndModifiers],
+    [rpcDataChannel?.readyState, send, updateActiveKeysAndModifiers, isReinitializingGadget, usbState],
   );
 
   const resetKeyboardState = useCallback(() => {

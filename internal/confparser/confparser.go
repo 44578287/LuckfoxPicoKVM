@@ -345,15 +345,35 @@ func (f *FieldConfig) validateField() error {
 		return nil
 	}
 
-	val, err := toString(f.CurrentValue)
-	if err != nil {
-		return fmt.Errorf("field `%s` cannot use validate_type: %s", f.Name, err)
+	switch v := f.CurrentValue.(type) {
+	case []string:
+		// Validate each element in the slice
+		for _, item := range v {
+			if item == "" {
+				continue
+			}
+			if err := f.validateScalarValue(item); err != nil {
+				return err
+			}
+		}
+	default:
+		val, err := toString(f.CurrentValue)
+		if err != nil {
+			return fmt.Errorf("field `%s` cannot use validate_type: %s", f.Name, err)
+		}
+		if val == "" {
+			return nil
+		}
+		if err := f.validateScalarValue(val); err != nil {
+			return err
+		}
 	}
 
-	if val == "" {
-		return nil
-	}
+	return nil
+}
 
+// validateScalarValue applies ValidateTypes to a single string value.
+func (f *FieldConfig) validateScalarValue(val string) error {
 	for _, validateType := range f.ValidateTypes {
 		switch validateType {
 		case "ipv4":
@@ -376,6 +396,5 @@ func (f *FieldConfig) validateField() error {
 			return fmt.Errorf("field `%s` cannot use validate_type: unsupported validator: %s", f.Name, validateType)
 		}
 	}
-
 	return nil
 }

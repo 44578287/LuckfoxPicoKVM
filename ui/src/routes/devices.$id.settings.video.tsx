@@ -8,6 +8,7 @@ import { useSettingsStore } from "@/hooks/stores";
 
 import notifications from "../notifications";
 import { SelectMenuBasic } from "../components/SelectMenuBasic";
+import Checkbox from "../components/Checkbox";
 
 import { SettingsItem } from "./devices.$id.settings";
 import {useReactAt} from 'i18n-auto-extractor/react'
@@ -48,6 +49,7 @@ export default function SettingsVideoRoute() {
   const [streamQuality, setStreamQuality] = useState("1");
   const [customEdidValue, setCustomEdidValue] = useState<string | null>(null);
   const [edid, setEdid] = useState<string | null>(null);
+  const [forceHpd, setForceHpd] = useState(false);
 
   // Video enhancement settings from store
   const videoSaturation = useSettingsStore(state => state.videoSaturation);
@@ -85,7 +87,31 @@ export default function SettingsVideoRoute() {
         setCustomEdidValue(receivedEdid);
       }
     });
+    
+    send("getForceHpd", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(`Failed to get force EDID output: ${resp.error.data || "Unknown error"}`);
+        setForceHpd(false);
+        return;
+      }
+
+      setForceHpd(resp.result as boolean);
+    });
+    
   }, [send]);
+
+  const handleForceHpdChange = (checked: boolean) => {
+    send("setForceHpd", { forceHpd: checked }, resp => { // 修复参数名称为forceHpd
+      if ("error" in resp) {
+        notifications.error(`Failed to set force EDID output: ${resp.error.data || "Unknown error"}`);
+        setForceHpd(!checked);
+        return;
+      }
+
+      notifications.success(`Force EDID output ${checked ? "enabled" : "disabled"}`);
+      setForceHpd(checked);
+    });
+  };
  
   const handleStreamQualityChange = (factor: string) => {
     send("setStreamQualityFactor", { factor: Number(factor) }, resp => {
@@ -204,6 +230,17 @@ export default function SettingsVideoRoute() {
                 />
               </div>
             </div>
+
+            {/* EDID Force Output Setting */}
+            <SettingsItem
+              title={$at("Force EDID Output")}
+              description={$at("Force EDID output even when no display is connected")}
+            >
+              <Checkbox
+                checked={forceHpd}
+                onChange={e => handleForceHpdChange(e.target.checked)}
+              />
+            </SettingsItem>
 
             <SettingsItem
               title="EDID"

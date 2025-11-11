@@ -31,8 +31,9 @@ func Main() {
 		Interface("app_version", appVersionLocal).
 		Msg("starting KVM")
 
-	go runWatchdog()
+	//go runWatchdog()
 	go confirmCurrentSystem() //A/B system
+	go setForceHpd()
 
 	http.DefaultClient.Timeout = 1 * time.Minute
 

@@ -13,6 +13,7 @@ import { keys, modifiers } from "@/keyboardMappings";
 import { layouts, chars } from "@/keyboardLayouts";
 import notifications from "@/notifications";
 import {useReactAt} from 'i18n-auto-extractor/react'
+import { Checkbox } from "@/components/Checkbox";
 
 const hidKeyboardPayload = (keys: number[], modifier: number) => {
   return { keys, modifier };
@@ -28,11 +29,15 @@ export default function PasteModal() {
   const TextAreaRef = useRef<HTMLTextAreaElement>(null);
   const setPasteMode = useHidStore(state => state.setPasteModeEnabled);
   const setDisableVideoFocusTrap = useUiStore(state => state.setDisableVideoFocusTrap);
+  const isReinitializingGadget = useHidStore(state => state.isReinitializingGadget);
 
   const [send] = useJsonRpc();
   const rpcDataChannel = useRTCStore(state => state.rpcDataChannel);
 
   const [invalidChars, setInvalidChars] = useState<string[]>([]);
+  const overrideCtrlV = useSettingsStore(state => state.overrideCtrlV);
+  const setOverrideCtrlV = useSettingsStore(state => state.setOverrideCtrlV);
+  const [pasteBuffer, setPasteBuffer] = useState<string>("");
   const close = useClose();
 
   const keyboardLayout = useSettingsStore(state => state.keyboardLayout);
@@ -59,54 +64,126 @@ export default function PasteModal() {
     setPasteMode(false);
     setDisableVideoFocusTrap(false);
     setInvalidChars([]);
+    // keep override state persistent via settings store; do not reset here
   }, [setDisableVideoFocusTrap, setPasteMode]);
 
   const onConfirmPaste = useCallback(async () => {
     setPasteMode(false);
     setDisableVideoFocusTrap(false);
     if (rpcDataChannel?.readyState !== "open" || !TextAreaRef.current) return;
+    // Don't send keyboard events while reinitializing gadget
+    if (isReinitializingGadget) {
+      notifications.error("USB gadget is reinitializing, please wait...");
+      return;
+    }
     if (!safeKeyboardLayout) return;
     if (!chars[safeKeyboardLayout]) return;
     const text = TextAreaRef.current.value;
+    const sendText = async (t: string) => {
+      try {
+        for (const char of t) {
+          const mapping = chars[safeKeyboardLayout][char];
+          if (!mapping || !mapping.key) continue;
+          const { key, shift, altRight, deadKey, accentKey } = mapping;
 
-    try {
-      for (const char of text) {
-        const { key, shift, altRight, deadKey, accentKey } = chars[safeKeyboardLayout][char]
-        if (!key) continue;
+          const keyz = [keys[key]];
+          const modz = [modifierCode(shift, altRight)];
 
-        const keyz = [ keys[key] ];
-        const modz = [ modifierCode(shift, altRight) ];
-
-        if (deadKey) {
+          if (deadKey) {
             keyz.push(keys["Space"]);
             modz.push(noModifier);
-        }
-        if (accentKey) {
-            keyz.unshift(keys[accentKey.key])
-            modz.unshift(modifierCode(accentKey.shift, accentKey.altRight))
-        }
+          }
+          if (accentKey) {
+            keyz.unshift(keys[accentKey.key]);
+            modz.unshift(modifierCode(accentKey.shift, accentKey.altRight));
+          }
 
-        for (const [index, kei] of keyz.entries()) {
-          await new Promise<void>((resolve, reject) => {
-            send(
-              "keyboardReport",
-              hidKeyboardPayload([kei], modz[index]),
-              params => {
-                if ("error" in params) return reject(params.error);
-                send("keyboardReport", hidKeyboardPayload([], 0), params => {
+          for (const [index, kei] of keyz.entries()) {
+            await new Promise<void>((resolve, reject) => {
+              send(
+                "keyboardReport",
+                hidKeyboardPayload([kei], modz[index]),
+                params => {
                   if ("error" in params) return reject(params.error);
-                  resolve();
-                });
-              },
-            );
-          });
+                  send("keyboardReport", hidKeyboardPayload([], 0), params => {
+                    if ("error" in params) return reject(params.error);
+                    resolve();
+                  });
+                },
+              );
+            });
+          }
         }
+        notifications.success(`Pasted: "${t}"`);
+      } catch (error) {
+        notifications.error("Failed to paste text");
       }
-    } catch (error) {
-      console.error(error);
-      notifications.error("Failed to paste text");
-    }
-  }, [rpcDataChannel?.readyState, send, setDisableVideoFocusTrap, setPasteMode, safeKeyboardLayout]);
+    };
+
+    await sendText(text);
+  }, [rpcDataChannel?.readyState, send, setDisableVideoFocusTrap, setPasteMode, safeKeyboardLayout, isReinitializingGadget]);
+
+  const readClipboardToBufferAndSend = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setPasteBuffer(text);
+      const segInvalid = [
+        ...new Set(
+          // @ts-expect-error TS doesn't recognize Intl.Segmenter in some environments
+          [...new Intl.Segmenter().segment(text)]
+            .map(x => x.segment)
+            .filter(char => !chars[safeKeyboardLayout][char]),
+        ),
+      ];
+      setInvalidChars(segInvalid);
+      if (segInvalid.length === 0) {
+        if (rpcDataChannel?.readyState !== "open" || isReinitializingGadget) return;
+        const sendText = async (t: string) => {
+          try {
+            for (const char of t) {
+              const mapping = chars[safeKeyboardLayout][char];
+              if (!mapping || !mapping.key) continue;
+              const { key, shift, altRight, deadKey, accentKey } = mapping;
+
+              const keyz = [keys[key]];
+              const modz = [modifierCode(shift, altRight)];
+
+              if (deadKey) {
+                keyz.push(keys["Space"]);
+                modz.push(noModifier);
+              }
+              if (accentKey) {
+                keyz.unshift(keys[accentKey.key]);
+                modz.unshift(modifierCode(accentKey.shift, accentKey.altRight));
+              }
+
+              for (const [index, kei] of keyz.entries()) {
+                await new Promise<void>((resolve, reject) => {
+                  send(
+                    "keyboardReport",
+                    hidKeyboardPayload([kei], modz[index]),
+                    params => {
+                      if ("error" in params) return reject(params.error);
+                      send("keyboardReport", hidKeyboardPayload([], 0), params => {
+                        if ("error" in params) return reject(params.error);
+                        resolve();
+                      });
+                    },
+                  );
+                });
+              }
+            }
+            notifications.success(`Pasted: "${t}"`);
+          } catch (error) {
+            notifications.error("Failed to paste text");
+          }
+        };
+        await sendText(text);
+      } else {
+        notifications.error(`Invalid characters: ${segInvalid.join(", ")}`);
+      }
+    } catch {}
+  }, [safeKeyboardLayout, rpcDataChannel?.readyState, isReinitializingGadget, send]);
 
   useEffect(() => {
     if (TextAreaRef.current) {
@@ -125,6 +202,18 @@ export default function PasteModal() {
                 description={$at("Paste text from your client to the remote host")}
               />
 
+              <div className="flex items-center">
+                <label className="flex items-center gap-x-2 text-sm">
+                  <Checkbox
+                    checked={overrideCtrlV}
+                    onChange={e => setOverrideCtrlV(e.target.checked)}
+                  />
+                  <span className="text-slate-700 dark:text-slate-300">
+                    {$at("Use Ctrl+V to paste clipboard to remote")}
+                  </span>
+                </label>
+              </div>
+              
               <div
                 className="animate-fadeIn opacity-0 space-y-2"
                 style={{
@@ -133,44 +222,122 @@ export default function PasteModal() {
                 }}
               >
                 <div>
-                  <div className="w-full" onKeyUp={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
-                    <TextAreaWithLabel
-                      ref={TextAreaRef}
-                      label={$at("Paste from host")}
-                      rows={4}
-                      onKeyUp={e => e.stopPropagation()}
-                      onKeyDown={e => {
-                        e.stopPropagation();
-                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                          e.preventDefault();
-                          onConfirmPaste();
-                        } else if (e.key === "Escape") {
-                          e.preventDefault();
-                          onCancelPasteMode();
+                  <div
+                    className="w-full"
+                    onKeyUp={e => e.stopPropagation()}
+                    onKeyDown={e => {
+                      e.stopPropagation();
+                      if (overrideCtrlV && (e.key.toLowerCase() === "v" || e.code === "KeyV") && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault();
+                        readClipboardToBufferAndSend();
+                      }
+                    }}
+                    onPaste={e => {
+                      if (overrideCtrlV) {
+                        e.preventDefault();
+                        const txt = e.clipboardData?.getData("text") || "";
+                        if (txt) {
+                          setPasteBuffer(txt);
+                          const segInvalid = [
+                            ...new Set(
+                              // @ts-expect-error TS doesn't recognize Intl.Segmenter in some environments
+                              [...new Intl.Segmenter().segment(txt)]
+                                .map(x => x.segment)
+                                .filter(char => !chars[safeKeyboardLayout][char]),
+                            ),
+                          ];
+                          setInvalidChars(segInvalid);
+                          if (segInvalid.length === 0) {
+                            if (rpcDataChannel?.readyState === "open" && !isReinitializingGadget) {
+                              const sendText = async (t: string) => {
+                                try {
+                                  for (const char of t) {
+                                    const mapping = chars[safeKeyboardLayout][char];
+                                    if (!mapping || !mapping.key) continue;
+                                    const { key, shift, altRight, deadKey, accentKey } = mapping;
+                                    const keyz = [keys[key]];
+                                    const modz = [modifierCode(shift, altRight)];
+                                    if (deadKey) {
+                                      keyz.push(keys["Space"]);
+                                      modz.push(noModifier);
+                                    }
+                                    if (accentKey) {
+                                      keyz.unshift(keys[accentKey.key]);
+                                      modz.unshift(modifierCode(accentKey.shift, accentKey.altRight));
+                                    }
+                                    for (const [index, kei] of keyz.entries()) {
+                                      await new Promise<void>((resolve, reject) => {
+                                        send(
+                                          "keyboardReport",
+                                          hidKeyboardPayload([kei], modz[index]),
+                                          params => {
+                                            if ("error" in params) return reject(params.error);
+                                            send("keyboardReport", hidKeyboardPayload([], 0), params => {
+                                              if ("error" in params) return reject(params.error);
+                                              resolve();
+                                            });
+                                          },
+                                        );
+                                      });
+                                    }
+                                  }
+                                  notifications.success(`Pasted: "${t}"`);
+                                } catch (error) {
+                                  notifications.error("Failed to paste text");
+                                }
+                              };
+                              sendText(txt);
+                            }
+                          } else {
+                            notifications.error(`Invalid characters: ${segInvalid.join(", ")}`);
+                          }
+                        } else {
+                          readClipboardToBufferAndSend();
                         }
-                      }}
-                      onChange={e => {
-                        const value = e.target.value;
-                        const invalidChars = [
-                          ...new Set(
-                            // @ts-expect-error TS doesn't recognize Intl.Segmenter in some environments
-                            [...new Intl.Segmenter().segment(value)]
-                              .map(x => x.segment)
-                              .filter(char => !chars[safeKeyboardLayout][char]),
-                          ),
-                        ];
+                      }
+                    }}
+                  >
+                    {!overrideCtrlV && (
+                      <>
+                        <TextAreaWithLabel
+                          ref={TextAreaRef}
+                          label={$at("Paste from host")}
+                          rows={4}
+                          onKeyUp={e => e.stopPropagation()}
+                          onKeyDown={e => {
+                            e.stopPropagation();
+                            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                              e.preventDefault();
+                              onConfirmPaste();
+                            } else if (e.key === "Escape") {
+                              e.preventDefault();
+                              onCancelPasteMode();
+                            }
+                          }}
+                          onChange={e => {
+                            const value = e.target.value;
+                            const invalidChars = [
+                              ...new Set(
+                                // @ts-expect-error TS doesn't recognize Intl.Segmenter in some environments
+                                [...new Intl.Segmenter().segment(value)]
+                                  .map(x => x.segment)
+                                  .filter(char => !chars[safeKeyboardLayout][char]),
+                              ),
+                            ];
 
-                        setInvalidChars(invalidChars);
-                      }}
-                    />
+                            setInvalidChars(invalidChars);
+                          }}
+                        />
 
-                    {invalidChars.length > 0 && (
-                      <div className="mt-2 flex items-center gap-x-2">
-                        <ExclamationCircleIcon className="h-4 w-4 text-red-500 dark:text-red-400" />
-                        <span className="text-xs text-red-500 dark:text-red-400">
-                          {$at("The following characters will not be pasted:")} {invalidChars.join(", ")}
-                        </span>
-                      </div>
+                        {invalidChars.length > 0 && (
+                          <div className="mt-2 flex items-center gap-x-2">
+                            <ExclamationCircleIcon className="h-4 w-4 text-red-500 dark:text-red-400" />
+                            <span className="text-xs text-red-500 dark:text-red-400">
+                              {$at("The following characters will not be pasted:")} {invalidChars.join(", ")}
+                            </span>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -199,13 +366,15 @@ export default function PasteModal() {
               close();
             }}
           />
-          <Button
-            size="SM"
-            theme="primary"
-            text={$at("Confirm paste")}
-            onClick={onConfirmPaste}
-            LeadingIcon={LuCornerDownLeft}
-          />
+          {!overrideCtrlV && (
+            <Button
+              size="SM"
+              theme="primary"
+              text={$at("Confirm paste")}
+              onClick={onConfirmPaste}
+              LeadingIcon={LuCornerDownLeft}
+            />
+          )}
         </div>
       </div>
     </GridCard>

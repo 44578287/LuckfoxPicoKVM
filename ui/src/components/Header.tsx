@@ -90,7 +90,7 @@ export default function DashboardNavbar({
             <div className="inline-block shrink-0">
               <div className="flex items-center gap-4">
                 <a 
-                  href="https://wiki.luckfox.com/Luckfox-Pico/Download" 
+                  href="https://wiki.luckfox.com/intro/" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="flex items-center gap-4"

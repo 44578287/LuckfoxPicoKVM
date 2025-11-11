@@ -1,8 +1,10 @@
 package usbgadget
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 )
 
 var relativeMouseConfig = gadgetConfigItem{
@@ -59,7 +61,19 @@ func (u *UsbGadget) relMouseWriteHidFile(data []byte) error {
 		var err error
 		u.relMouseHidFile, err = os.OpenFile("/dev/hidg2", os.O_RDWR, 0666)
 		if err != nil {
-			return fmt.Errorf("failed to open hidg1: %w", err)
+
+			if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "no such device") {
+				u.log.Error().
+					Str("device", "hidg2").
+					Str("device_name", "relative_mouse").
+					Err(err).
+					Msg("HID device file missing, gadget may need reinitialization")
+
+				if u.onHidDeviceMissing != nil {
+					(*u.onHidDeviceMissing)("relative_mouse", err)
+				}
+			}
+			return fmt.Errorf("failed to open hidg2: %w", err)
 		}
 	}
 

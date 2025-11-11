@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pion/webrtc/v4"
@@ -248,6 +249,51 @@ func rpcSetEDID(edid string) error {
 	config.EdidString = edid
 	_ = SaveConfig()
 	return nil
+}
+
+func rpcSetForceHpd(forceHpd bool) error {
+	forceHpdValue := 0
+	if forceHpd {
+		forceHpdValue = 1
+	}
+
+	forceHpdPath := "/sys/module/tc35874x/parameters/force_hpd"
+	err := os.WriteFile(forceHpdPath, []byte(fmt.Sprintf("%d\n", forceHpdValue)), 0644)
+	if err != nil {
+		logger.Error().Err(err).Bool("force_hpd", forceHpd).Msg("Failed to set force_hpd parameter")
+		return fmt.Errorf("failed to set force_hpd parameter: %w", err)
+	}
+
+	logger.Info().Bool("force_hpd", forceHpd).Msg("Force HPD setting applied")
+
+	config.ForceHpd = forceHpd
+	if err := SaveConfig(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	return nil
+}
+
+func rpcGetForceHpd() (bool, error) {
+	forceHpdPath := "/sys/module/tc35874x/parameters/force_hpd"
+	data, err := os.ReadFile(forceHpdPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return config.ForceHpd, nil
+		}
+		logger.Error().Err(err).Msg("Failed to read force_hpd parameter")
+		return config.ForceHpd, fmt.Errorf("failed to read force_hpd parameter: %w", err)
+	}
+
+	forceHpdValue := strings.TrimSpace(string(data))
+	if forceHpdValue == "1" {
+		return true, nil
+	} else if forceHpdValue == "0" {
+		return false, nil
+	} else {
+		logger.Warn().Str("force_hpd_value", forceHpdValue).Msg("Unexpected force_hpd value, using config value")
+		return config.ForceHpd, nil
+	}
 }
 
 func rpcGetDevChannelState() (bool, error) {
@@ -1050,6 +1096,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"getNetworkSettings":       {Func: rpcGetNetworkSettings},
 	"setNetworkSettings":       {Func: rpcSetNetworkSettings, Params: []string{"settings"}},
 	"renewDHCPLease":           {Func: rpcRenewDHCPLease},
+	"requestDHCPAddress":       {Func: rpcRequestDHCPAddress, Params: []string{"ip"}},
 	"keyboardReport":           {Func: rpcKeyboardReport, Params: []string{"modifier", "keys"}},
 	"getKeyboardLedState":      {Func: rpcGetKeyboardLedState},
 	"absMouseReport":           {Func: rpcAbsMouseReport, Params: []string{"x", "y", "buttons"}},
@@ -1057,6 +1104,8 @@ var rpcHandlers = map[string]RPCHandler{
 	"wheelReport":              {Func: rpcWheelReport, Params: []string{"wheelY"}},
 	"getVideoState":            {Func: rpcGetVideoState},
 	"getUSBState":              {Func: rpcGetUSBState},
+    "reinitializeUsbGadget":        {Func: rpcReinitializeUsbGadget},
+    "reinitializeUsbGadgetSoft":   {Func: rpcReinitializeUsbGadgetSoft},
 	"unmountImage":             {Func: rpcUnmountImage},
 	"rpcMountBuiltInImage":     {Func: rpcMountBuiltInImage, Params: []string{"filename"}},
 	"setJigglerState":          {Func: rpcSetJigglerState, Params: []string{"enabled"}},
@@ -1069,6 +1118,8 @@ var rpcHandlers = map[string]RPCHandler{
 	"setAutoUpdateState":       {Func: rpcSetAutoUpdateState, Params: []string{"enabled"}},
 	"getEDID":                  {Func: rpcGetEDID},
 	"setEDID":                  {Func: rpcSetEDID, Params: []string{"edid"}},
+	"setForceHpd":              {Func: rpcSetForceHpd, Params: []string{"forceHpd"}},
+	"getForceHpd":              {Func: rpcGetForceHpd},
 	"getDevChannelState":       {Func: rpcGetDevChannelState},
 	"setDevChannelState":       {Func: rpcSetDevChannelState, Params: []string{"enabled"}},
 	"getLocalUpdateStatus":     {Func: rpcGetLocalUpdateStatus},
@@ -1154,5 +1205,16 @@ var rpcHandlers = map[string]RPCHandler{
 	"getEasyTierStatus":        {Func: rpcGetEasyTierStatus},
 	"getEasyTierConfig":        {Func: rpcGetEasyTierConfig},
 	"getEasyTierLog":           {Func: rpcGetEasyTierLog},
+	"startVnt":                 {Func: rpcStartVnt, Params: []string{"config_mode", "token", "device_id", "name", "server_addr", "config_file", "model", "password"}},
+	"stopVnt":                  {Func: rpcStopVnt},
+	"getVntStatus":             {Func: rpcGetVntStatus},
+	"getVntConfig":             {Func: rpcGetVntConfig},
+	"getVntConfigFile":         {Func: rpcGetVntConfigFile},
+	"getVntLog":                {Func: rpcGetVntLog},
+	"getVntInfo":               {Func: rpcGetVntInfo},
 	"getEasyTierNodeInfo":      {Func: rpcGetEasyTierNodeInfo},
+	"startCloudflared":         {Func: rpcStartCloudflared, Params: []string{"token"}},
+	"stopCloudflared":          {Func: rpcStopCloudflared},
+	"getCloudflaredStatus":     {Func: rpcGetCloudflaredStatus},
+	"getCloudflaredLog":        {Func: rpcGetCloudflaredLog},
 }

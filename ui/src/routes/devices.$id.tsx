@@ -566,12 +566,13 @@ export default function KvmIdRoute() {
   const setNetworkState = useNetworkStateStore(state => state.setNetworkState);
 
   const setUsbState = useHidStore(state => state.setUsbState);
+  const usbState = useHidStore(state => state.usbState);
   const setHdmiState = useVideoStore(state => state.setHdmiState);
 
   const keyboardLedState = useHidStore(state => state.keyboardLedState);
   const setKeyboardLedState = useHidStore(state => state.setKeyboardLedState);
-
   const setKeyboardLedStateSyncAvailable = useHidStore(state => state.setKeyboardLedStateSyncAvailable);
+  const setIsReinitializingGadget = useHidStore(state => state.setIsReinitializingGadget);
 
   const [hasUpdated, setHasUpdated] = useState(false);
   const { navigateTo } = useDeviceUiNavigation();
@@ -601,6 +602,42 @@ export default function KvmIdRoute() {
       setKeyboardLedStateSyncAvailable(true);
     }
 
+    if (resp.method === "hidDeviceMissing") {
+      const params = resp.params as { device: string; error: string };
+      console.error("HID device missing:", params);
+      
+      send("getUsbEmulationState", {}, stateResp => {
+        if ("error" in stateResp) return;
+        const emuEnabled = stateResp.result as boolean;
+        if (!emuEnabled || usbState !== "configured") {
+          return;
+        }
+
+        setIsReinitializingGadget(true);
+
+        notifications.error(
+          `USB HID device (${params.device}) is missing. Reinitializing USB gadget...`,
+          { duration: 5000 }
+        );
+
+        send("reinitializeUsbGadgetSoft", {}, (resp) => {
+          setIsReinitializingGadget(false);
+          
+          if ("error" in resp) {
+            notifications.error(
+              `Failed to reinitialize USB gadget (soft): ${resp.error.message}`,
+              { duration: 5000 }
+            );
+          } else {
+            notifications.success(
+              "USB gadget soft reinitialized successfully",
+              { duration: 3000 }
+            );
+          }
+        });
+      });
+    }
+
     if (resp.method === "otaState") {
       const otaState = resp.params as UpdateState["otaState"];
       setOtaState(otaState);
@@ -623,6 +660,12 @@ export default function KvmIdRoute() {
         currentUrl.searchParams.set("updateSuccess", "true");
         window.location.href = currentUrl.toString();
       }
+    }
+
+    if (resp.method === "refreshPage") {
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set("networkChanged", "true");
+      window.location.href = currentUrl.toString();
     }
   }
 

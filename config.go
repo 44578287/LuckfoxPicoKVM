@@ -92,6 +92,7 @@ type Config struct {
 	KeyboardMacros       []KeyboardMacro        `json:"keyboard_macros"`
 	KeyboardLayout       string                 `json:"keyboard_layout"`
 	EdidString           string                 `json:"hdmi_edid_string"`
+	ForceHpd             bool                   `json:"force_hpd"` // 强制输出EDID
 	ActiveExtension      string                 `json:"active_extension"`
 	DisplayRotation      string                 `json:"display_rotation"`
 	DisplayMaxBrightness int                    `json:"display_max_brightness"`
@@ -99,15 +100,18 @@ type Config struct {
 	DisplayOffAfterSec   int                    `json:"display_off_after_sec"`
 	TLSMode              string                 `json:"tls_mode"` // options: "self-signed", "user-defined", ""
 	UsbConfig            *usbgadget.Config      `json:"usb_config"`
-	UsbDevices           *usbgadget.Devices     `json:"usb_devices"`
-	NetworkConfig        *network.NetworkConfig `json:"network_config"`
-	DefaultLogLevel      string                 `json:"default_log_level"`
+    UsbDevices           *usbgadget.Devices     `json:"usb_devices"`
+    NetworkConfig        *network.NetworkConfig `json:"network_config"`
+    AppliedNetworkConfig *network.NetworkConfig `json:"applied_network_config,omitempty"`
+    DefaultLogLevel      string                 `json:"default_log_level"`
 	TailScaleAutoStart   bool                   `json:"tailscale_autostart"`
 	TailScaleXEdge       bool                   `json:"tailscale_xedge"`
 	ZeroTierNetworkID    string                 `json:"zerotier_network_id"`
 	ZeroTierAutoStart    bool                   `json:"zerotier_autostart"`
 	FrpcAutoStart        bool                   `json:"frpc_autostart"`
 	FrpcToml             string                 `json:"frpc_toml"`
+	CloudflaredAutoStart bool                   `json:"cloudflared_autostart"`
+	CloudflaredToken     string                 `json:"cloudflared_token"`
 	IO0Status            bool                   `json:"io0_status"`
 	IO1Status            bool                   `json:"io1_status"`
 	AudioMode            string                 `json:"audio_mode"`
@@ -117,6 +121,19 @@ type Config struct {
 	AutoMountSystemInfo  bool                   `json:"auto_mount_system_info_img"`
 	EasytierAutoStart    bool                   `json:"easytier_autostart"`
 	EasytierConfig       EasytierConfig         `json:"easytier_config"`
+	VntAutoStart         bool                   `json:"vnt_autostart"`
+	VntConfig            VntConfig              `json:"vnt_config"`
+}
+
+type VntConfig struct {
+    Token      string `json:"token"`
+    DeviceId   string `json:"device_id"`
+    Name       string `json:"name"`
+    ServerAddr string `json:"server_addr"`
+    ConfigMode string `json:"config_mode"` // "params" or "file"
+    ConfigFile string `json:"config_file"`
+    Model      string `json:"model"`
+    Password   string `json:"password"`
 }
 
 const configPath = "/userdata/kvm_config.json"
@@ -134,6 +151,7 @@ var defaultConfig = &Config{
 	DisplayDimAfterSec:   120,  // 2 minutes
 	DisplayOffAfterSec:   1800, // 30 minutes
 	TLSMode:              "",
+	ForceHpd:             false, // 默认不强制输出EDID
 	UsbConfig: &usbgadget.Config{
 		VendorId:     "0x1d6b", //The Linux Foundation
 		ProductId:    "0x0104", //Multifunction Composite Gadget
@@ -149,12 +167,14 @@ var defaultConfig = &Config{
 		Audio:         false, //At any given time, only one of Audio and Mtp can be set to true
 		Mtp:           false,
 	},
-	NetworkConfig:       &network.NetworkConfig{},
+    NetworkConfig:       &network.NetworkConfig{},
+    AppliedNetworkConfig: nil,
 	DefaultLogLevel:     "INFO",
 	ZeroTierAutoStart:   false,
 	TailScaleAutoStart:  false,
 	TailScaleXEdge:      false,
 	FrpcAutoStart:       false,
+	CloudflaredAutoStart: false,
 	IO0Status:           true,
 	IO1Status:           true,
 	AudioMode:           "disabled",

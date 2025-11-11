@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
+	"time"
 )
 
 type gadgetConfigItem struct {
@@ -238,14 +240,68 @@ func (u *UsbGadget) Init() error {
 
 	udcs := getUdcs()
 	if len(udcs) < 1 {
+		u.log.Warn().Msg("no UDC found, skipping USB stack init")
 		return u.logWarn("no udc found, skipping USB stack init", nil)
 	}
 
 	u.udc = udcs[0]
 
+	if err := u.ensureGadgetUnbound(); err != nil {
+		u.log.Warn().Err(err).Msg("failed to ensure gadget is unbound, will continue")
+	} else {
+		u.log.Info().Msg("gadget unbind check completed")
+	}
+
 	err := u.configureUsbGadget(false)
 	if err != nil {
+		u.log.Error().Err(err).
+			Str("udc", u.udc).
+			Interface("enabled_devices", u.enabledDevices).
+			Msg("USB gadget initialization FAILED")
 		return u.logError("unable to initialize USB stack", err)
+	}
+
+	return nil
+}
+
+func (u *UsbGadget) ensureGadgetUnbound() error {
+	udcPath := path.Join(u.kvmGadgetPath, "UDC")
+
+	if _, err := os.Stat(u.kvmGadgetPath); os.IsNotExist(err) {
+		return nil
+	}
+
+	udcContent, err := os.ReadFile(udcPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to read UDC file: %w", err)
+	}
+
+	currentUDC := strings.TrimSpace(string(udcContent))
+	if currentUDC == "" || currentUDC == "none" {
+		return nil
+	}
+
+	u.log.Info().
+		Str("current_udc", currentUDC).
+		Str("target_udc", u.udc).
+		Msg("unbinding existing UDC before reconfiguration")
+
+	if err := u.UnbindUDC(); err != nil {
+		u.log.Warn().Err(err).Msg("failed to unbind via UDC file, trying DWC3")
+		if err := u.UnbindUDCToDWC3(); err != nil {
+			return fmt.Errorf("failed to unbind UDC: %w", err)
+		}
+	}
+
+	time.Sleep(200 * time.Millisecond)
+
+	if content, err := os.ReadFile(udcPath); err == nil {
+		if strings.TrimSpace(string(content)) != "none" {
+			u.log.Warn().Msg("UDC still bound after unbind attempt")
+		}
 	}
 
 	return nil
@@ -266,13 +322,48 @@ func (u *UsbGadget) UpdateGadgetConfig() error {
 }
 
 func (u *UsbGadget) configureUsbGadget(resetUsb bool) error {
+	u.log.Info().
+		Bool("reset_usb", resetUsb).
+		Msg("configuring USB gadget via transaction")
+
 	return u.WithTransaction(func() error {
+		u.log.Info().Msg("Transaction: Mounting configfs")
 		u.tx.MountConfigFS()
+
+		u.log.Info().Msg("Transaction: Creating config path")
 		u.tx.CreateConfigPath()
+
+		u.log.Info().Msg("Transaction: Writing gadget configuration")
 		u.tx.WriteGadgetConfig()
+
 		if resetUsb {
+			u.log.Info().Msg("Transaction: Rebinding USB")
 			u.tx.RebindUsb(true)
 		}
 		return nil
 	})
+}
+
+func (u *UsbGadget) VerifyMassStorage() error {
+	if !u.enabledDevices.MassStorage {
+		return nil
+	}
+
+	massStoragePath := path.Join(u.kvmGadgetPath, "functions/mass_storage.usb0")
+	if _, err := os.Stat(massStoragePath); err != nil {
+		return fmt.Errorf("mass_storage function not found: %w", err)
+	}
+
+	lunPath := path.Join(massStoragePath, "lun.0")
+	if _, err := os.Stat(lunPath); err != nil {
+		return fmt.Errorf("mass_storage LUN not found: %w", err)
+	}
+
+	configLink := path.Join(u.configC1Path, "mass_storage.usb0")
+	if _, err := os.Lstat(configLink); err != nil {
+		return fmt.Errorf("mass_storage symlink not found: %w", err)
+	}
+
+	u.log.Info().Msg("mass storage verified")
+	return nil
 }

@@ -80,6 +80,7 @@ type UsbGadget struct {
 	txLock sync.Mutex
 
 	onKeyboardStateChange *func(state KeyboardState)
+	onHidDeviceMissing    *func(device string, err error)
 
 	log *zerolog.Logger
 
@@ -140,8 +141,7 @@ func newUsbGadget(name string, configMap map[string]gadgetConfigItem, enabledDev
 		absMouseAccumulatedWheelY: 0,
 	}
 	if err := g.Init(); err != nil {
-		logger.Error().Err(err).Msg("failed to init USB gadget")
-		return nil
+		logger.Error().Err(err).Msg("failed to init USB gadget (will retry later)")
 	}
 
 	return g

@@ -7,7 +7,7 @@ import Checkbox from "../components/Checkbox";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { SettingsPageHeader } from "../components/SettingsPageheader";
 import { TextAreaWithLabel } from "../components/TextArea";
-import { useSettingsStore } from "../hooks/stores";
+import { useSettingsStore, useHidStore } from "../hooks/stores";
 import { useJsonRpc } from "../hooks/useJsonRpc";
 import { isOnDevice } from "../main";
 import notifications from "../notifications";
@@ -24,9 +24,12 @@ export default function SettingsAdvancedRoute() {
   const [devChannel, setDevChannel] = useState(false);
   const [usbEmulationEnabled, setUsbEmulationEnabled] = useState(false);
   const [showLoopbackWarning, setShowLoopbackWarning] = useState(false);
+  const [showRebootConfirm, setShowRebootConfirm] = useState(false);
   const [localLoopbackOnly, setLocalLoopbackOnly] = useState(false);
 
   const settings = useSettingsStore();
+  const isReinitializingGadget = useHidStore(state => state.isReinitializingGadget);
+  const setIsReinitializingGadget = useHidStore(state => state.setIsReinitializingGadget);
 
   useEffect(() => {
     send("getSSHKeyState", {}, resp => {
@@ -210,6 +213,47 @@ export default function SettingsAdvancedRoute() {
             </SettingsItem>
 
             <SettingsItem
+              title={$at("USB Gadget Reinitialize")}
+              description={$at("Reinitialize USB gadget configuration")}
+            >
+              <Button
+                size="SM"
+                theme="light"
+                text={$at("Reinitialize USB Gadget")}
+                disabled={isReinitializingGadget}
+                loading={isReinitializingGadget}
+                onClick={() => {
+                  if (isReinitializingGadget) return;
+                  setIsReinitializingGadget(true);
+                  send("reinitializeUsbGadget", {}, resp => {
+                    setIsReinitializingGadget(false);
+                    if ("error" in resp) {
+                      notifications.error(
+                        `Failed to reinitialize USB gadget: ${resp.error.data || "Unknown error"}`,
+                      );
+                      return;
+                    }
+                    notifications.success("USB gadget reinitialized successfully");
+                  });
+                }}
+              />
+            </SettingsItem>
+
+            <SettingsItem
+              title={$at("Reboot System")}
+              description={$at("Restart the device system")}
+            >
+              <Button
+                size="SM"
+                theme="danger"
+                text={$at("Reboot")}
+                onClick={() => {
+                  setShowRebootConfirm(true);
+                }}
+              />
+            </SettingsItem>
+
+            <SettingsItem
               title={$at("Reset Configuration")}
               description={$at("Reset configuration to default. This will log you out.Some configuration changes will take effect after restart system.")}
             >
@@ -249,6 +293,39 @@ export default function SettingsAdvancedRoute() {
         variant="warning"
         confirmText="I Understand, Enable Anyway"
         onConfirm={confirmLoopbackModeEnable}
+      />
+
+      <ConfirmDialog
+        open={showRebootConfirm}
+        onClose={() => {
+          setShowRebootConfirm(false);
+        }}
+        title={$at("Reboot System?")}
+        description={
+          <>
+            <p>
+              {$at("Are you sure you want to reboot the system?")}
+            </p>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">
+              {$at("The device will restart and you will be disconnected from the web interface.")}
+            </p>
+          </>
+        }
+        variant="warning"
+        cancelText={$at("Cancel")}
+        confirmText={$at("Reboot")}
+        onConfirm={() => {
+          setShowRebootConfirm(false);
+          send("reboot", { force: false }, resp => {
+            if ("error" in resp) {
+              notifications.error(
+                `Failed to reboot: ${resp.error.data || "Unknown error"}`,
+              );
+              return;
+            }
+            notifications.success("System rebooting...");
+          });
+        }}
       />
     </div>
   );

@@ -57,7 +57,13 @@ export function useJsonRpc(onRequest?: (payload: JsonRpcRequest) => void) {
       // The "API" can also "request" data from the client
       // If the payload has a method, it's a request
       if ("method" in payload) {
-        if (onRequest) onRequest(payload);
+        if ((payload as JsonRpcRequest).method === "refreshPage") {
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set("networkChanged", "true");
+          window.location.href = currentUrl.toString();
+          return;
+        }
+        if (onRequest) onRequest(payload as JsonRpcRequest);
         return;
       }
 

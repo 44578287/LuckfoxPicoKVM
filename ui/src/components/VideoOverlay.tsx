@@ -264,6 +264,9 @@ export function HDMIErrorOverlay({ show, hdmiState }: HDMIErrorOverlayProps) {
                           {$at("If using an adapter, ensure it's compatible and functioning correctly")}
                         </li>
                         <li>
+                          {$at("Certain motherboards do not support simultaneous multi-display output")}
+                        </li> 
+                        <li>
                           {$at("Ensure source device is not in sleep mode and outputting a signal")}
                         </li>
                       </ul>

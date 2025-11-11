@@ -1,8 +1,10 @@
 package usbgadget
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 )
 
 var absoluteMouseConfig = gadgetConfigItem{
@@ -69,6 +71,17 @@ func (u *UsbGadget) absMouseWriteHidFile(data []byte) error {
 		var err error
 		u.absMouseHidFile, err = os.OpenFile("/dev/hidg1", os.O_RDWR, 0666)
 		if err != nil {
+
+			if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "no such device") {
+				u.log.Error().
+					Str("device", "hidg1").
+					Str("device_name", "absolute_mouse").
+					Err(err).
+					Msg("HID device file missing, gadget may need reinitialization")
+				if u.onHidDeviceMissing != nil {
+					(*u.onHidDeviceMissing)("absolute_mouse", err)
+				}
+			}
 			return fmt.Errorf("failed to open hidg1: %w", err)
 		}
 	}

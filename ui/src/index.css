@@ -315,6 +315,16 @@ video::-webkit-media-controls {
   @apply inline-flex h-auto! w-auto! grow-0 py-1 text-xs;
 }
 
+.hg-theme-default .hg-button.modifier-locked {
+  @apply bg-blue-500! text-white! border-blue-600!;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5) !important;
+}
+
+.dark .hg-theme-default .hg-button.modifier-locked {
+  @apply bg-blue-600! text-white! border-blue-700!;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.7) !important;
+}
+
 .hg-theme-default .hg-row .hg-button-container,
 .hg-theme-default .hg-row .hg-button:not(:last-child) {
   @apply mr-[2px]! md:mr-[5px]!;

@@ -1,11 +1,13 @@
 package network
 
 import (
-	"fmt"
-	"time"
+    "fmt"
+    "time"
 
-	"kvm/internal/confparser"
-	"kvm/internal/udhcpc"
+    "kvm/internal/confparser"
+    "kvm/internal/udhcpc"
+
+    "github.com/guregu/null/v6"
 )
 
 type RpcIPv6Address struct {
@@ -99,17 +101,22 @@ func (s *NetworkInterfaceState) RpcGetNetworkSettings() RpcNetworkSettings {
 }
 
 func (s *NetworkInterfaceState) RpcSetNetworkSettings(settings RpcNetworkSettings) error {
-	currentSettings := s.config
+    currentSettings := s.config
 
-	err := confparser.SetDefaultsAndValidate(&settings.NetworkConfig)
-	if err != nil {
-		return err
-	}
+    err := confparser.SetDefaultsAndValidate(&settings.NetworkConfig)
+    if err != nil {
+        return err
+    }
 
-	if IsSame(currentSettings, settings.NetworkConfig) {
-		// no changes, do nothing
-		return nil
-	}
+    neutralA := *currentSettings
+    neutralB := settings.NetworkConfig
+    neutralA.PendingReboot = null.Bool{}
+    neutralB.PendingReboot = null.Bool{}
+
+    if IsSame(neutralA, neutralB) {
+        // no changes, do nothing
+        return nil
+    }
 
 	s.config = &settings.NetworkConfig
 	s.onConfigChange(s.config)
@@ -123,4 +130,11 @@ func (s *NetworkInterfaceState) RpcRenewDHCPLease() error {
 	}
 
 	return s.dhcpClient.Renew()
+}
+
+func (s *NetworkInterfaceState) RpcRequestDHCPAddress(ip string) error {
+	if s.dhcpClient == nil {
+		return fmt.Errorf("dhcp client not initialized")
+	}
+	return s.dhcpClient.RequestAddress(ip)
 }
