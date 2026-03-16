@@ -130,7 +130,7 @@ func rpcGetKeyboardLedState() (state usbgadget.KeyboardState) {
 var usbState = "unknown"
 
 func rpcGetUSBState() (state string) {
-	return gadget.GetUsbState()
+	return gadget.GetUsbState(config.UsbEnhancedDetection)
 }
 
 func triggerUSBStateUpdate() {
@@ -144,7 +144,7 @@ func triggerUSBStateUpdate() {
 }
 
 func checkUSBState() {
-	newState := gadget.GetUsbState()
+	newState := gadget.GetUsbState(config.UsbEnhancedDetection)
 	if newState == usbState {
 		return
 	}

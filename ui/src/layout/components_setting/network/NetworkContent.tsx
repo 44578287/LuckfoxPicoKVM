@@ -85,6 +85,10 @@ export default function SettingsNetwork() {
   const [networkSettings, setNetworkSettings] =
     useState<NetworkSettings>(defaultNetworkSettings);
 
+  const [macAddressInput, setMacAddressInput] = useState<string>("");
+  const macAddressTouched = useRef(false);
+  const initialMacAddress = useRef<string>("");
+
   // We use this to determine whether the settings have changed
   const firstNetworkSettings = useRef<NetworkSettings | undefined>(undefined);
   // We use this to indicate whether saved settings differ from initial (effective) settings
@@ -165,8 +169,37 @@ export default function SettingsNetwork() {
     });
   }, [send, setNetworkState]);
 
+  const normalizeMacAddress = useCallback((value: string) => {
+    return value.trim().toLowerCase();
+  }, []);
+
+  const isValidMacAddress = useCallback((value: string) => {
+    const v = normalizeMacAddress(value);
+    return /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(v);
+  }, [normalizeMacAddress]);
+
   const setNetworkSettingsRemote = useCallback(
     (settings: NetworkSettings) => {
+      const currentMac = (networkState?.mac_address || "").toLowerCase();
+      const newMac = normalizeMacAddress(macAddressInput);
+      const macChanged = newMac !== currentMac;
+
+      if (macChanged) {
+        if (!isValidMacAddress(macAddressInput)) {
+          notifications.error("Please enter a valid MAC address");
+          return;
+        }
+        setPendingMacAddress(newMac);
+        setShowMacChangeConfirm(true);
+      } else {
+        saveNetworkSettings(settings);
+      }
+    },
+    [networkState?.mac_address, macAddressInput, isValidMacAddress, normalizeMacAddress],
+  );
+
+  const saveNetworkSettings = useCallback(
+    (settings: NetworkSettings, onSaved?: () => void) => {
       setNetworkSettingsLoaded(false);
       send("setNetworkSettings", { settings }, resp => {
         if ("error" in resp) {
@@ -177,12 +210,13 @@ export default function SettingsNetwork() {
           setNetworkSettingsLoaded(true);
           return;
         }
-        // We need to update the firstNetworkSettings ref to the new settings so we can use it to determine if the settings have changed
         firstNetworkSettings.current = resp.result as NetworkSettings;
         setNetworkSettings(resp.result as NetworkSettings);
+        macAddressTouched.current = false;
         getNetworkState();
         setNetworkSettingsLoaded(true);
         notifications.success("Network settings saved");
+        onSaved?.();
       });
     },
     [getNetworkState, send],
@@ -202,6 +236,14 @@ export default function SettingsNetwork() {
     getNetworkState();
     getNetworkSettings();
   }, [getNetworkState, getNetworkSettings]);
+
+  useEffect(() => {
+    if (networkState?.mac_address && initialMacAddress.current === "") {
+      const normalized = networkState.mac_address.toLowerCase();
+      setMacAddressInput(normalized);
+      initialMacAddress.current = normalized;
+    }
+  }, [networkState?.mac_address]);
 
   const handleIpv4ModeChange = (value: IPv4Mode | string) => {
     const newMode = value as IPv4Mode;
@@ -290,6 +332,8 @@ export default function SettingsNetwork() {
   const [showRequestAddrConfirm, setShowRequestAddrConfirm] = useState(false);
   const [showApplyStaticConfirm, setShowApplyStaticConfirm] = useState(false);
   const [showIpv4RestartConfirm, setShowIpv4RestartConfirm] = useState(false);
+  const [showMacChangeConfirm, setShowMacChangeConfirm] = useState(false);
+  const [pendingMacAddress, setPendingMacAddress] = useState("");
   const [pendingIpv4Mode, setPendingIpv4Mode] = useState<IPv4Mode | null>(null);
   const [ipv4StaticDnsText, setIpv4StaticDnsText] = useState("");
 
@@ -336,19 +380,13 @@ export default function SettingsNetwork() {
           >
             <Input
               type="text"
-              value={networkState?.mac_address}
-              readOnly={true}
+              value={macAddressInput}
+              onChange={e => {
+                macAddressTouched.current = true;
+                setMacAddressInput(e.target.value);
+              }}
               className={isMobile ? "!w-full !h-[36px]" : "!w-[35%] !h-[36px]"}
             />
-            {/*<InputField*/}
-            {/*  type="text"*/}
-            {/*  size="SM"*/}
-            {/*  value={networkState?.mac_address}*/}
-            {/*  error={""}*/}
-            {/*  readOnly={true}*/}
-            {/*  className="dark:!text-opacity-60 "*/}
-            {/*/>*/}
-
           </SettingsItem>
         </div>
         <div className="space-y-4">
@@ -502,8 +540,9 @@ export default function SettingsNetwork() {
           <AntdButton
             type="primary"
             disabled={
-              firstNetworkSettings.current === networkSettings ||
-              (networkSettings.ipv4_mode === "static" && firstNetworkSettings.current?.ipv4_mode !== "static")
+              (!macAddressTouched.current && firstNetworkSettings.current === networkSettings) ||
+              (networkSettings.ipv4_mode === "static" && firstNetworkSettings.current?.ipv4_mode !== "static") ||
+              (macAddressTouched.current && !isValidMacAddress(macAddressInput))
             }
             onClick={() => setNetworkSettingsRemote(networkSettings)}
             className={isMobile ? "w-full" : ""}
@@ -795,6 +834,31 @@ export default function SettingsNetwork() {
             setNetworkSettingsRemote(updatedSettings);
             setPendingIpv4Mode(null);
           }
+        }}
+      />
+      <ConfirmDialog
+        open={showMacChangeConfirm}
+        onClose={() => setShowMacChangeConfirm(false)}
+        title={$at("Change MAC Address?")}
+        description={$at("Changing the MAC address may cause the device IP to be reassigned and changed.")}
+        variant="warning"
+        confirmText={$at("Confirm")}
+        cancelText={$at("Cancel")}
+        onConfirm={() => {
+          setShowMacChangeConfirm(false);
+          send("setEthernetMacAddress", { macAddress: pendingMacAddress }, resp => {
+            if ("error" in resp) {
+              notifications.error(
+                "Failed to apply MAC address: " +
+                (resp.error.data ? resp.error.data : resp.error.message),
+              );
+              return;
+            }
+            setNetworkState(resp.result as NetworkState);
+            saveNetworkSettings(networkSettings, () => {
+              initialMacAddress.current = pendingMacAddress;
+            });
+          });
         }}
       />
     </>

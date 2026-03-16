@@ -84,10 +84,12 @@ type Config struct {
 	JigglerEnabled       bool                   `json:"jiggler_enabled"`
 	AutoUpdateEnabled    bool                   `json:"auto_update_enabled"`
 	IncludePreRelease    bool                   `json:"include_pre_release"`
+	UpdateDownloadProxy  string                 `json:"update_download_proxy"`
 	HashedPassword       string                 `json:"hashed_password"`
 	LocalAuthToken       string                 `json:"local_auth_token"`
 	LocalAuthMode        string                 `json:"localAuthMode"` //TODO: fix it with migration
 	LocalLoopbackOnly    bool                   `json:"local_loopback_only"`
+	UsbEnhancedDetection bool                   `json:"usb_enhanced_detection"`
 	WakeOnLanDevices     []WakeOnLanDevice      `json:"wake_on_lan_devices"`
 	KeyboardMacros       []KeyboardMacro        `json:"keyboard_macros"`
 	KeyboardLayout       string                 `json:"keyboard_layout"`
@@ -126,6 +128,40 @@ type Config struct {
 	WireguardAutoStart   bool                   `json:"wireguard_autostart"`
 	WireguardConfig      WireguardConfig        `json:"wireguard_config"`
 	NpuAppEnabled        bool                   `json:"npu_app_enabled"`
+	Firewall             *FirewallConfig        `json:"firewall"`
+}
+
+type FirewallConfig struct {
+	Base         FirewallBaseRule   `json:"base"`
+	Rules        []FirewallRule     `json:"rules"`
+	PortForwards []FirewallPortRule `json:"portForwards"`
+}
+
+type FirewallBaseRule struct {
+	InputPolicy   string `json:"inputPolicy"`
+	OutputPolicy  string `json:"outputPolicy"`
+	ForwardPolicy string `json:"forwardPolicy"`
+}
+
+type FirewallRule struct {
+	Chain           string   `json:"chain"`
+	SourceIP        string   `json:"sourceIP"`
+	SourcePort      *int     `json:"sourcePort,omitempty"`
+	Protocols       []string `json:"protocols"`
+	DestinationIP   string   `json:"destinationIP"`
+	DestinationPort *int     `json:"destinationPort,omitempty"`
+	Action          string   `json:"action"`
+	Comment         string   `json:"comment"`
+}
+
+type FirewallPortRule struct {
+	Chain           string   `json:"chain,omitempty"`
+	Managed         *bool    `json:"managed,omitempty"`
+	SourcePort      int      `json:"sourcePort"`
+	Protocols       []string `json:"protocols"`
+	DestinationIP   string   `json:"destinationIP"`
+	DestinationPort int      `json:"destinationPort"`
+	Comment         string   `json:"comment"`
 }
 
 type VntConfig struct {
@@ -160,6 +196,7 @@ var defaultConfig = &Config{
 	DisplayOffAfterSec:   1800, // 30 minutes
 	TLSMode:              "",
 	ForceHpd:             false, // 默认不强制输出EDID
+	UsbEnhancedDetection: true,
 	UsbConfig: &usbgadget.Config{
 		VendorId:     "0x1d6b", //The Linux Foundation
 		ProductId:    "0x0104", //Multifunction Composite Gadget
@@ -191,6 +228,15 @@ var defaultConfig = &Config{
 	AutoMountSystemInfo:  true,
 	WireguardAutoStart:   false,
 	NpuAppEnabled:        false,
+	Firewall: &FirewallConfig{
+		Base: FirewallBaseRule{
+			InputPolicy:   "accept",
+			OutputPolicy:  "accept",
+			ForwardPolicy: "accept",
+		},
+		Rules:        []FirewallRule{},
+		PortForwards: []FirewallPortRule{},
+	},
 }
 
 var (
@@ -247,6 +293,10 @@ func LoadConfig() {
 
 	if loadedConfig.NetworkConfig == nil {
 		loadedConfig.NetworkConfig = defaultConfig.NetworkConfig
+	}
+
+	if loadedConfig.Firewall == nil {
+		loadedConfig.Firewall = defaultConfig.Firewall
 	}
 
 	config = &loadedConfig

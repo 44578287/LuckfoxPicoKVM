@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"reflect"
@@ -161,6 +162,16 @@ func onRPCMessage(message webrtc.DataChannelMessage, session *Session) {
 
 func rpcPing() (string, error) {
 	return "pong", nil
+}
+
+type BootStorageTypeResponse struct {
+	Type string `json:"type"`
+}
+
+func rpcGetBootStorageType() (*BootStorageTypeResponse, error) {
+	return &BootStorageTypeResponse{
+		Type: string(GetBootStorageType()),
+	}, nil
 }
 
 func rpcGetDeviceID() (string, error) {
@@ -385,6 +396,32 @@ func rpcGetCustomUpdateBaseURL() (string, error) {
 
 func rpcSetCustomUpdateBaseURL(baseURL string) error {
 	customUpdateBaseURL = baseURL
+	return nil
+}
+
+func rpcGetUpdateDownloadProxy() (string, error) {
+	return config.UpdateDownloadProxy, nil
+}
+
+func rpcSetUpdateDownloadProxy(proxy string) error {
+	proxy = strings.TrimSpace(proxy)
+	if proxy != "" {
+		parsed, err := url.Parse(proxy)
+		if err != nil || strings.TrimSpace(parsed.Scheme) == "" || strings.TrimSpace(parsed.Host) == "" {
+			return fmt.Errorf("invalid update download proxy")
+		}
+		if parsed.Scheme != "http" && parsed.Scheme != "https" {
+			return fmt.Errorf("update download proxy must use http or https")
+		}
+		if !strings.HasSuffix(proxy, "/") {
+			proxy += "/"
+		}
+	}
+
+	config.UpdateDownloadProxy = proxy
+	if err := SaveConfig(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
 	return nil
 }
 
@@ -723,6 +760,29 @@ func rpcSetUsbEmulationState(enabled bool) error {
 	}
 }
 
+func rpcGetUsbEnhancedDetection() (bool, error) {
+	ensureConfigLoaded()
+	return config.UsbEnhancedDetection, nil
+}
+
+func rpcSetUsbEnhancedDetection(enabled bool) error {
+	ensureConfigLoaded()
+	if config.UsbEnhancedDetection == enabled {
+		return nil
+	}
+
+	config.UsbEnhancedDetection = enabled
+	if err := SaveConfig(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	if gadget != nil {
+		checkUSBState()
+	}
+
+	return nil
+}
+
 func rpcGetUsbConfig() (usbgadget.Config, error) {
 	LoadConfig()
 	return *config.UsbConfig, nil
@@ -759,6 +819,36 @@ func rpcResetConfig() error {
 	}
 
 	logger.Info().Msg("Configuration reset to default")
+	return nil
+}
+
+func rpcGetConfigRaw() (string, error) {
+	configLock.Lock()
+	defer configLock.Unlock()
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	return string(data), nil
+}
+
+func rpcSetConfigRaw(configStr string) error {
+	var newConfig Config
+	if err := json.Unmarshal([]byte(configStr), &newConfig); err != nil {
+		return fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	configLock.Lock()
+	config = &newConfig
+	configLock.Unlock()
+
+	if err := SaveConfig(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	logger.Info().Msg("Configuration updated via raw JSON")
 	return nil
 }
 
@@ -1194,6 +1284,42 @@ func rpcSetAutoMountSystemInfo(enabled bool) error {
 	return nil
 }
 
+func rpcGetFirewallConfig() (FirewallConfig, error) {
+	LoadConfig()
+	if systemCfg, err := ReadFirewallConfigFromSystem(); err == nil && systemCfg != nil {
+		return *systemCfg, nil
+	}
+	if config.Firewall == nil {
+		return *defaultConfig.Firewall, nil
+	}
+	return *config.Firewall, nil
+}
+
+func rpcSetFirewallConfig(firewallCfg FirewallConfig) error {
+	LoadConfig()
+	managedCfg := firewallCfg
+	managedCfg.PortForwards = filterManagedPortForwards(firewallCfg.PortForwards)
+	if err := ApplyFirewallConfig(&managedCfg); err != nil {
+		return err
+	}
+	config.Firewall = &managedCfg
+	if err := SaveConfig(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+	return nil
+}
+
+func filterManagedPortForwards(in []FirewallPortRule) []FirewallPortRule {
+	out := make([]FirewallPortRule, 0, len(in))
+	for _, r := range in {
+		if r.Managed != nil && !*r.Managed {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
 func rpcConfirmOtherSession() (bool, error) {
 	return true, nil
 }
@@ -1205,6 +1331,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"getNetworkState":           {Func: rpcGetNetworkState},
 	"getNetworkSettings":        {Func: rpcGetNetworkSettings},
 	"setNetworkSettings":        {Func: rpcSetNetworkSettings, Params: []string{"settings"}},
+	"setEthernetMacAddress":     {Func: rpcSetEthernetMacAddress, Params: []string{"macAddress"}},
 	"renewDHCPLease":            {Func: rpcRenewDHCPLease},
 	"requestDHCPAddress":        {Func: rpcRequestDHCPAddress, Params: []string{"ip"}},
 	"keyboardReport":            {Func: rpcKeyboardReport, Params: []string{"modifier", "keys"}},
@@ -1237,6 +1364,8 @@ var rpcHandlers = map[string]RPCHandler{
 	"tryUpdate":                 {Func: rpcTryUpdate},
 	"getCustomUpdateBaseURL":    {Func: rpcGetCustomUpdateBaseURL},
 	"setCustomUpdateBaseURL":    {Func: rpcSetCustomUpdateBaseURL, Params: []string{"baseURL"}},
+	"getUpdateDownloadProxy":    {Func: rpcGetUpdateDownloadProxy},
+	"setUpdateDownloadProxy":    {Func: rpcSetUpdateDownloadProxy, Params: []string{"proxy"}},
 	"getDevModeState":           {Func: rpcGetDevModeState},
 	"getSSHKeyState":            {Func: rpcGetSSHKeyState},
 	"setSSHKeyState":            {Func: rpcSetSSHKeyState, Params: []string{"sshKey"}},
@@ -1247,6 +1376,8 @@ var rpcHandlers = map[string]RPCHandler{
 	"isUpdatePending":           {Func: rpcIsUpdatePending},
 	"getUsbEmulationState":      {Func: rpcGetUsbEmulationState},
 	"setUsbEmulationState":      {Func: rpcSetUsbEmulationState, Params: []string{"enabled"}},
+	"getUsbEnhancedDetection":   {Func: rpcGetUsbEnhancedDetection},
+	"setUsbEnhancedDetection":   {Func: rpcSetUsbEnhancedDetection, Params: []string{"enabled"}},
 	"getUsbConfig":              {Func: rpcGetUsbConfig},
 	"setUsbConfig":              {Func: rpcSetUsbConfig, Params: []string{"usbConfig"}},
 	"checkMountUrl":             {Func: rpcCheckMountUrl, Params: []string{"url"}},
@@ -1256,6 +1387,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"resetSDStorage":            {Func: rpcResetSDStorage},
 	"mountSDStorage":            {Func: rpcMountSDStorage},
 	"unmountSDStorage":          {Func: rpcUnmountSDStorage},
+	"formatSDStorage":           {Func: rpcFormatSDStorage, Params: []string{"confirm"}},
 	"mountWithHTTP":             {Func: rpcMountWithHTTP, Params: []string{"url", "mode"}},
 	"mountWithWebRTC":           {Func: rpcMountWithWebRTC, Params: []string{"filename", "size", "mode"}},
 	"mountWithStorage":          {Func: rpcMountWithStorage, Params: []string{"filename", "mode"}},
@@ -1272,6 +1404,8 @@ var rpcHandlers = map[string]RPCHandler{
 	"getWakeOnLanDevices":       {Func: rpcGetWakeOnLanDevices},
 	"setWakeOnLanDevices":       {Func: rpcSetWakeOnLanDevices, Params: []string{"params"}},
 	"resetConfig":               {Func: rpcResetConfig},
+	"getConfigRaw":              {Func: rpcGetConfigRaw},
+	"setConfigRaw":              {Func: rpcSetConfigRaw, Params: []string{"configStr"}},
 	"setDisplayRotation":        {Func: rpcSetDisplayRotation, Params: []string{"params"}},
 	"getDisplayRotation":        {Func: rpcGetDisplayRotation},
 	"setBacklightSettings":      {Func: rpcSetBacklightSettings, Params: []string{"params"}},
@@ -1345,4 +1479,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"getWireguardConfig":        {Func: rpcGetWireguardConfig},
 	"getWireguardLog":           {Func: rpcGetWireguardLog},
 	"getWireguardInfo":          {Func: rpcGetWireguardInfo},
+	"getFirewallConfig":         {Func: rpcGetFirewallConfig},
+	"setFirewallConfig":         {Func: rpcSetFirewallConfig, Params: []string{"config"}},
+	"getBootStorageType":        {Func: rpcGetBootStorageType},
 }

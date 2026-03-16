@@ -12,6 +12,7 @@ import { cx } from "@/cva.config";
 import { useVideoEffects } from "@/layout/core/desktop/hooks/useVideoEffects";
 import { useVideoStream } from "@/layout/core/desktop/hooks/useVideoStream";
 import { usePointerLock } from "@/layout/core/desktop/hooks/usePointerLock";
+import { useFullscreen } from "@/layout/core/desktop/hooks/useFullscreen";
 import { useKeyboardEvents } from "@/layout/core/desktop/hooks/useKeyboardEvents";
 import { useMouseEvents } from "@/layout/core/desktop/hooks/useMouseEvents";
 import { useVideoOverlays } from "@/layout/core/desktop/hooks/useVideoOverlays";
@@ -25,7 +26,7 @@ import { useUiStore, useHidStore, useSettingsStore } from "@/hooks/stores";
 import { useTouchZoom } from "@/layout/core/desktop/hooks/useTouchZoom";
 import { usePasteHandler } from "@/layout/core/desktop/hooks/usePasteHandler";
 
-export default function PCDesktop() {
+export default function PCDesktop({ isFullscreen }: { isFullscreen?: number }) {
   const videoElm = useRef<HTMLVideoElement>(null);
   const audioElm = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -55,6 +56,7 @@ export default function PCDesktop() {
   const videoEffects = useVideoEffects();
   const videoStream = useVideoStream(videoElm as React.RefObject<HTMLVideoElement>, audioElm as React.RefObject<HTMLAudioElement>);
   const pointerLock = usePointerLock(videoElm as React.RefObject<HTMLVideoElement>);
+  useFullscreen(videoElm as React.RefObject<HTMLVideoElement>, pointerLock, isFullscreen);
   const touchZoom = useTouchZoom(zoomContainerRef as React.RefObject<HTMLDivElement>);
   const { handleGlobalPaste } = usePasteHandler(pasteCaptureRef as React.RefObject<HTMLTextAreaElement>);
 

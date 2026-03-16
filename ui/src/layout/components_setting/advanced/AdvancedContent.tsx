@@ -19,8 +19,14 @@ export default function SettingsAdvanced() {
   const [sshKey, setSSHKey] = useState<string>("");
   const setDeveloperMode = useSettingsStore(state => state.setDeveloperMode);
   const [usbEmulationEnabled, setUsbEmulationEnabled] = useState(false);
+  const [usbEnhancedDetectionEnabled, setUsbEnhancedDetectionEnabled] =
+    useState(true);
   const [showLoopbackWarning, setShowLoopbackWarning] = useState(false);
   const [showRebootConfirm, setShowRebootConfirm] = useState(false);
+  const [showConfigEdit, setShowConfigEdit] = useState(false);
+  const [showConfigSavedReboot, setShowConfigSavedReboot] = useState(false);
+  const [configContent, setConfigContent] = useState("");
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [localLoopbackOnly, setLocalLoopbackOnly] = useState(false);
 
   const settings = useSettingsStore();
@@ -36,6 +42,11 @@ export default function SettingsAdvanced() {
     send("getUsbEmulationState", {}, resp => {
       if ("error" in resp) return;
       setUsbEmulationEnabled(resp.result as boolean);
+    });
+
+    send("getUsbEnhancedDetection", {}, resp => {
+      if ("error" in resp) return;
+      setUsbEnhancedDetectionEnabled(resp.result as boolean);
     });
 
     send("getLocalLoopbackOnly", {}, resp => {
@@ -65,6 +76,24 @@ export default function SettingsAdvanced() {
       });
     },
     [getUsbEmulationState, send],
+  );
+
+  const handleUsbEnhancedDetectionToggle = useCallback(
+    (enabled: boolean) => {
+      send("setUsbEnhancedDetection", { enabled }, resp => {
+        if ("error" in resp) {
+          notifications.error(
+            `Failed to ${enabled ? "enable" : "disable"} USB enhanced detection: ${resp.error.data || "Unknown error"}`,
+          );
+          return;
+        }
+        setUsbEnhancedDetectionEnabled(enabled);
+        notifications.success(
+          enabled ? "USB enhanced detection enabled" : "USB enhanced detection disabled",
+        );
+      });
+    },
+    [send],
   );
 
   const handleResetConfig = useCallback(() => {
@@ -133,6 +162,35 @@ export default function SettingsAdvanced() {
     setShowLoopbackWarning(false);
   }, [applyLoopbackOnlyMode, setShowLoopbackWarning]);
 
+  const handleOpenConfigEditor = useCallback(() => {
+    send("getConfigRaw", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to load configuration: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+      setConfigContent(resp.result as string);
+      setShowConfigEdit(true);
+    });
+  }, [send]);
+
+  const handleSaveConfig = useCallback(() => {
+    setIsSavingConfig(true);
+    send("setConfigRaw", { configStr: configContent }, resp => {
+      setIsSavingConfig(false);
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to save configuration: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+      notifications.success("Configuration saved successfully");
+      setShowConfigEdit(false);
+      setShowConfigSavedReboot(true);
+    });
+  }, [send, configContent]);
+
   return (
     <div className="space-y-4">
       <SettingsPageHeader
@@ -198,6 +256,17 @@ export default function SettingsAdvanced() {
         </SettingsItem>
 
         <SettingsItem
+          title={$at("USB detection enhancement")}
+          description={$at("The DISC state is also checked during USB status retrieval")}
+          noCol
+        >
+          <Checkbox
+            checked={usbEnhancedDetectionEnabled}
+            onChange={e => handleUsbEnhancedDetectionToggle(e.target.checked)}
+          />
+        </SettingsItem>
+
+        <SettingsItem
           title={$at("USB Emulation")}
           description={$at("Control the USB emulation state")}
         >
@@ -256,15 +325,24 @@ export default function SettingsAdvanced() {
           </AntdButton> 
         </SettingsItem>
 
-
+        <SettingsItem
+          title={$at("Edit Configuration")}
+          description={$at("Edit the raw configuration file directly")}
+        >
+          <AntdButton
+            type="primary"
+            className={`${isMobile?"w-full":""}`}
+            onClick={handleOpenConfigEditor}
+          >
+            {$at("Edit")}
+          </AntdButton>
+        </SettingsItem>
 
         <SettingsItem
           title={$at("Reset Configuration")}
           description={$at("Reset configuration to default. This will log you out.Some configuration changes will take effect after restart system.")}
         >
-
           <AntdButton
-
             type="primary"
             className={`${isMobile?"w-full":""}`}
             onClick={() => {
@@ -322,6 +400,61 @@ export default function SettingsAdvanced() {
         confirmText={$at("Reboot")}
         onConfirm={() => {
           setShowRebootConfirm(false);
+          send("reboot", { force: false }, resp => {
+            if ("error" in resp) {
+              notifications.error(
+                `Failed to reboot: ${resp.error.data || "Unknown error"}`,
+              );
+              return;
+            }
+            notifications.success("System rebooting...");
+          });
+        }}
+      />
+
+      <ConfirmDialog
+        open={showConfigEdit}
+        onClose={() => setShowConfigEdit(false)}
+        title={$at("Edit Configuration")}
+        description={
+          <div className="space-y-4">
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              {$at("Edit the raw configuration JSON. Be careful when making changes as invalid JSON can cause system issues.")}
+            </p>
+            <textarea
+              value={configContent}
+              onChange={e => setConfigContent(e.target.value)}
+              className="w-full h-64 p-3 font-mono text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+              spellCheck={false}
+            />
+          </div>
+        }
+        variant="info"
+        cancelText={$at("Cancel")}
+        confirmText={isSavingConfig ? `${$at("Saving")}...` : $at("Save")}
+        onConfirm={handleSaveConfig}
+        isConfirming={isSavingConfig}
+      />
+
+      <ConfirmDialog
+        open={showConfigSavedReboot}
+        onClose={() => setShowConfigSavedReboot(false)}
+        title={$at("Configuration Saved")}
+        description={
+          <>
+            <p>
+              {$at("Configuration has been saved successfully. Some changes may require a system restart to take effect.")}
+            </p>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">
+              {$at("Would you like to restart the system now?")}
+            </p>
+          </>
+        }
+        variant="info"
+        cancelText={$at("Later")}
+        confirmText={$at("Restart Now")}
+        onConfirm={() => {
+          setShowConfigSavedReboot(false);
           send("reboot", { force: false }, resp => {
             if ("error" in resp) {
               notifications.error(

@@ -65,6 +65,7 @@ interface StorageFilePageProps {
   showSDManagement?: boolean;
   onResetSDStorage?: () => void;
   onUnmountSDStorage?: () => void;
+  onFormatSDStorage?: () => void;
   onMountSDStorage?: () => void;
 }
 
@@ -77,6 +78,7 @@ export const FileManager: React.FC<StorageFilePageProps> = ({
                                                               showSDManagement = false,
                                                               onResetSDStorage,
                                                               onUnmountSDStorage,
+                                                              onFormatSDStorage,
                                                             }) => {
   const { $at } = useReactAt();
 
@@ -212,6 +214,16 @@ export const FileManager: React.FC<StorageFilePageProps> = ({
     }
   }, [onResetSDStorage, syncStorage]);
 
+  const handleFormatWrapper = useCallback(async () => {
+    if (onFormatSDStorage) {
+      setLoading(true);
+      await onFormatSDStorage();
+      setSDMountStatus(null);
+      syncStorage();
+      setLoading(false);
+    }
+  }, [onFormatSDStorage, syncStorage]);
+
   if (mediaType === "sd" && sdMountStatus && sdMountStatus !== "ok") {
     return (
       <div className="mx-auto max-w-4xl py-8">
@@ -237,6 +249,19 @@ export const FileManager: React.FC<StorageFilePageProps> = ({
                       ? $at("Please insert an SD card and try again.")
                       : $at("Please format the SD card and try again.")}
                   </p>
+                  {sdMountStatus !== "none" && (
+                    <div className="pt-2">
+                      <AntdButton
+                        disabled={loading}
+                        danger={true}
+                        type="primary"
+                        onClick={handleFormatWrapper}
+                        className="w-full text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
+                      >
+                        {$at("Format MicroSD Card")}
+                      </AntdButton>
+                    </div>
+                  )}
                 </div>
 
               </div>
@@ -291,6 +316,7 @@ export const FileManager: React.FC<StorageFilePageProps> = ({
         showSDManagement={showSDManagement}
         onNewImageClick={handleNewImageClick}
         onUnmountSDStorage={handleUnmountWrapper}
+        onFormatSDStorage={handleFormatWrapper}
         syncStorage={syncStorage}
       />
 
@@ -476,6 +502,7 @@ interface ActionButtonsSectionProps {
   showSDManagement?: boolean;
   onNewImageClick: (incompleteFileName?: string) => void;
   onUnmountSDStorage?: () => void;
+  onFormatSDStorage?: () => void;
   syncStorage: () => void;
 }
 
@@ -484,15 +511,22 @@ const ActionButtonsSection: React.FC<ActionButtonsSectionProps> = ({
                                                                      loading,
                                                                      showSDManagement,
                                                                      onUnmountSDStorage,
+                                                                     onFormatSDStorage,
                                                                    }) => {
   const { $at } = useReactAt();
 
   if (mediaType === "sd" && showSDManagement) {
     return (
-      <div className="flex animate-fadeIn justify-between opacity-0"
+      <div className="flex animate-fadeIn justify-between gap-2 opacity-0"
            style={{ animationDuration: "0.7s", animationDelay: "0.25s" }}
       >
-
+        <AntdButton
+          disabled={loading}
+          type="primary"
+          danger={true}
+          onClick={onFormatSDStorage}
+          className="w-full text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
+        >{$at("Format MicroSD Card")}</AntdButton>
         <AntdButton
           disabled={loading}
           type="primary"

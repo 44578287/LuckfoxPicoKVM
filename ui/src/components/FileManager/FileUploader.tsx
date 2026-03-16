@@ -20,10 +20,12 @@ export function FileUploader({
                               onBack,
                               incompleteFileName,
                               media,
+                              accept,
                              }: {
   onBack: () => void;
   incompleteFileName?: string;
   media?: string;
+  accept?: string;
 })
 {
   const { $at }= useReactAt();
@@ -39,8 +41,24 @@ export function FileUploader({
 
   const [send] = useJsonRpc();
   const rtcDataChannelRef = useRef<RTCDataChannel | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const xhrRef = useRef<XMLHttpRequest | null>(null);
+
+  const validateSelectedFile = (file: File) => {
+    if (!accept) return null;
+    const allowedExts = accept
+      .split(",")
+      .map(s => s.trim().toLowerCase())
+      .filter(s => s.startsWith("."));
+    if (allowedExts.length === 0) return null;
+    const lowerName = file.name.toLowerCase();
+    if (allowedExts.some(ext => lowerName.endsWith(ext))) return null;
+    return $at("Only {{types}} files are supported").replace(
+      "{{types}}",
+      allowedExts.join(", "),
+    );
+  };
 
   useEffect(() => {
     const ref = rtcDataChannelRef.current;
@@ -262,6 +280,13 @@ export function FileUploader({
       }
 
       setFileError(null);
+      const validationError = validateSelectedFile(file);
+      if (validationError) {
+        setFileError(validationError);
+        setUploadState("idle");
+        event.target.value = "";
+        return;
+      }
       console.log(`File selected: ${file.name}, size: ${file.size} bytes`);
       setUploadedFileName(file.name);
       setUploadedFileSize(file.size);
@@ -338,7 +363,7 @@ export function FileUploader({
           <div
             onClick={() => {
               if (uploadState === "idle") {
-                document.getElementById("file-upload")?.click();
+                fileInputRef.current?.click();
               }
             }}
             className="block select-none"
@@ -369,7 +394,7 @@ export function FileUploader({
                                   <span>{$at("Click here to select {{fileName}} to resume upload").replace("{{fileName}}", formatters.truncateMiddle(incompleteFileName.replace(".incomplete", ""), 30))}</span>
                                 </div>
                               )
-                            : $at("Click here to upload a new image")
+                            : $at("Click here to upload")
                           }
                         </div>
                         {/*<p className="text-xs leading-none text-slate-700 dark:text-slate-300">*/}
@@ -435,10 +460,11 @@ export function FileUploader({
             </div>
           </div>
           <input
-            id="file-upload"
             type="file"
             onChange={handleFileChange}
             className="hidden"
+            ref={fileInputRef}
+            accept={accept}
           />
           {fileError && (
             <p className="mt-2 text-sm text-red-600 dark:text-red-400">{fileError}</p>

@@ -4,16 +4,17 @@ import SideTabs from "@components/Sidebar/SideTabs";
 import DevicePage from "@/layout/components_side/VirtualMediaSource/DevicePage";
 import SDPage from "@/layout/components_side/VirtualMediaSource/SDPage";
 import UnMountPage from "@/layout/components_side/VirtualMediaSource/UnMount";
+import { useBootStorageType } from "@/hooks/useBootStorage";
 
-
-////* KVM MicroSD Mount */
-// width: 143px;
-// height: 11px;
-// display: flex;
-// flex-direction: row;
-// align-items: center;
-// 主组件
 const VirtualMediaSource: React.FC = () => {
+  const { bootStorageType } = useBootStorageType();
+  const isBootFromSD = bootStorageType === "sd";
+
+  if (isBootFromSD) {
+    return (
+      <UnMountPage unmountedPage={<DevicePage />} />
+    );
+  }
 
   return (
     <UnMountPage unmountedPage={(
@@ -25,7 +26,6 @@ const VirtualMediaSource: React.FC = () => {
         defaultActiveKey="1"
       />
     )}/>
-
   );
 };
 

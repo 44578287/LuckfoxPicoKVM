@@ -22,6 +22,7 @@ import { useVpnStore, useLocalAuthModalStore } from "@/hooks/stores";
 import { LogDialog } from "@components/LogDialog";
 import { Dialog } from "@/layout/components_setting/access/auth";
 import AutoHeight from "@components/AutoHeight";
+import FirewallSettings from "./FirewallSettings";
 
 export interface TailScaleResponse {
   state: string;
@@ -988,6 +989,9 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
                   </AntdButton>
               </SettingsItem>
             )}
+
+            <FirewallSettings />
+
           </div>
           <div className="h-px w-full bg-slate-800/10 dark:bg-slate-300/20" />
         </>

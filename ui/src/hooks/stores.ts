@@ -678,6 +678,7 @@ export interface UpdateState {
     appUpdatePending: boolean;
 
     appDownloadProgress: number;
+    appDownloadSpeedBps: number;
     appDownloadFinishedAt: string | null;
 
     appVerificationProgress: number;
@@ -690,6 +691,7 @@ export interface UpdateState {
     systemUpdatePending: boolean;
 
     systemDownloadProgress: number;
+    systemDownloadSpeedBps: number;
     systemDownloadFinishedAt: string | null;
 
     systemVerificationProgress: number;
@@ -732,10 +734,12 @@ export const useUpdateStore = create<UpdateState>(set => ({
     appUpdatePending: false,
     systemUpdatePending: false,
     appDownloadProgress: 0,
+    appDownloadSpeedBps: 0,
     appDownloadFinishedAt: null,
     appVerificationProgress: 0,
     appVerifiedAt: null,
     systemDownloadProgress: 0,
+    systemDownloadSpeedBps: 0,
     systemDownloadFinishedAt: null,
     systemVerificationProgress: 0,
     systemVerifiedAt: null,
@@ -1143,3 +1147,15 @@ export interface LogEntry {
   message: string;
   originalArgs: any[];
 }
+
+export type BootStorageType = 'emmc' | 'sd' | 'unknown';
+
+interface BootStorageState {
+  bootStorageType: BootStorageType;
+  setBootStorageType: (type: BootStorageType) => void;
+}
+
+export const useBootStorageStore = create<BootStorageState>(set => ({
+  bootStorageType: 'unknown',
+  setBootStorageType: type => set({ bootStorageType: type }),
+}));

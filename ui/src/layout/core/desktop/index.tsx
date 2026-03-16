@@ -9,5 +9,5 @@ export default function Desktop({ isFullscreen }: { isFullscreen?: number }) {
   if(isMobile){
     return <MobileDesktop isFullscreen={isFullscreen}/>
   }
-  return <PCDesktop/> ;
+  return <PCDesktop isFullscreen={isFullscreen}/> ;
 }

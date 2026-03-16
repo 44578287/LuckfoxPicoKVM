@@ -89,7 +89,7 @@ var UpdateGiteeSystemZipUrls = []string{
 
 const cdnUpdateBaseURL = "https://cdn.picokvm.top/luckfox_picokvm_firmware/lastest/"
 
-var builtAppVersion = "0.1.1+dev"
+var builtAppVersion = "0.1.2+dev"
 
 var updateSource = "github"
 var customUpdateBaseURL string
@@ -672,13 +672,62 @@ func parseVersionTxt(s string) (appVersion string, systemVersion string, err err
 	return appVersion, systemVersion, nil
 }
 
-func downloadFile(ctx context.Context, path string, url string, downloadProgress *float32) error {
+func shouldProxyUpdateDownloadURL(u *url.URL) bool {
+	if u == nil {
+		return false
+	}
+	host := strings.ToLower(strings.TrimSpace(u.Hostname()))
+	if host == "" {
+		return false
+	}
+	if host == "github.com" || host == "api.github.com" || host == "codeload.github.com" || host == "raw.githubusercontent.com" {
+		return true
+	}
+	if strings.HasSuffix(host, ".github.com") || strings.HasSuffix(host, ".githubusercontent.com") || strings.HasSuffix(host, ".githubassets.com") {
+		return true
+	}
+	return false
+}
+
+func applyUpdateDownloadProxyPrefix(rawURL string) string {
+	if config == nil {
+		return rawURL
+	}
+	proxy := strings.TrimSpace(config.UpdateDownloadProxy)
+	if proxy == "" {
+		return rawURL
+	}
+	proxy = strings.TrimRight(proxy, "/") + "/"
+	if strings.HasPrefix(rawURL, proxy) {
+		return rawURL
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed == nil {
+		return rawURL
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return rawURL
+	}
+	if !shouldProxyUpdateDownloadURL(parsed) {
+		return rawURL
+	}
+	return proxy + rawURL
+}
+
+func downloadFile(
+	ctx context.Context,
+	path string,
+	url string,
+	downloadProgress *float32,
+	downloadSpeedBps *float32,
+) error {
 	//if _, err := os.Stat(path); err == nil {
 	//	if err := os.Remove(path); err != nil {
 	//		return fmt.Errorf("error removing existing file: %w", err)
 	//	}
 	//}
-	otaLogger.Info().Str("path", path).Str("url", url).Msg("downloading file")
+	finalURL := applyUpdateDownloadProxyPrefix(url)
+	otaLogger.Info().Str("path", path).Str("url", finalURL).Msg("downloading file")
 
 	unverifiedPath := path + ".unverified"
 	if _, err := os.Stat(unverifiedPath); err == nil {
@@ -693,7 +742,7 @@ func downloadFile(ctx context.Context, path string, url string, downloadProgress
 	}
 	defer file.Close()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", finalURL, nil)
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}
@@ -726,6 +775,19 @@ func downloadFile(ctx context.Context, path string, url string, downloadProgress
 	var lastProgressBytes int64
 	lastProgressAt := time.Now()
 	lastReportedProgress := float32(0)
+	lastSpeedAt := time.Now()
+	var lastSpeedBytes int64
+
+	if downloadProgress != nil {
+		*downloadProgress = 0
+	}
+	if downloadSpeedBps != nil {
+		*downloadSpeedBps = 0
+	}
+	if downloadProgress != nil || downloadSpeedBps != nil {
+		triggerOTAStateUpdate()
+	}
+
 	buf := make([]byte, 32*1024)
 	for {
 		nr, er := resp.Body.Read(buf)
@@ -738,20 +800,40 @@ func downloadFile(ctx context.Context, path string, url string, downloadProgress
 			if ew != nil {
 				return fmt.Errorf("error writing to file: %w", ew)
 			}
-			if hasKnownSize && downloadProgress != nil {
-				progress := float32(written) / float32(totalSize)
-				if progress-lastReportedProgress >= 0.001 || time.Since(lastProgressAt) >= 1*time.Second {
-					lastReportedProgress = progress
-					*downloadProgress = lastReportedProgress
-					triggerOTAStateUpdate()
-					lastProgressAt = time.Now()
+			now := time.Now()
+			speedUpdated := false
+			progressUpdated := false
+
+			if downloadSpeedBps != nil {
+				dt := now.Sub(lastSpeedAt)
+				if dt >= 1*time.Second {
+					seconds := float32(dt.Seconds())
+					if seconds <= 0 {
+						*downloadSpeedBps = 0
+					} else {
+						*downloadSpeedBps = float32(written-lastSpeedBytes) / seconds
+					}
+					lastSpeedAt = now
+					lastSpeedBytes = written
+					speedUpdated = true
 				}
 			}
+
+			if hasKnownSize && downloadProgress != nil {
+				progress := float32(written) / float32(totalSize)
+				if progress-lastReportedProgress >= 0.001 || now.Sub(lastProgressAt) >= 1*time.Second {
+					lastReportedProgress = progress
+					*downloadProgress = lastReportedProgress
+					lastProgressAt = now
+					progressUpdated = true
+				}
+			}
+
 			if !hasKnownSize && downloadProgress != nil {
 				if *downloadProgress <= 0 {
 					*downloadProgress = 0.01
-					triggerOTAStateUpdate()
 					lastProgressBytes = written
+					progressUpdated = true
 				} else if written-lastProgressBytes >= 1024*1024 {
 					next := *downloadProgress + 0.01
 					if next > 0.99 {
@@ -759,10 +841,14 @@ func downloadFile(ctx context.Context, path string, url string, downloadProgress
 					}
 					if next-*downloadProgress >= 0.01 {
 						*downloadProgress = next
-						triggerOTAStateUpdate()
 						lastProgressBytes = written
+						progressUpdated = true
 					}
 				}
+			}
+
+			if speedUpdated || progressUpdated {
+				triggerOTAStateUpdate()
 			}
 		}
 		if er != nil {
@@ -779,6 +865,14 @@ func downloadFile(ctx context.Context, path string, url string, downloadProgress
 
 	if downloadProgress != nil && !hasKnownSize {
 		*downloadProgress = 1
+		if downloadSpeedBps != nil {
+			*downloadSpeedBps = 0
+		}
+		triggerOTAStateUpdate()
+	}
+
+	if downloadSpeedBps != nil && hasKnownSize {
+		*downloadSpeedBps = 0
 		triggerOTAStateUpdate()
 	}
 
@@ -813,6 +907,7 @@ func prepareSystemUpdateTarFromKvmSystemZip(
 	zipURL string,
 	outputTarPath string,
 	downloadProgress *float32,
+	downloadSpeedBps *float32,
 	verificationProgress *float32,
 	scopedLogger *zerolog.Logger,
 ) error {
@@ -846,10 +941,15 @@ func prepareSystemUpdateTarFromKvmSystemZip(
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if downloadProgress != nil {
 			*downloadProgress = 0
+		}
+		if downloadSpeedBps != nil {
+			*downloadSpeedBps = 0
+		}
+		if downloadProgress != nil || downloadSpeedBps != nil {
 			triggerOTAStateUpdate()
 		}
 
-		if err := downloadFile(ctx, zipPath, zipURL, downloadProgress); err != nil {
+		if err := downloadFile(ctx, zipPath, zipURL, downloadProgress, downloadSpeedBps); err != nil {
 			lastErr = err
 		} else {
 			zipUnverifiedPath := zipPath + ".unverified"
@@ -1084,8 +1184,10 @@ type OTAState struct {
 	AppUpdatePending           bool       `json:"appUpdatePending"`
 	SystemUpdatePending        bool       `json:"systemUpdatePending"`
 	AppDownloadProgress        float32    `json:"appDownloadProgress,omitempty"` //TODO: implement for progress bar
+	AppDownloadSpeedBps        float32    `json:"appDownloadSpeedBps"`
 	AppDownloadFinishedAt      *time.Time `json:"appDownloadFinishedAt,omitempty"`
 	SystemDownloadProgress     float32    `json:"systemDownloadProgress,omitempty"` //TODO: implement for progress bar
+	SystemDownloadSpeedBps     float32    `json:"systemDownloadSpeedBps"`
 	SystemDownloadFinishedAt   *time.Time `json:"systemDownloadFinishedAt,omitempty"`
 	AppVerificationProgress    float32    `json:"appVerificationProgress,omitempty"`
 	AppVerifiedAt              *time.Time `json:"appVerifiedAt,omitempty"`
@@ -1177,7 +1279,13 @@ func TryUpdate(ctx context.Context, deviceId string, includePreRelease bool) err
 			Str("remote", remote.AppVersion).
 			Msg("App update available")
 
-		err := downloadFile(ctx, "/userdata/picokvm/bin/kvm_app", remote.AppUrl, &otaState.AppDownloadProgress)
+		err := downloadFile(
+			ctx,
+			"/userdata/picokvm/bin/kvm_app",
+			remote.AppUrl,
+			&otaState.AppDownloadProgress,
+			&otaState.AppDownloadSpeedBps,
+		)
 		if err != nil {
 			otaState.Error = fmt.Sprintf("Error downloading app update: %v", err)
 			scopedLogger.Error().Err(err).Msg("Error downloading app update")
@@ -1227,6 +1335,7 @@ func TryUpdate(ctx context.Context, deviceId string, includePreRelease bool) err
 				remote.SystemUrl,
 				systemTarPath,
 				&otaState.SystemDownloadProgress,
+				&otaState.SystemDownloadSpeedBps,
 				&otaState.SystemVerificationProgress,
 				&scopedLogger,
 			)
@@ -1238,7 +1347,13 @@ func TryUpdate(ctx context.Context, deviceId string, includePreRelease bool) err
 			}
 		} else {
 			systemZipPath := "/userdata/picokvm/update_system.zip"
-			err := downloadFile(ctx, systemZipPath, remote.SystemUrl, &otaState.SystemDownloadProgress)
+			err := downloadFile(
+				ctx,
+				systemZipPath,
+				remote.SystemUrl,
+				&otaState.SystemDownloadProgress,
+				&otaState.SystemDownloadSpeedBps,
+			)
 			if err != nil {
 				otaState.Error = fmt.Sprintf("Error downloading system update: %v", err)
 				scopedLogger.Error().Err(err).Msg("Error downloading system update")

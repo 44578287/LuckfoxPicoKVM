@@ -53,6 +53,11 @@ export interface StorageSpace {
   bytesFree: number;
 }
 
+const isMountableVirtualMediaFile = (filename: string) => {
+  const lower = filename.toLowerCase();
+  return lower.endsWith(".img") || lower.endsWith(".iso");
+};
+
 
 const LoadingOverlay: React.FC = () => {
   const { $at } = useReactAt();
@@ -89,7 +94,6 @@ export default function ImageManager({
   const { $at } = useReactAt();
   const [send] = useJsonRpc();
 
-  // 状态管理
   const [storageFiles, setStorageFiles] = useState<StorageFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [usbMode, setUsbMode] = useState<RemoteVirtualMediaState["mode"]>("CDROM");
@@ -103,7 +107,6 @@ export default function ImageManager({
   const [uploadFile, setUploadFile] = useState<string | null>(null);
   const filesPerPage = 5;
 
-  // 计算属性
   const percentageUsed = useMemo(() => {
     if (!storageSpace) return 0;
     return Number(
@@ -162,13 +165,30 @@ export default function ImageManager({
     setLoading(false);
   };
 
-  // 数据获取函数
+  const handleFormatSDStorage = async () => {
+    if (!window.confirm($at("Formatting the SD card will erase all data. Continue?"))) {
+      return;
+    }
+    setLoading(true);
+    send("formatSDStorage", { confirm: true }, res => {
+      if ("error" in res) {
+        notifications.error(res.error.data || res.error.message);
+        setLoading(false);
+        return;
+      }
+      notifications.success($at("SD card formatted successfully"));
+      setSDMountStatus(null);
+      checkSDStatus();
+    });
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    setLoading(false);
+  };
+
   const syncStorage = useCallback(() => {
     if (storageType === 'sd' && sdMountStatus !== 'ok') {
       return;
     }
 
-    // 获取存储文件列表
     send(listFilesApi, {}, res => {
       if ("error" in res) {
         notifications.error(`Error listing storage files: ${res.error}`);
@@ -180,10 +200,11 @@ export default function ImageManager({
         size: formatters.bytes(file.size),
         createdAt: formatters.date(new Date(file?.createdAt)),
       }));
-      setStorageFiles(formattedFiles);
+      const mountableFiles = formattedFiles.filter(f => isMountableVirtualMediaFile(f.name));
+      setStorageFiles(mountableFiles);
+      setSelectedFile(prev => (prev && mountableFiles.some(f => f.name === prev) ? prev : null));
     });
 
-    // 获取存储空间信息
     send(getSpaceApi, {}, res => {
       if ("error" in res) {
         notifications.error(`Error getting storage space: ${res.error}`);
@@ -192,7 +213,6 @@ export default function ImageManager({
       setStorageSpace(res.result as StorageSpace);
     });
 
-    // 获取自动挂载设置
     if (showAutoMount && getAutoMountApi) {
       send(getAutoMountApi, {}, resp => {
         if ("error" in resp) {
@@ -205,7 +225,6 @@ export default function ImageManager({
     }
   }, [send, listFilesApi, getSpaceApi, showAutoMount, getAutoMountApi, storageType, sdMountStatus]);
 
-  // 初始化数据
   useEffect(() => {
     if (storageType === 'sd') {
       checkSDStatus();
@@ -220,7 +239,6 @@ export default function ImageManager({
     }
   }, [sdMountStatus, syncStorage]);
 
-  // 事件处理函数
   const handleDeleteFile = useCallback((file: StorageFile) => {
     if (window.confirm($at("Are you sure you want to delete " + file.name + "?"))) {
       send(deleteFileApi, { filename: file.name }, res => {
@@ -235,9 +253,10 @@ export default function ImageManager({
 
   const handleSelectFile = useCallback((file: StorageFile) => {
     setSelectedFile(file.name);
-    if (file.name.endsWith(".iso")) {
+    const lower = file.name.toLowerCase();
+    if (lower.endsWith(".iso")) {
       setUsbMode("CDROM");
-    } else if (file.name.endsWith(".img")) {
+    } else if (lower.endsWith(".img")) {
       setUsbMode("Disk");
     }
   }, []);
@@ -263,7 +282,6 @@ export default function ImageManager({
         return;
       }
 
-      // 挂载成功
       syncRemoteVirtualMediaState()
       setMountInProgress(false);
       if (onMountSuccess) {
@@ -327,6 +345,19 @@ export default function ImageManager({
                       ? $at("Please insert an SD card and try again.")
                       : $at("Please format the SD card and try again.")}
                   </p>
+                  {sdMountStatus !== "none" && (
+                    <div className="pt-2">
+                      <AntdButton
+                        disabled={loading}
+                        danger={true}
+                        type="primary"
+                        onClick={handleFormatSDStorage}
+                        className="w-full text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
+                      >
+                        {$at("Format MicroSD Card")}
+                      </AntdButton>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -343,7 +374,6 @@ export default function ImageManager({
         title={$at("Mount from KVM Storage")}
         description={$at("Select the image you want to mount from the KVM storage")}
       />
-      {/* 自动挂载设置 */}
       {showAutoMount && (
         <div className="w-full animate-fadeIn opacity-0" style={{ animationDuration: "0.7s", animationDelay: "0.1s" }}>
           <SettingsItem
@@ -361,7 +391,6 @@ export default function ImageManager({
 
       {showAutoMount && <hr className="border-slate-800/20 dark:border-slate-300/20" />}
 
-      {/* 文件列表 */}
       <div className="w-full animate-fadeIn opacity-0 px-0.5" style={{ animationDuration: "0.7s", animationDelay: "0.1s" }}>
         <div className="relative">
           <Card>
@@ -402,7 +431,6 @@ export default function ImageManager({
                   />
                 ))}
 
-                {/* 分页控件 */}
                 {storageFiles.length > filesPerPage && (
                   <div className="flex items-center justify-between px-3 py-2">
                     <p className="text-sm text-slate-700 dark:text-slate-300">
@@ -438,7 +466,6 @@ export default function ImageManager({
         </div>
       </div>
 
-      {/* 操作按钮 */}
       {storageFiles.length > 0 && (
         <div className="flex animate-fadeIn items-end justify-between opacity-0" style={{ animationDuration: "0.7s", animationDelay: "0.15s" }}>
           <Fieldset disabled={selectedFile === null}>
@@ -456,7 +483,6 @@ export default function ImageManager({
         </div>
       )}
 
-      {/* 存储空间信息 */}
       <hr className="border-slate-800/20 dark:border-slate-300/20" />
       <div className="animate-fadeIn space-y-2 opacity-0" style={{ animationDuration: "0.7s", animationDelay: "0.20s" }}>
         <StorageSpaceBar
@@ -465,12 +491,18 @@ export default function ImageManager({
           bytesFree={storageSpace?.bytesFree || 0}
         />
       </div>
-      
-      {/* 自定义操作区域 */}
+
       {unmountApi && storageType === 'sd' && (
-        <div className="flex animate-fadeIn justify-between opacity-0"
+        <div className="flex animate-fadeIn justify-between gap-2 opacity-0"
              style={{ animationDuration: "0.7s", animationDelay: "0.25s" }}
         >
+          <AntdButton
+            disabled={loading}
+            type="primary"
+            danger={true}
+            onClick={handleFormatSDStorage}
+            className="w-full text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
+          >{$at("Format MicroSD Card")}</AntdButton>
           <AntdButton
             disabled={loading}
             type="primary"
@@ -482,7 +514,6 @@ export default function ImageManager({
       )}
       {customActions}
 
-      {/* 上传新镜像按钮 */}
       {uploadFile ? (
         <FileUploader
           key={`resume-${uploadFile}`}
@@ -492,12 +523,14 @@ export default function ImageManager({
           }}
           incompleteFileName={uploadFile}
           media={storageType}
+          accept=".img,.iso"
         />
       ) : (
         <FileUploader
           key="new-upload"
           onBack={handleFileUploadComplete}
           media={storageType}
+          accept=".img,.iso"
         />
       )}
 

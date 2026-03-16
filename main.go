@@ -35,6 +35,7 @@ func Main() {
 		Interface("app_version", appVersionLocal).
 		Msg("starting KVM")
 
+	go watchAdcKeysLongPressReset(appCtx)
 	go runWatchdog()
 	go confirmCurrentSystem() //A/B system
 	if isNewEnoughSystem {
@@ -55,6 +56,10 @@ func Main() {
 	if err := initNetwork(); err != nil {
 		logger.Error().Err(err).Msg("failed to initialize network")
 		os.Exit(1)
+	}
+
+	if err := ApplyFirewallConfig(config.Firewall); err != nil {
+		logger.Warn().Err(err).Msg("failed to apply firewall config")
 	}
 
 	// Initialize time sync
