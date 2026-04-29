@@ -782,7 +782,11 @@ func rpcUnmountSDStorage() error {
 	return nil
 }
 
-func rpcFormatSDStorage(confirm bool) error {
+func rpcFormatSDStorage(confirm bool, fsType string) error {
+	validFsTypes := map[string]bool{"exfat": true, "fat32": true}
+	if !validFsTypes[fsType] {
+		fsType = "fat32"
+	}
 	if !confirm {
 		return fmt.Errorf("format not confirmed")
 	}
@@ -864,7 +868,13 @@ func rpcFormatSDStorage(confirm bool) error {
 		return fmt.Errorf("failed to stat sd partition: %w", err)
 	}
 
-	mkfsOut, mkfsErr := exec.Command("mkfs.vfat", "-F", "32", "-n", "PICOKVM", "/dev/mmcblk1p1").CombinedOutput()
+	var mkfsCmd *exec.Cmd
+	if fsType == "exfat" {
+		mkfsCmd = exec.Command("mkfs.exfat", "-n", "PICOKVM", "/dev/mmcblk1p1")
+	} else {
+		mkfsCmd = exec.Command("mkfs.vfat", "-F", "32", "-n", "PICOKVM", "/dev/mmcblk1p1")
+	}
+	mkfsOut, mkfsErr := mkfsCmd.CombinedOutput()
 	if mkfsErr != nil {
 		return fmt.Errorf("failed to format sdcard: %w: %s", mkfsErr, strings.TrimSpace(string(mkfsOut)))
 	}

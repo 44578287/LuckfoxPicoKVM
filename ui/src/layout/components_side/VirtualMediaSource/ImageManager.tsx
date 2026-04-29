@@ -105,6 +105,7 @@ export default function ImageManager({
   const [sdMountStatus, setSDMountStatus] = useState<"ok" | "none" | "fail" | null>(storageType === 'sd' ? null : 'ok');
   const [loading, setLoading] = useState(false);
   const [uploadFile, setUploadFile] = useState<string | null>(null);
+  const [fsType, setFsType] = useState<'exfat' | 'fat32'>('fat32');
   const filesPerPage = 5;
 
   const percentageUsed = useMemo(() => {
@@ -170,7 +171,7 @@ export default function ImageManager({
       return;
     }
     setLoading(true);
-    send("formatSDStorage", { confirm: true }, res => {
+    send("formatSDStorage", { confirm: true, fsType }, res => {
       if ("error" in res) {
         notifications.error(res.error.data || res.error.message);
         setLoading(false);
@@ -347,15 +348,28 @@ export default function ImageManager({
                   </p>
                   {sdMountStatus !== "none" && (
                     <div className="pt-2">
-                      <AntdButton
-                        disabled={loading}
-                        danger={true}
-                        type="primary"
-                        onClick={handleFormatSDStorage}
-                        className="w-full text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
-                      >
-                        {$at("Format MicroSD Card")}
-                      </AntdButton>
+                      <div className="mx-auto w-full max-w-[360px] space-y-2">
+                        <p className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+                          {$at("Choose the file system for MicroSD formatting")}
+                        </p>
+                        <select
+                          value={fsType}
+                          onChange={(e) => setFsType(e.target.value as 'exfat' | 'fat32')}
+                          style={{ width: "100%", padding: "8px", borderRadius: "4px" }}
+                        >
+                          <option value="fat32">FAT32</option>
+                          <option value="exfat">exFAT</option>
+                        </select>
+                        <AntdButton
+                          disabled={loading}
+                          danger={true}
+                          type="primary"
+                          onClick={handleFormatSDStorage}
+                          className="w-full text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
+                        >
+                          {$at("Format MicroSD Card")} ({fsType})
+                        </AntdButton>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -493,16 +507,29 @@ export default function ImageManager({
       </div>
 
       {unmountApi && storageType === 'sd' && (
-        <div className="flex animate-fadeIn justify-between gap-2 opacity-0"
+        <div className="animate-fadeIn space-y-2 opacity-0"
              style={{ animationDuration: "0.7s", animationDelay: "0.25s" }}
         >
-          <AntdButton
-            disabled={loading}
-            type="primary"
-            danger={true}
-            onClick={handleFormatSDStorage}
-            className="w-full text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
-          >{$at("Format MicroSD Card")}</AntdButton>
+          <div className="w-full space-y-2">
+            <p className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+              {$at("Choose the file system for MicroSD formatting")}
+            </p>
+            <select
+              value={fsType}
+              onChange={(e) => setFsType(e.target.value as 'exfat' | 'fat32')}
+              style={{ width: "100%", padding: "8px", borderRadius: "4px" }}
+            >
+              <option value="fat32">FAT32</option>
+              <option value="exfat">exFAT</option>
+            </select>
+            <AntdButton
+              disabled={loading}
+              type="primary"
+              danger={true}
+              onClick={handleFormatSDStorage}
+              className="w-full text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
+            >{$at("Format MicroSD Card")} ({fsType})</AntdButton>
+          </div>
           <AntdButton
             disabled={loading}
             type="primary"

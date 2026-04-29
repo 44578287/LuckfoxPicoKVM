@@ -67,6 +67,8 @@ interface StorageFilePageProps {
   onUnmountSDStorage?: () => void;
   onFormatSDStorage?: () => void;
   onMountSDStorage?: () => void;
+  fsType?: 'exfat' | 'fat32';
+  onFsTypeChange?: (value: 'exfat' | 'fat32') => void;
 }
 
 export const FileManager: React.FC<StorageFilePageProps> = ({
@@ -79,6 +81,8 @@ export const FileManager: React.FC<StorageFilePageProps> = ({
                                                               onResetSDStorage,
                                                               onUnmountSDStorage,
                                                               onFormatSDStorage,
+                                                              fsType,
+                                                              onFsTypeChange,
                                                             }) => {
   const { $at } = useReactAt();
 
@@ -251,15 +255,28 @@ export const FileManager: React.FC<StorageFilePageProps> = ({
                   </p>
                   {sdMountStatus !== "none" && (
                     <div className="pt-2">
-                      <AntdButton
-                        disabled={loading}
-                        danger={true}
-                        type="primary"
-                        onClick={handleFormatWrapper}
-                        className="w-full text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
-                      >
-                        {$at("Format MicroSD Card")}
-                      </AntdButton>
+                      <div className="w-full space-y-2">
+                        <p className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+                          {$at("Choose the file system for MicroSD formatting")}
+                        </p>
+                        <select
+                          value={fsType || "fat32"}
+                          onChange={(e) => onFsTypeChange?.(e.target.value as 'exfat' | 'fat32')}
+                          style={{ width: "100%", padding: "8px", borderRadius: "4px" }}
+                        >
+                          <option value="fat32">FAT32</option>
+                          <option value="exfat">exFAT</option>
+                        </select>
+                        <AntdButton
+                          disabled={loading}
+                          danger={true}
+                          type="primary"
+                          onClick={handleFormatWrapper}
+                          className="w-full text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
+                        >
+                          {$at("Format MicroSD Card")} ({(fsType || "fat32")})
+                        </AntdButton>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -318,6 +335,8 @@ export const FileManager: React.FC<StorageFilePageProps> = ({
         onUnmountSDStorage={handleUnmountWrapper}
         onFormatSDStorage={handleFormatWrapper}
         syncStorage={syncStorage}
+        fsType={fsType}
+        onFsTypeChange={onFsTypeChange}
       />
 
       {uploadFile ? (
@@ -504,29 +523,46 @@ interface ActionButtonsSectionProps {
   onUnmountSDStorage?: () => void;
   onFormatSDStorage?: () => void;
   syncStorage: () => void;
+  fsType?: 'exfat' | 'fat32';
+  onFsTypeChange?: (value: 'exfat' | 'fat32') => void;
 }
 
 const ActionButtonsSection: React.FC<ActionButtonsSectionProps> = ({
-                                                                     mediaType,
-                                                                     loading,
-                                                                     showSDManagement,
-                                                                     onUnmountSDStorage,
-                                                                     onFormatSDStorage,
-                                                                   }) => {
+                                                                      mediaType,
+                                                                      loading,
+                                                                      showSDManagement,
+                                                                      onUnmountSDStorage,
+                                                                      onFormatSDStorage,
+                                                                      fsType,
+                                                                      onFsTypeChange,
+                                                                    }) => {
   const { $at } = useReactAt();
 
   if (mediaType === "sd" && showSDManagement) {
     return (
-      <div className="flex animate-fadeIn justify-between gap-2 opacity-0"
+      <div className="animate-fadeIn space-y-2 opacity-0"
            style={{ animationDuration: "0.7s", animationDelay: "0.25s" }}
       >
-        <AntdButton
-          disabled={loading}
-          type="primary"
-          danger={true}
-          onClick={onFormatSDStorage}
-          className="w-full text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
-        >{$at("Format MicroSD Card")}</AntdButton>
+        <div className="w-full space-y-2">
+          <p className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+            {$at("Choose the file system for MicroSD formatting")}
+          </p>
+          <select
+            value={fsType || "fat32"}
+            onChange={(e) => onFsTypeChange?.(e.target.value as 'exfat' | 'fat32')}
+            style={{ width: "100%", padding: "8px", borderRadius: "4px" }}
+          >
+            <option value="fat32">FAT32</option>
+            <option value="exfat">exFAT</option>
+          </select>
+          <AntdButton
+            disabled={loading}
+            type="primary"
+            danger={true}
+            onClick={onFormatSDStorage}
+            className="w-full text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
+          >{$at("Format MicroSD Card")} ({(fsType || "fat32")})</AntdButton>
+        </div>
         <AntdButton
           disabled={loading}
           type="primary"
