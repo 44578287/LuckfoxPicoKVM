@@ -1,6 +1,8 @@
-import { KeyCombo } from "../keyboardLayouts"
+import { KeyboardLayout, KeyCombo } from "../keyboardLayouts"
+import { modifierDisplayMap, keyDisplayMap, virtualKeyboard } from "./en_US"
 
-export const name = "Belgisch Nederlands";
+const name = "Belgisch Nederlands";
+const isoCode = "fr-BE";
 
 const keyTrema = { key: "BracketLeft", shift: true } // tréma (umlaut), two dots placed above a vowel
 const keyHat = { key: "BracketLeft" } // accent circonflexe (accent hat), mark ^ placed above the letter
@@ -165,3 +167,12 @@ export const chars = {
   Enter: { key: "Enter" },
   Tab: { key: "Tab" },
 } as Record<string, KeyCombo>;
+
+export const fr_BE: KeyboardLayout = {
+  isoCode,
+  name,
+  chars,
+  keyDisplayMap,
+  modifierDisplayMap,
+  virtualKeyboard,
+};

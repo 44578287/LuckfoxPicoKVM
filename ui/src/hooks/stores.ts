@@ -185,6 +185,9 @@ interface RTCState {
 
   serialConsole: RTCDataChannel | null;
   setSerialConsole: (channel: RTCDataChannel | null) => void;
+
+  hidChannel: RTCDataChannel | null;
+  setHidChannel: (channel: RTCDataChannel | null) => void;
 }
 
 export const useRTCStore = create<RTCState>(set => ({
@@ -193,6 +196,9 @@ export const useRTCStore = create<RTCState>(set => ({
 
   rpcDataChannel: null,
   setRpcDataChannel: channel => set({ rpcDataChannel: channel }),
+
+  hidChannel: null,
+  setHidChannel: channel => set({ hidChannel: channel }),
 
   transceiver: null,
   setTransceiver: transceiver => set({ transceiver }),
@@ -566,6 +572,12 @@ export interface HidState {
   keyboardLedStateSyncAvailable: boolean;
   setKeyboardLedStateSyncAvailable: (available: boolean) => void;
 
+  rpcHidReady: boolean;
+  setRpcHidReady: (ready: boolean) => void;
+
+  keysDownState?: { modifier: number; keys: number[] };
+  setKeysDownState: (state: { modifier: number; keys: number[] }) => void;
+
   isVirtualKeyboardEnabled: boolean;
   setVirtualKeyboardEnabled: (enabled: boolean) => void;
 
@@ -621,6 +633,12 @@ export const useHidStore = create<HidState>((set, get) => ({
     keyboardLedState.scroll_lock = active;
     set({ keyboardLedState });
   },
+
+  rpcHidReady: false,
+  setRpcHidReady: ready => set({ rpcHidReady: ready }),
+
+  keysDownState: undefined,
+  setKeysDownState: state => set({ keysDownState: state }),
 
   keyboardLedStateSyncAvailable: false,
   setKeyboardLedStateSyncAvailable: available => set({ keyboardLedStateSyncAvailable: available }),

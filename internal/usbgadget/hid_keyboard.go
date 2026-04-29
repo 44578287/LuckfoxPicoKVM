@@ -226,15 +226,153 @@ func (u *UsbGadget) keyboardWriteHidFile(data []byte) error {
 	return nil
 }
 
-func (u *UsbGadget) KeyboardReport(modifier uint8, keys []uint8) error {
+type autoReleaseTimer struct {
+	timer  *time.Timer
+	key    byte
+	active bool
+}
+
+type KeysDownState struct {
+	Modifier byte
+	Keys     [6]byte
+}
+
+func (u *UsbGadget) scheduleAutoRelease(key byte) {
+	// Cancel existing timer for this key
+	for i := range u.autoReleaseTimers {
+		if u.autoReleaseTimers[i].key == key && u.autoReleaseTimers[i].active {
+			u.autoReleaseTimers[i].timer.Stop()
+			u.autoReleaseTimers[i].active = false
+		}
+	}
+
+	// Schedule new timer
+	timer := time.AfterFunc(100*time.Millisecond, func() {
+		u.autoReleaseKey(key)
+	})
+
+	u.autoReleaseTimers = append(u.autoReleaseTimers, autoReleaseTimer{
+		timer:  timer,
+		key:    key,
+		active: true,
+	})
+}
+
+func (u *UsbGadget) autoReleaseKey(key byte) {
 	u.keyboardLock.Lock()
 	defer u.keyboardLock.Unlock()
 
+	// Remove key from buffer
+	found := false
+	for i := 0; i < len(u.keysDownState.Keys); i++ {
+		if u.keysDownState.Keys[i] == key {
+			found = true
+		}
+		if found && i < len(u.keysDownState.Keys)-1 {
+			u.keysDownState.Keys[i] = u.keysDownState.Keys[i+1]
+		}
+	}
+	if found {
+		u.keysDownState.Keys[len(u.keysDownState.Keys)-1] = 0
+		u.keyboardWriteHidFileLocked(u.keysDownState.Modifier, u.keysDownState.Keys[:])
+	}
+
+	// Mark timer as inactive
+	for i := range u.autoReleaseTimers {
+		if u.autoReleaseTimers[i].key == key && u.autoReleaseTimers[i].active {
+			u.autoReleaseTimers[i].active = false
+		}
+	}
+}
+
+func (u *UsbGadget) cancelAutoRelease(key byte) {
+	for i := range u.autoReleaseTimers {
+		if u.autoReleaseTimers[i].key == key && u.autoReleaseTimers[i].active {
+			u.autoReleaseTimers[i].timer.Stop()
+			u.autoReleaseTimers[i].active = false
+		}
+	}
+}
+
+func (u *UsbGadget) resetAllAutoReleaseTimers() {
+	for i := range u.autoReleaseTimers {
+		if u.autoReleaseTimers[i].active {
+			u.autoReleaseTimers[i].timer.Stop()
+			u.autoReleaseTimers[i].active = false
+		}
+	}
+}
+
+func (u *UsbGadget) KeypressReport(key byte, press bool) error {
+	u.keyboardLock.Lock()
+	defer u.keyboardLock.Unlock()
+
+	if press {
+		// Check if key already in buffer
+		for _, k := range u.keysDownState.Keys {
+			if k == key {
+				return nil // Already pressed
+			}
+		}
+
+		// Find empty slot
+		emptySlot := -1
+		for i, k := range u.keysDownState.Keys {
+			if k == 0 {
+				emptySlot = i
+				break
+			}
+		}
+
+		if emptySlot == -1 {
+			// Buffer full - ErrorRollOver
+			u.keysDownState.Keys = [6]byte{0x01, 0x01, 0x01, 0x01, 0x01, 0x01}
+		} else {
+			u.keysDownState.Keys[emptySlot] = key
+		}
+
+		u.scheduleAutoRelease(key)
+	} else {
+		// Remove key from buffer
+		found := false
+		for i := 0; i < len(u.keysDownState.Keys); i++ {
+			if u.keysDownState.Keys[i] == key {
+				found = true
+			}
+			if found && i < len(u.keysDownState.Keys)-1 {
+				u.keysDownState.Keys[i] = u.keysDownState.Keys[i+1]
+			}
+		}
+		if found {
+			u.keysDownState.Keys[len(u.keysDownState.Keys)-1] = 0
+		}
+
+		u.cancelAutoRelease(key)
+	}
+
+	return u.keyboardWriteHidFileLocked(u.keysDownState.Modifier, u.keysDownState.Keys[:])
+}
+
+func (u *UsbGadget) KeypressKeepAlive() error {
+	u.keyboardLock.Lock()
+	defer u.keyboardLock.Unlock()
+
+	// Reset auto-release timers for all currently held keys
+	for _, key := range u.keysDownState.Keys {
+		if key != 0 {
+			u.scheduleAutoRelease(key)
+		}
+	}
+
+	return nil
+}
+
+func (u *UsbGadget) keyboardWriteHidFileLocked(modifier byte, keys []byte) error {
 	if len(keys) > 6 {
 		keys = keys[:6]
 	}
 	if len(keys) < 6 {
-		keys = append(keys, make([]uint8, 6-len(keys))...)
+		keys = append(keys, make([]byte, 6-len(keys))...)
 	}
 
 	err := u.keyboardWriteHidFile([]byte{modifier, 0, keys[0], keys[1], keys[2], keys[3], keys[4], keys[5]})
@@ -244,4 +382,14 @@ func (u *UsbGadget) KeyboardReport(modifier uint8, keys []uint8) error {
 
 	u.resetUserInputTime()
 	return nil
+}
+
+func (u *UsbGadget) KeyboardReport(modifier uint8, keys []uint8) error {
+	u.keyboardLock.Lock()
+	defer u.keyboardLock.Unlock()
+
+	u.keysDownState.Modifier = modifier
+	copy(u.keysDownState.Keys[:], keys)
+
+	return u.keyboardWriteHidFileLocked(modifier, keys)
 }

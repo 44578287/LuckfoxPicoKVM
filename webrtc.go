@@ -142,6 +142,9 @@ func newSession(sessionConfig SessionConfig) (*Session, error) {
 			handleTerminalChannel(d)
 		case "serial":
 			handleSerialChannel(d)
+		case "hid":
+			session.HidChannel = d
+			go handleHidChannel(d, session)
 		default:
 			if strings.HasPrefix(d.Label(), uploadIdPrefix) {
 				go handleUploadChannel(d)

@@ -1,8 +1,9 @@
-import { KeyCombo } from "../keyboardLayouts"
-
+import { KeyboardLayout, KeyCombo } from "../keyboardLayouts"
 import { chars as chars_de_CH } from "./de_CH"
+import { modifierDisplayMap, keyDisplayMap, virtualKeyboard } from "./en_US"
 
-export const name = "Français de Suisse";
+const name = "Français de Suisse";
+const isoCode = "fr-CH";
 
 export const chars = {
   ...chars_de_CH,
@@ -13,3 +14,12 @@ export const chars = {
   "à": { key: "Quote" },
   "ä": { key: "Quote", shift: true },
 } as Record<string, KeyCombo>;
+
+export const fr_CH: KeyboardLayout = {
+  isoCode,
+  name,
+  chars,
+  keyDisplayMap,
+  modifierDisplayMap,
+  virtualKeyboard,
+};

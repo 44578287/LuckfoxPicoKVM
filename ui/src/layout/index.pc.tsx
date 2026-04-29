@@ -462,6 +462,11 @@ export default function PCHome() {
       setDiskChannel(diskDataChannel);
     };
 
+    const hidDataChannel = pc.createDataChannel("hid");
+    hidDataChannel.onopen = () => {
+      useRTCStore.getState().setHidChannel(hidDataChannel);
+    };
+
     setPeerConnection(pc);
   }, [
     forceHttp,

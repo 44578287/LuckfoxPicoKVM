@@ -105,6 +105,11 @@ export const keys = {
   Space: 0x2c,
   SystemRequest: 0x9a,
   Tab: 0x2b,
+  Yen: 0x89,
+  KeyRO: 0x87,
+  Henkan: 0x8a,
+  Muhenkan: 0x8b,
+  KatakanaHiragana: 0x88,
 } as Record<string, number>;
 
 export const modifiers = {

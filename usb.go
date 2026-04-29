@@ -6,6 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pion/webrtc/v4"
+
+	"kvm/internal/hidrpc"
 	"kvm/internal/usbgadget"
 )
 
@@ -44,6 +47,28 @@ func initUsbGadget() {
 	gadget.SetOnKeyboardStateChange(func(state usbgadget.KeyboardState) {
 		if currentSession != nil {
 			writeJSONRPCEvent("keyboardLedState", state, currentSession)
+			
+			// Send HID-RPC LED state message
+			if currentSession.HidChannel != nil {
+				var raw byte
+				if state.NumLock {
+					raw |= usbgadget.KeyboardLedMaskNumLock
+				}
+				if state.CapsLock {
+					raw |= usbgadget.KeyboardLedMaskCapsLock
+				}
+				if state.ScrollLock {
+					raw |= usbgadget.KeyboardLedMaskScrollLock
+				}
+				if state.Compose {
+					raw |= usbgadget.KeyboardLedMaskCompose
+				}
+				if state.Kana {
+					raw |= usbgadget.KeyboardLedMaskKana
+				}
+				ledData := hidrpc.MarshalKeyboardLedState(raw)
+				currentSession.HidChannel.Send(ledData)
+			}
 		}
 	})
 
@@ -109,6 +134,49 @@ func initSystemInfo() {
 
 func rpcKeyboardReport(modifier uint8, keys []uint8) error {
 	return gadget.KeyboardReport(modifier, keys)
+}
+
+func rpcKeypressReport(key uint8, press bool) error {
+	return gadget.KeypressReport(key, press)
+}
+
+func rpcKeypressKeepAlive() error {
+	return gadget.KeypressKeepAlive()
+}
+
+func handleHidChannel(d *webrtc.DataChannel, session *Session) {
+	hidServer := hidrpc.NewServer(&hidRpcHandler{session: session})
+	d.OnMessage(func(msg webrtc.DataChannelMessage) {
+		if err := hidServer.HandleMessage(msg.Data); err != nil {
+			usbLogger.Warn().Err(err).Msg("HID-RPC message handling error")
+		}
+	})
+}
+
+type hidRpcHandler struct {
+	session *Session
+}
+
+func (h *hidRpcHandler) HandleKeyboardReport(modifier byte, keys []byte) error {
+	return rpcKeyboardReport(modifier, keys)
+}
+
+func (h *hidRpcHandler) HandleKeypressReport(key byte, press bool) error {
+	return rpcKeypressReport(key, press)
+}
+
+func (h *hidRpcHandler) HandleKeypressKeepAlive() error {
+	return rpcKeypressKeepAlive()
+}
+
+func (h *hidRpcHandler) HandleKeyboardMacroReport(data []byte) error {
+	// TODO: Implement macro handling
+	return nil
+}
+
+func (h *hidRpcHandler) HandleCancelKeyboardMacro() error {
+	// TODO: Implement macro cancellation
+	return nil
 }
 
 func rpcAbsMouseReport(x, y int, buttons uint8) error {
@@ -206,6 +274,28 @@ func rpcReinitializeUsbGadget() error {
 	gadget.SetOnKeyboardStateChange(func(state usbgadget.KeyboardState) {
 		if currentSession != nil {
 			writeJSONRPCEvent("keyboardLedState", state, currentSession)
+			
+			// Send HID-RPC LED state message
+			if currentSession.HidChannel != nil {
+				var raw byte
+				if state.NumLock {
+					raw |= usbgadget.KeyboardLedMaskNumLock
+				}
+				if state.CapsLock {
+					raw |= usbgadget.KeyboardLedMaskCapsLock
+				}
+				if state.ScrollLock {
+					raw |= usbgadget.KeyboardLedMaskScrollLock
+				}
+				if state.Compose {
+					raw |= usbgadget.KeyboardLedMaskCompose
+				}
+				if state.Kana {
+					raw |= usbgadget.KeyboardLedMaskKana
+				}
+				ledData := hidrpc.MarshalKeyboardLedState(raw)
+				currentSession.HidChannel.Send(ledData)
+			}
 		}
 	})
 	gadget.SetOnHidDeviceMissing(func(device string, err error) {

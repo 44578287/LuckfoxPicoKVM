@@ -8,7 +8,7 @@ export const useKeyboardEvents = (
   pasteCaptureRef?: React.RefObject<HTMLTextAreaElement>,
   isReinitializingGadget?: boolean
 ) => {
-  const { sendKeyboardEvent, resetKeyboardState } = useKeyboard();
+  const { sendKeyboardEvent, sendKeypress, resetKeyboardState } = useKeyboard();
   const { setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive } = useHidStore();
 
   const keyboardLedStateSyncAvailable = useHidStore(state => state.keyboardLedStateSyncAvailable);
@@ -66,8 +66,15 @@ export const useKeyboardEvents = (
       }, 10);
     }
 
+    // Send per-key press event
+    const hidKey = keys[code];
+    if (hidKey !== undefined) {
+      sendKeypress(hidKey, true);
+    }
+    
+    // Still update the full state for legacy compatibility and UI display
     sendKeyboardEvent([...new Set(newKeys)], [...new Set(newModifiers)]);
-  }, [handleModifierKeys, sendKeyboardEvent, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive, overrideCtrlV, pasteCaptureRef, isReinitializingGadget]);
+  }, [handleModifierKeys, sendKeyboardEvent, sendKeypress, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive, overrideCtrlV, pasteCaptureRef, isReinitializingGadget]);
 
   const keyUpHandler = useCallback((e: KeyboardEvent) => {
     if (isReinitializingGadget) return;
@@ -86,8 +93,15 @@ export const useKeyboardEvents = (
       prev.activeModifiers.filter(k => k !== modifiers[e.code]),
     );
 
+    // Send per-key release event
+    const hidKey = keys[e.code];
+    if (hidKey !== undefined) {
+      sendKeypress(hidKey, false);
+    }
+    
+    // Still update the full state for legacy compatibility and UI display
     sendKeyboardEvent([...new Set(newKeys)], [...new Set(newModifiers)]);
-  }, [handleModifierKeys, sendKeyboardEvent, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive]);
+  }, [handleModifierKeys, sendKeyboardEvent, sendKeypress, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive]);
 
   const setupKeyboardEvents = useCallback(() => {
     const abortController = new AbortController();
