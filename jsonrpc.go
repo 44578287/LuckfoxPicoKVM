@@ -236,6 +236,124 @@ func rpcSetStreamEncodecType(encodecType string) error {
 	return nil
 }
 
+type RcQpParams struct {
+	S32FirstFrameStartQp       int `json:"s32FirstFrameStartQp"`
+	U32StepQp                  int `json:"u32StepQp"`
+	U32MinQp                   int `json:"u32MinQp"`
+	U32MaxQp                   int `json:"u32MaxQp"`
+	U32MinIQp                  int `json:"u32MinIQp"`
+	U32MaxIQp                  int `json:"u32MaxIQp"`
+	S32DeltIpQp                int `json:"s32DeltIpQp"`
+	S32MaxReEncodeTimes        int `json:"s32MaxReEncodeTimes"`
+	U32FrmMaxQp                int `json:"u32FrmMaxQp"`
+	U32FrmMinQp                int `json:"u32FrmMinQp"`
+	U32FrmMinIQp               int `json:"u32FrmMinIQp"`
+	U32FrmMaxIQp               int `json:"u32FrmMaxIQp"`
+	U32MotionStaticSwitchFrmQp int `json:"u32MotionStaticSwitchFrmQp"`
+}
+
+type VideoRcConfigParams struct {
+	H264 RcQpParams `json:"h264"`
+	H265 RcQpParams `json:"h265"`
+}
+
+func rpcSetVideoRc(params VideoRcConfigParams) error {
+	logger.Info().Interface("params", params).Msg("Setting video RC params")
+	rcParams := map[string]interface{}{
+		"h264": map[string]interface{}{
+			"s32FirstFrameStartQp":       params.H264.S32FirstFrameStartQp,
+			"u32StepQp":                  params.H264.U32StepQp,
+			"u32MinQp":                   params.H264.U32MinQp,
+			"u32MaxQp":                   params.H264.U32MaxQp,
+			"u32MinIQp":                  params.H264.U32MinIQp,
+			"u32MaxIQp":                  params.H264.U32MaxIQp,
+			"s32DeltIpQp":                params.H264.S32DeltIpQp,
+			"s32MaxReEncodeTimes":        params.H264.S32MaxReEncodeTimes,
+			"u32FrmMaxQp":                params.H264.U32FrmMaxQp,
+			"u32FrmMinQp":                params.H264.U32FrmMinQp,
+			"u32FrmMinIQp":               params.H264.U32FrmMinIQp,
+			"u32FrmMaxIQp":               params.H264.U32FrmMaxIQp,
+			"u32MotionStaticSwitchFrmQp": params.H264.U32MotionStaticSwitchFrmQp,
+		},
+		"h265": map[string]interface{}{
+			"s32FirstFrameStartQp":       params.H265.S32FirstFrameStartQp,
+			"u32StepQp":                  params.H265.U32StepQp,
+			"u32MinQp":                   params.H265.U32MinQp,
+			"u32MaxQp":                   params.H265.U32MaxQp,
+			"u32MinIQp":                  params.H265.U32MinIQp,
+			"u32MaxIQp":                  params.H265.U32MaxIQp,
+			"s32DeltIpQp":                params.H265.S32DeltIpQp,
+			"s32MaxReEncodeTimes":        params.H265.S32MaxReEncodeTimes,
+			"u32FrmMaxQp":                params.H265.U32FrmMaxQp,
+			"u32FrmMinQp":                params.H265.U32FrmMinQp,
+			"u32FrmMinIQp":               params.H265.U32FrmMinIQp,
+			"u32FrmMaxIQp":               params.H265.U32FrmMaxIQp,
+			"u32MotionStaticSwitchFrmQp": params.H265.U32MotionStaticSwitchFrmQp,
+		},
+	}
+	var _, err = CallCtrlAction("set_video_rc", rcParams)
+	return err
+}
+
+func rpcGetVideoRc() (VideoRcConfigParams, error) {
+	resp, err := CallCtrlAction("get_video_rc", nil)
+	if err != nil {
+		return VideoRcConfigParams{}, err
+	}
+
+	result := resp.Result
+	if result == nil {
+		return VideoRcConfigParams{}, errors.New("invalid response format")
+	}
+
+	h264Map, _ := result["h264"].(map[string]interface{})
+	h265Map, _ := result["h265"].(map[string]interface{})
+
+	getInt := func(m map[string]interface{}, k string) int {
+		if v, ok := m[k].(float64); ok {
+			return int(v)
+		}
+		return 0
+	}
+	getUint := func(m map[string]interface{}, k string) int {
+		return getInt(m, k)
+	}
+
+	rc := VideoRcConfigParams{
+		H264: RcQpParams{
+			S32FirstFrameStartQp:       getInt(h264Map, "s32FirstFrameStartQp"),
+			U32StepQp:                  getUint(h264Map, "u32StepQp"),
+			U32MinQp:                   getUint(h264Map, "u32MinQp"),
+			U32MaxQp:                   getUint(h264Map, "u32MaxQp"),
+			U32MinIQp:                  getUint(h264Map, "u32MinIQp"),
+			U32MaxIQp:                  getUint(h264Map, "u32MaxIQp"),
+			S32DeltIpQp:                getInt(h264Map, "s32DeltIpQp"),
+			S32MaxReEncodeTimes:        getInt(h264Map, "s32MaxReEncodeTimes"),
+			U32FrmMaxQp:                getUint(h264Map, "u32FrmMaxQp"),
+			U32FrmMinQp:                getUint(h264Map, "u32FrmMinQp"),
+			U32FrmMinIQp:               getUint(h264Map, "u32FrmMinIQp"),
+			U32FrmMaxIQp:               getUint(h264Map, "u32FrmMaxIQp"),
+			U32MotionStaticSwitchFrmQp: getUint(h264Map, "u32MotionStaticSwitchFrmQp"),
+		},
+		H265: RcQpParams{
+			S32FirstFrameStartQp:       getInt(h265Map, "s32FirstFrameStartQp"),
+			U32StepQp:                  getUint(h265Map, "u32StepQp"),
+			U32MinQp:                   getUint(h265Map, "u32MinQp"),
+			U32MaxQp:                   getUint(h265Map, "u32MaxQp"),
+			U32MinIQp:                  getUint(h265Map, "u32MinIQp"),
+			U32MaxIQp:                  getUint(h265Map, "u32MaxIQp"),
+			S32DeltIpQp:                getInt(h265Map, "s32DeltIpQp"),
+			S32MaxReEncodeTimes:        getInt(h265Map, "s32MaxReEncodeTimes"),
+			U32FrmMaxQp:                getUint(h265Map, "u32FrmMaxQp"),
+			U32FrmMinQp:                getUint(h265Map, "u32FrmMinQp"),
+			U32FrmMinIQp:               getUint(h265Map, "u32FrmMinIQp"),
+			U32FrmMaxIQp:               getUint(h265Map, "u32FrmMaxIQp"),
+			U32MotionStaticSwitchFrmQp: getUint(h265Map, "u32MotionStaticSwitchFrmQp"),
+		},
+	}
+	return rc, nil
+}
+
 func rpcSetNpuAppStatus(enable bool) error {
 	logger.Info().Bool("enable", enable).Msg("Setting NPU app status")
 	var _, err = CallCtrlAction("set_yolo_enable", map[string]interface{}{"enable": enable})
@@ -1441,7 +1559,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"resetSDStorage":            {Func: rpcResetSDStorage},
 	"mountSDStorage":            {Func: rpcMountSDStorage},
 	"unmountSDStorage":          {Func: rpcUnmountSDStorage},
-	"formatSDStorage":           {Func: rpcFormatSDStorage, Params: []string{"confirm"}},
+	"formatSDStorage":           {Func: rpcFormatSDStorage, Params: []string{"confirm", "fsType"}},
 	"mountWithHTTP":             {Func: rpcMountWithHTTP, Params: []string{"url", "mode"}},
 	"mountWithWebRTC":           {Func: rpcMountWithWebRTC, Params: []string{"filename", "size", "mode"}},
 	"mountWithStorage":          {Func: rpcMountWithStorage, Params: []string{"filename", "mode"}},
@@ -1527,8 +1645,16 @@ var rpcHandlers = map[string]RPCHandler{
 	"stopCloudflared":           {Func: rpcStopCloudflared},
 	"getCloudflaredStatus":      {Func: rpcGetCloudflaredStatus},
 	"getCloudflaredLog":         {Func: rpcGetCloudflaredLog},
+	"getVpnToolSystemInfo":      {Func: rpcGetVpnToolSystemInfo},
+	"getVpnToolStatus":          {Func: rpcGetVpnToolStatus, Params: []string{"tool"}},
+	"listVpnToolReleases":       {Func: rpcListVpnToolReleases, Params: []string{"tool"}},
+	"installVpnTool":            {Func: rpcInstallVpnTool, Params: []string{"tool", "version", "assetName", "downloadURL"}},
+	"useVpnToolVersion":         {Func: rpcUseVpnToolVersion, Params: []string{"tool", "version"}},
+	"uninstallVpnToolVersion":   {Func: rpcUninstallVpnToolVersion, Params: []string{"tool", "version"}},
 	"getStreamEncodecType":      {Func: rpcGetStreamEncodecType},
 	"setStreamEncodecType":      {Func: rpcSetStreamEncodecType, Params: []string{"encodecType"}},
+	"setVideoRc":                {Func: rpcSetVideoRc, Params: []string{"params"}},
+	"getVideoRc":                {Func: rpcGetVideoRc},
 	"setNpuAppStatus":           {Func: rpcSetNpuAppStatus, Params: []string{"enable"}},
 	"getNpuAppStatus":           {Func: rpcGetNpuAppStatus},
 	"startWireguard":            {Func: rpcStartWireguard, Params: []string{"configFile"}},

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Button as AntdButton , Slider , Checkbox, Select } from "antd";
+import { Button as AntdButton , Slider , Checkbox, Select, Modal, InputNumber, Tabs, Typography } from "antd";
 import { useReactAt } from "i18n-auto-extractor/react";
 import { isMobile } from "react-device-detect";
 
@@ -10,6 +10,7 @@ import { SettingsItem, SettingsItemNew } from "@components/Settings/SettingsView
 
 import notifications from "../../../notifications";
 
+const { Text } = Typography;
 
 
 
@@ -45,6 +46,133 @@ const streamQualityOptions = [
   { value: "0.1", label: "Low" },
 ];
 
+type RcQpParams = {
+  s32FirstFrameStartQp: number;
+  u32StepQp: number;
+  u32MinQp: number;
+  u32MaxQp: number;
+  u32MinIQp: number;
+  u32MaxIQp: number;
+  s32DeltIpQp: number;
+  s32MaxReEncodeTimes: number;
+  u32FrmMaxQp: number;
+  u32FrmMinQp: number;
+  u32FrmMinIQp: number;
+  u32FrmMaxIQp: number;
+  u32MotionStaticSwitchFrmQp: number;
+};
+
+type VideoRcConfig = {
+  h264: RcQpParams;
+  h265: RcQpParams;
+};
+
+type RcSliderValues = {
+  stepQp: number;
+  minQp: number;
+  minIQp: number;
+  deltIpQp: number;
+};
+
+type RcSliderState = {
+  h264: RcSliderValues;
+  h265: RcSliderValues;
+};
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+const sliderValueToNumber = (value: number | number[]) =>
+  Array.isArray(value) ? value[0] : value;
+
+const DEFAULT_RC_CODEC: RcQpParams = {
+  s32FirstFrameStartQp: 0,
+  u32StepQp: 48,
+  u32MinQp: 48,
+  u32MaxQp: 51,
+  u32MinIQp: 48,
+  u32MaxIQp: 51,
+  s32DeltIpQp: 7,
+  s32MaxReEncodeTimes: 2,
+  u32FrmMaxQp: 51,
+  u32FrmMinQp: 48,
+  u32FrmMinIQp: 51,
+  u32FrmMaxIQp: 48,
+  u32MotionStaticSwitchFrmQp: 50,
+};
+
+const DEFAULT_VIDEO_RC_CONFIG: VideoRcConfig = {
+  h264: { ...DEFAULT_RC_CODEC },
+  h265: { ...DEFAULT_RC_CODEC },
+};
+
+const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const toVideoRcConfigOrDefault = (value: unknown): VideoRcConfig => {
+  if (!isObjectRecord(value)) return DEFAULT_VIDEO_RC_CONFIG;
+  if (!("h264" in value) || !("h265" in value)) return DEFAULT_VIDEO_RC_CONFIG;
+  return value as VideoRcConfig;
+};
+
+const RC_LIMITS = {
+  stepQp: { min: 1, max: 51 },
+  maxQp: { min: 1, max: 51 },
+  maxIQp: { min: 1, max: 51 },
+  deltIpQp: { min: -7, max: 7 },
+  maxReEncodeTimes: { min: 0, max: 3 },
+  frmQp: { min: 1, max: 51 },
+};
+
+const normalizeRcCodec = (codec: RcQpParams): RcQpParams => {
+  const maxQp = clamp(Number(codec.u32MaxQp), RC_LIMITS.maxQp.min, RC_LIMITS.maxQp.max);
+  const maxIQp = clamp(Number(codec.u32MaxIQp), RC_LIMITS.maxIQp.min, RC_LIMITS.maxIQp.max);
+  const minQp = clamp(Number(codec.u32MinQp), RC_LIMITS.maxQp.min, maxQp);
+  const minIQp = clamp(Number(codec.u32MinIQp), RC_LIMITS.maxIQp.min, maxIQp);
+
+  return {
+    ...codec,
+    s32FirstFrameStartQp: clamp(Number(codec.s32FirstFrameStartQp), RC_LIMITS.frmQp.min, RC_LIMITS.frmQp.max),
+    u32StepQp: clamp(Number(codec.u32StepQp), RC_LIMITS.stepQp.min, RC_LIMITS.stepQp.max),
+    u32MaxQp: maxQp,
+    u32MinQp: minQp,
+    u32MaxIQp: maxIQp,
+    u32MinIQp: minIQp,
+    s32DeltIpQp: clamp(Number(codec.s32DeltIpQp), RC_LIMITS.deltIpQp.min, RC_LIMITS.deltIpQp.max),
+    s32MaxReEncodeTimes: clamp(
+      Number(codec.s32MaxReEncodeTimes),
+      RC_LIMITS.maxReEncodeTimes.min,
+      RC_LIMITS.maxReEncodeTimes.max,
+    ),
+    u32FrmMaxQp: clamp(Number(codec.u32FrmMaxQp), RC_LIMITS.frmQp.min, RC_LIMITS.frmQp.max),
+    u32FrmMinQp: clamp(Number(codec.u32FrmMinQp), RC_LIMITS.frmQp.min, RC_LIMITS.frmQp.max),
+    u32FrmMinIQp: clamp(Number(codec.u32FrmMinIQp), RC_LIMITS.frmQp.min, RC_LIMITS.frmQp.max),
+    u32FrmMaxIQp: clamp(Number(codec.u32FrmMaxIQp), RC_LIMITS.frmQp.min, RC_LIMITS.frmQp.max),
+    u32MotionStaticSwitchFrmQp: clamp(
+      Number(codec.u32MotionStaticSwitchFrmQp),
+      RC_LIMITS.frmQp.min,
+      RC_LIMITS.frmQp.max,
+    ),
+  };
+};
+
+const normalizeVideoRcConfig = (config: VideoRcConfig): VideoRcConfig => ({
+  h264: normalizeRcCodec(config.h264),
+  h265: normalizeRcCodec(config.h265),
+});
+
+const sliderValuesFromCodec = (codec: RcQpParams): RcSliderValues => ({
+  stepQp: clamp(Number(codec.u32StepQp), 1, 50),
+  minQp: clamp(Number(codec.u32MinQp), 1, 50),
+  minIQp: clamp(Number(codec.u32MinIQp), 1, 50),
+  deltIpQp: clamp(Number(codec.s32DeltIpQp), -7, 7),
+});
+
+const sliderStateFromConfig = (config: VideoRcConfig): RcSliderState => ({
+  h264: sliderValuesFromCodec(config.h264),
+  h265: sliderValuesFromCodec(config.h265),
+});
+
 export default function SettingsVideoSide() {
   const { $at } = useReactAt();
   const [send] = useJsonRpc();
@@ -54,6 +182,12 @@ export default function SettingsVideoSide() {
   const [customEdidValue, setCustomEdidValue] = useState<string | null>(null);
   const [edid, setEdid] = useState<string | null>(null);
   const [forceHpd, setForceHpd] = useState(false);
+  const [videoRcConfig, setVideoRcConfig] = useState<VideoRcConfig>(DEFAULT_VIDEO_RC_CONFIG);
+  const [rcSliderValues, setRcSliderValues] = useState<RcSliderState>(
+    sliderStateFromConfig(DEFAULT_VIDEO_RC_CONFIG),
+  );
+  const [showRcAdvanced, setShowRcAdvanced] = useState(false);
+  const [rcDraftConfig, setRcDraftConfig] = useState<VideoRcConfig | null>(null);
 
   // Video enhancement settings from store
   const videoSaturation = useSettingsStore(state => state.videoSaturation);
@@ -62,6 +196,129 @@ export default function SettingsVideoSide() {
   const setVideoBrightness = useSettingsStore(state => state.setVideoBrightness);
   const videoContrast = useSettingsStore(state => state.videoContrast);
   const setVideoContrast = useSettingsStore(state => state.setVideoContrast);
+
+  const currentCodec: "h264" | "h265" = streamEncodecType === "hevc" ? "h265" : "h264";
+  const currentSliders = rcSliderValues[currentCodec];
+
+  const applySliderToCodec = (codec: RcQpParams, sliders: RcSliderValues): RcQpParams => ({
+      ...codec,
+      u32StepQp: sliders.stepQp,
+      u32MinQp: sliders.minQp,
+      u32MinIQp: sliders.minIQp,
+      s32DeltIpQp: sliders.deltIpQp,
+    });
+
+  const applyRcBasicConfig = () => {
+    const nextRcConfig = normalizeVideoRcConfig({
+      ...videoRcConfig,
+      [currentCodec]: applySliderToCodec(videoRcConfig[currentCodec], currentSliders),
+    });
+    send("setVideoRc", { params: nextRcConfig }, resp => {
+      if ("error" in resp) {
+        notifications.error(`Failed to set video RC: ${resp.error.data || "Unknown error"}`);
+        return;
+      }
+      setVideoRcConfig(nextRcConfig);
+      setRcDraftConfig(nextRcConfig);
+      setRcSliderValues(sliderStateFromConfig(nextRcConfig));
+      notifications.success("Video RC updated");
+    });
+  };
+
+  const updateRcDraftField = (
+    codec: "h264" | "h265",
+    field: keyof RcQpParams,
+    value: number,
+  ) => {
+    setRcDraftConfig(prev => {
+      if (!prev) return prev;
+      const nextCodec = { ...prev[codec], [field]: value };
+      const normalizedCodec = normalizeRcCodec(nextCodec);
+      return {
+        ...prev,
+        [codec]: normalizedCodec,
+      };
+    });
+  };
+
+  const openRcAdvancedModal = () => {
+    const nextDraft = normalizeVideoRcConfig({
+      ...videoRcConfig,
+      [currentCodec]: applySliderToCodec(videoRcConfig[currentCodec], currentSliders),
+    });
+    setRcDraftConfig(nextDraft);
+    setShowRcAdvanced(true);
+  };
+
+  const applyRcAdvancedConfig = () => {
+    if (!rcDraftConfig) {
+      return;
+    }
+    const normalized = normalizeVideoRcConfig(rcDraftConfig);
+    send("setVideoRc", { params: normalized }, resp => {
+      if ("error" in resp) {
+        notifications.error(`Failed to set video RC: ${resp.error.data || "Unknown error"}`);
+        return;
+      }
+      setVideoRcConfig(normalized);
+      setRcDraftConfig(normalized);
+      setRcSliderValues(sliderStateFromConfig(normalized));
+      notifications.success("Video RC updated");
+      setShowRcAdvanced(false);
+    });
+  };
+
+  const renderRcAdvancedForm = (codec: "h264" | "h265") => {
+    const current = rcDraftConfig?.[codec];
+    if (!current) return null;
+
+    const fields: Array<{
+      key: keyof RcQpParams;
+      label: string;
+      min?: number;
+      max?: number;
+    }> = [
+      { key: "s32FirstFrameStartQp", label: "FirstFrameStartQp", min: 1, max: 51 },
+      { key: "u32StepQp", label: "StepQp", min: 1, max: 51 },
+      { key: "u32MaxQp", label: "MaxQp", min: 1, max: 51 },
+      { key: "u32MinQp", label: "MinQp", min: 1, max: Number(current.u32MaxQp) || 51 },
+      { key: "u32MaxIQp", label: "MaxIQp", min: 1, max: 51 },
+      { key: "u32MinIQp", label: "MinIQp", min: 1, max: Number(current.u32MaxIQp) || 51 },
+      { key: "s32DeltIpQp", label: "DeltIpQp", min: -7, max: 7 },
+      { key: "s32MaxReEncodeTimes", label: "MaxReEncodeTimes", min: 0, max: 3 },
+      { key: "u32FrmMaxQp", label: "FrmMaxQp", min: 1, max: 51 },
+      { key: "u32FrmMinQp", label: "FrmMinQp", min: 1, max: 51 },
+      { key: "u32FrmMaxIQp", label: "FrmMaxIQp", min: 1, max: 51 },
+      { key: "u32FrmMinIQp", label: "FrmMinIQp", min: 1, max: 51 },
+      { key: "u32MotionStaticSwitchFrmQp", label: "MotionStaticSwitchFrmQp", min: 1, max: 51 },
+    ];
+
+    return (
+      <div className="grid grid-cols-1 gap-3">
+        {fields.map(field => (
+          <div key={`${codec}-${field.key}`} className="flex items-center justify-between gap-3">
+            <Text className="text-xs">{field.label}</Text>
+            <InputNumber
+              size="small"
+              value={current[field.key]}
+              min={field.min}
+              max={field.max}
+              step={1}
+              style={{ width: 140 }}
+              onChange={val => {
+                if (typeof val !== "number") return;
+                const safeValue =
+                  field.min !== undefined && field.max !== undefined
+                    ? clamp(Number(val), field.min, field.max)
+                    : Number(val);
+                updateRcDraftField(codec, field.key, safeValue);
+              }}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   useEffect(() => {
     send("getNpuAppStatus", {}, resp => {
@@ -77,6 +334,20 @@ export default function SettingsVideoSide() {
     send("getStreamQualityFactor", {}, resp => {
       if ("error" in resp) return;
       setStreamQuality(String(resp.result));
+    });
+
+    send("getVideoRc", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(`Failed to get video RC: ${resp.error.data || "Unknown error"}`);
+        const fallbackRc = normalizeVideoRcConfig(DEFAULT_VIDEO_RC_CONFIG);
+        setVideoRcConfig(fallbackRc);
+        setRcSliderValues(sliderStateFromConfig(fallbackRc));
+        return;
+      }
+
+      const rc = normalizeVideoRcConfig(toVideoRcConfigOrDefault(resp.result));
+      setVideoRcConfig(rc);
+      setRcSliderValues(sliderStateFromConfig(rc));
     });
 
     send("getEDID", {}, resp => {
@@ -218,6 +489,116 @@ export default function SettingsVideoSide() {
           />
         </SettingsItem>
 
+        <SettingsItem
+          title={$at("RC Control")}
+          description={$at("Adjust rate control QP settings for better balance between quality and bitrate")}
+        />
+        <div className="space-y-4">
+          <SettingsItemNew
+            title={$at("StepQp")}
+            description={String(currentSliders.stepQp)}
+            className={"flex-col w-full h-[40px]"}
+          >
+            <Slider
+              min={1}
+              max={51}
+              step={1}
+              value={currentSliders.stepQp}
+              onChange={value => {
+                const nextStepQp = clamp(sliderValueToNumber(value), 1, 50);
+                setRcSliderValues(prev => ({
+                  ...prev,
+                  [currentCodec]: {
+                    ...prev[currentCodec],
+                    stepQp: nextStepQp,
+                  },
+                }));
+              }}
+              className={"w-full"}
+            />
+          </SettingsItemNew>
+
+          <SettingsItemNew
+            title={$at("MinQp")}
+            description={String(currentSliders.minQp)}
+            className={"flex-col w-full h-[40px]"}
+          >
+            <Slider
+              min={1}
+              max={50}
+              step={1}
+              value={currentSliders.minQp}
+              onChange={value => {
+                const nextMinQp = clamp(sliderValueToNumber(value), 1, 50);
+                setRcSliderValues(prev => ({
+                  ...prev,
+                  [currentCodec]: {
+                    ...prev[currentCodec],
+                    minQp: nextMinQp,
+                  },
+                }));
+              }}
+              className={"w-full"}
+            />
+          </SettingsItemNew>
+
+          <SettingsItemNew
+            title={$at("MinIQp")}
+            description={String(currentSliders.minIQp)}
+            className={"flex-col w-full h-[40px]"}
+          >
+            <Slider
+              min={1}
+              max={50}
+              step={1}
+              value={currentSliders.minIQp}
+              onChange={value => {
+                const nextMinIQp = clamp(sliderValueToNumber(value), 1, 50);
+                setRcSliderValues(prev => ({
+                  ...prev,
+                  [currentCodec]: {
+                    ...prev[currentCodec],
+                    minIQp: nextMinIQp,
+                  },
+                }));
+              }}
+              className={"w-full"}
+            />
+          </SettingsItemNew>
+
+          <SettingsItemNew
+            title={$at("DetlpQp")}
+            description={String(currentSliders.deltIpQp)}
+            className={"flex-col w-full h-[40px]"}
+          >
+            <Slider
+              min={-7}
+              max={7}
+              step={1}
+              value={currentSliders.deltIpQp}
+              onChange={value => {
+                const nextDeltIpQp = clamp(sliderValueToNumber(value), -7, 7);
+                setRcSliderValues(prev => ({
+                  ...prev,
+                  [currentCodec]: {
+                    ...prev[currentCodec],
+                    deltIpQp: nextDeltIpQp,
+                  },
+                }));
+              }}
+              className={"w-full"}
+            />
+          </SettingsItemNew>
+
+          <div className="flex justify-end gap-2">
+            <AntdButton onClick={openRcAdvancedModal}>
+              {$at("Advanced")}
+            </AntdButton>
+            <AntdButton type="primary" onClick={applyRcBasicConfig}>
+              {$at("Apply")}
+            </AntdButton>
+          </div>
+        </div>
 
         <SettingsItem
           title={$at("NPU Application")}
@@ -362,25 +743,7 @@ export default function SettingsVideoSide() {
             }}
             options={[...edids, { value: "custom", label: "Custom" }]}
           />
-        {/* options={[...edids, { value: "custom", label: "Custom" }]}*/}
         </SettingsItem>
-        {/*<SelectMenuBasic*/}
-        {/*  size="SM"*/}
-        {/*  label=""*/}
-        {/*  fullWidth*/}
-        {/*  value={customEdidValue ? "custom" : edid || "asd"}*/}
-        {/*  onChange={e => {*/}
-        {/*          console.log(e.target.value)*/}
-        {/*    if (e.target.value === "custom") {*/}
-        {/*      setEdid("custom");*/}
-        {/*      setCustomEdidValue("");*/}
-        {/*    } else {*/}
-        {/*      setCustomEdidValue(null);*/}
-        {/*      handleEDIDChange(e.target.value as string);*/}
-        {/*    }*/}
-        {/*  }}*/}
-        {/*  options={[...edids, { value: "custom", label: "Custom" }]}*/}
-        {/*/>*/}
 
         {customEdidValue !== null && (
           <>
@@ -418,6 +781,39 @@ export default function SettingsVideoSide() {
         )}
       </div>
       <div className={"h-[10vh]"}></div>
+
+      <Modal
+        title={
+          <Text strong style={{ fontSize: "16px" }}>
+            {$at("RC Advanced Config")}
+          </Text>
+        }
+        open={showRcAdvanced}
+        onCancel={() => setShowRcAdvanced(false)}
+        onOk={applyRcAdvancedConfig}
+        okText={$at("Apply")}
+        cancelText={$at("Cancel")}
+        maskClosable={true}
+        keyboard={true}
+        width={520}
+        styles={{
+          body: {
+            padding: "20px 24px",
+          },
+          header: {
+            borderBottom: "1px solid #f0f0f0",
+            padding: "16px 24px",
+            marginBottom: 0,
+          }
+        }}
+      >
+        <Tabs
+          items={[
+            { key: "h264", label: "H264", children: renderRcAdvancedForm("h264") },
+            { key: "h265", label: "H265", children: renderRcAdvancedForm("h265") },
+          ]}
+        />
+      </Modal>
     </div>
   );
 }
