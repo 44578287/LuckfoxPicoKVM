@@ -290,6 +290,7 @@ export default function SettingsHardware() {
             value={settings.ledGreenMode.toString()}
             className={`${isMobile?"w-full":"h-[36px] w-[22%]"}`}
             options={[
+              { value: "disabled", label: $at("Disabled") },
               { value: "network-link", label: $at("network-link") },
               { value: "network-tx", label: $at("network-tx") },
               { value: "network-rx", label: $at("network-rx") },
@@ -309,8 +310,9 @@ export default function SettingsHardware() {
 
           <SelectMenuBasic
             value={settings.ledYellowMode.toString()}
-            className={`${isMobile?"w-full":""}`}
+            className={`${isMobile?"w-full":"h-[36px] w-[22%]"}`}
             options={[
+              { value: "disabled", label: $at("Disabled") },
               { value: "network-link", label: $at("network-link") },
               { value: "network-tx", label: $at("network-tx") },
               { value: "network-rx", label: $at("network-rx") },

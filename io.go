@@ -105,6 +105,15 @@ func setLedMode(ledConfigPath string, mode string) error {
 		if err != nil {
 			return fmt.Errorf("failed to set LED trigger: %v", err)
 		}
+	case "disabled":
+		err := os.WriteFile(ledConfigPath+"/trigger", []byte("none"), 0644)
+		if err != nil {
+			return fmt.Errorf("failed to set LED trigger: %v", err)
+		}
+		err = os.WriteFile(ledConfigPath+"/brightness", []byte("0"), 0644)
+		if err != nil {
+			return fmt.Errorf("failed to set LED brightness: %v", err)
+		}
 	default:
 		return fmt.Errorf("invalid LED mode: %s", mode)
 	}
