@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 export const useTouchZoom = (
-  containerRef: React.RefObject<HTMLDivElement>
+  containerRef: React.RefObject<HTMLDivElement>,
+  gestureEnabled = true,
 ) => {
   const [mobileScale, setMobileScale] = useState(1);
   const [mobileTx, setMobileTx] = useState(0);
@@ -17,67 +18,83 @@ export const useTouchZoom = (
     if (!el) return;
     const abortController = new AbortController();
     const signal = abortController.signal;
+    const isPointInVideo = (x: number, y: number) => {
+      const video = el.querySelector("video") as HTMLVideoElement | null;
+      if (!video) return false;
+      const vRect = video.getBoundingClientRect();
+      return x >= vRect.left && x <= vRect.right && y >= vRect.top && y <= vRect.bottom;
+    };
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.pointerType !== "touch") return;
       activeTouchPointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (!gestureEnabled) return;
+      let shouldHandleLocalGesture = false;
+
       if (activeTouchPointers.current.size === 1) {
         const now = Date.now();
-        let isInVideo = false;
-        const video = el.querySelector("video") as HTMLVideoElement | null;
-        if (video) {
-          const vRect = video.getBoundingClientRect();
-          if (
-            e.clientX >= vRect.left &&
-            e.clientX <= vRect.right &&
-            e.clientY >= vRect.top &&
-            e.clientY <= vRect.bottom
-          ) {
-            isInVideo = true;
-          }
-        }
+        const isInVideo = isPointInVideo(e.clientX, e.clientY);
         if (!isInVideo) {
           if (now - lastTapAt.current < 300) {
             setMobileScale(1);
             setMobileTx(0);
             setMobileTy(0);
           }
+          shouldHandleLocalGesture = true;
         }
         lastTapAt.current = now;
-        lastPanPoint.current = { x: e.clientX, y: e.clientY };
+        if (mobileScale > 1) {
+          lastPanPoint.current = { x: e.clientX, y: e.clientY };
+          shouldHandleLocalGesture = true;
+        } else {
+          lastPanPoint.current = null;
+        }
       } else if (activeTouchPointers.current.size === 2) {
         const pts = Array.from(activeTouchPointers.current.values());
         const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
         initialPinchDistance.current = d;
         initialPinchScale.current = mobileScale;
+        shouldHandleLocalGesture = true;
       }
-      e.preventDefault();
-      e.stopPropagation();
+
+      if (shouldHandleLocalGesture) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
     };
 
     const onPointerMove = (e: PointerEvent) => {
       if (e.pointerType !== "touch") return;
       const prev = activeTouchPointers.current.get(e.pointerId);
       activeTouchPointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (!gestureEnabled) return;
       const pts = Array.from(activeTouchPointers.current.values());
+      let shouldHandleLocalGesture = false;
+
       if (pts.length === 2 && initialPinchDistance.current) {
         const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
         const factor = d / initialPinchDistance.current;
         const next = Math.max(1, Math.min(4, initialPinchScale.current * factor));
         setMobileScale(next);
-      } else if (pts.length === 1 && lastPanPoint.current && prev) {
+        shouldHandleLocalGesture = true;
+      } else if (pts.length === 1 && mobileScale > 1 && lastPanPoint.current && prev) {
         const dx = e.clientX - lastPanPoint.current.x;
         const dy = e.clientY - lastPanPoint.current.y;
         lastPanPoint.current = { x: e.clientX, y: e.clientY };
         setMobileTx(v => v + dx);
         setMobileTy(v => v + dy);
+        shouldHandleLocalGesture = true;
       }
-      e.preventDefault();
-      e.stopPropagation();
+
+      if (shouldHandleLocalGesture) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
     };
 
     const onPointerUp = (e: PointerEvent) => {
       if (e.pointerType !== "touch") return;
+      const wasHandlingLocalGesture = gestureEnabled && (initialPinchDistance.current !== null || mobileScale > 1);
       activeTouchPointers.current.delete(e.pointerId);
       if (activeTouchPointers.current.size < 2) {
         initialPinchDistance.current = null;
@@ -85,8 +102,11 @@ export const useTouchZoom = (
       if (activeTouchPointers.current.size === 0) {
         lastPanPoint.current = null;
       }
-      e.preventDefault();
-      e.stopPropagation();
+
+      if (wasHandlingLocalGesture) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
     };
 
     el.addEventListener("pointerdown", onPointerDown, { signal });
@@ -95,7 +115,15 @@ export const useTouchZoom = (
     el.addEventListener("pointercancel", onPointerUp, { signal });
 
     return () => abortController.abort();
-  }, [mobileScale, containerRef]);
+  }, [mobileScale, containerRef, gestureEnabled]);
+
+  const resetTransform = () => {
+    initialPinchDistance.current = null;
+    lastPanPoint.current = null;
+    setMobileScale(1);
+    setMobileTx(0);
+    setMobileTy(0);
+  };
 
   useEffect(() => {
     const container = containerRef.current;
@@ -115,5 +143,6 @@ export const useTouchZoom = (
     mobileTy,
     activeTouchPointers,
     lastPanPoint,
+    resetTransform,
   };
 };

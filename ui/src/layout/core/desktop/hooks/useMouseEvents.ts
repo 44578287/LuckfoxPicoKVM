@@ -25,12 +25,13 @@ export const useMouseEvents = (
   const { setMousePosition, setMouseMove } = useMouseStore();
   const { width: videoWidth, height: videoHeight } = useVideoStore();
   const isReinitializingGadget = useHidStore(state => state.isReinitializingGadget);
+  const touchDragActiveRef = useRef(false);
 
   const calcDelta = (pos: number) => (Math.abs(pos) < 10 ? pos * 2 : pos);
 
   const sendRelMouseMovement = useCallback(
-    (x: number, y: number, buttons: number) => {
-      if (settings.mouseMode !== "relative") return;
+    (x: number, y: number, buttons: number, force = false) => {
+      if (!force && settings.mouseMode !== "relative") return;
       // Don't send mouse events while reinitializing gadget
       if (isReinitializingGadget) return;
       send("relMouseReport", { dx: calcDelta(x), dy: calcDelta(y), buttons });
@@ -48,6 +49,13 @@ export const useMouseEvents = (
       setMousePosition(x, y);
     },
     [send, setMousePosition, settings.mouseMode, isReinitializingGadget],
+  );
+
+  const sendVirtualRelativeMovement = useCallback(
+    (x: number, y: number, buttons = 0) => {
+      sendRelMouseMovement(x, y, buttons, true);
+    },
+    [sendRelMouseMovement],
   );
 
   const relMouseMoveHandler = useCallback(
@@ -76,11 +84,17 @@ export const useMouseEvents = (
   const absMouseMoveHandler = useCallback(
     (e: MouseEvent) => {
       const pt = (e as unknown as PointerEvent).pointerType as unknown as string;
+      const pointerEvent = e as unknown as PointerEvent;
+      const eventType = pointerEvent.type;
       if (pt === "touch") {
         if (touchZoom) {
-            const touchCount = touchZoom.activeTouchPointers.current.size;
-            const eventType = (e as unknown as PointerEvent).type;
-            if (touchCount >= 2 && eventType !== "pointerup") return;
+          const touchCount = touchZoom.activeTouchPointers.current.size;
+          if (touchCount >= 2) {
+            if (eventType === "pointerup" || eventType === "pointercancel") {
+              touchDragActiveRef.current = false;
+            }
+            return;
+          }
         }
       }
 
@@ -135,28 +149,20 @@ export const useMouseEvents = (
       let buttons = e.buttons;
 
       if (pt === "touch") {
-        const touchCount = touchZoom ? touchZoom.activeTouchPointers.current.size : 1;
-        const pointerEvent = e as unknown as PointerEvent;
-        const eventType = pointerEvent.type;
-
-        if (eventType === "pointerup") {
-          if (touchCount >= 2 || disableTouchClick) {
-            buttons = 0;
-          } else {
-            buttons = 1;
-          }
-        } else {
+        if (eventType === "pointerdown") {
+          touchDragActiveRef.current = !disableTouchClick;
+        }
+        if (eventType === "pointerup" || eventType === "pointercancel") {
           buttons = 0;
+          touchDragActiveRef.current = false;
+        } else {
+          buttons = touchDragActiveRef.current ? 1 : 0;
         }
       }
 
       buttons |= externalButtons;
 
       sendAbsMouseMovement(x, y, buttons);
-
-      if (pt === "touch" && buttons !== externalButtons && (e as unknown as PointerEvent).type === "pointerup") {
-        sendAbsMouseMovement(x, y, externalButtons);
-      }
     },
     [settings.mouseMode, videoElm, videoWidth, videoHeight, sendAbsMouseMovement, touchZoom, disableTouchClick, externalButtons],
   );
@@ -216,8 +222,10 @@ export const useMouseEvents = (
     };
 
     videoElmRefValue.addEventListener("mousemove", eventHandler, { signal });
+    videoElmRefValue.addEventListener("pointermove", eventHandler, { signal });
     videoElmRefValue.addEventListener("pointerdown", eventHandler, { signal });
     videoElmRefValue.addEventListener("pointerup", eventHandler, { signal });
+    videoElmRefValue.addEventListener("pointercancel", eventHandler, { signal });
     videoElmRefValue.addEventListener("wheel", mouseWheelHandler, {
       signal,
       passive: true,
@@ -255,5 +263,6 @@ export const useMouseEvents = (
 
   return {
     setupMouseEvents,
+    sendVirtualRelativeMovement,
   };
 };

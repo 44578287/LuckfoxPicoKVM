@@ -278,9 +278,10 @@ export function HDMIErrorOverlay({ show, hdmiState }: HDMIErrorOverlayProps) {
 
   const setVirtualKeyboardEnabled = useHidStore(state => state.setVirtualKeyboardEnabled);
   const isVirtualKeyboardEnabled = useHidStore(state => state.isVirtualKeyboardEnabled);
+  const allowTapToOpenVirtualKeyboard = useHidStore(state => state.allowTapToOpenVirtualKeyboard);
 
   const handleClick = () => {
-    if (isMobile && !isVirtualKeyboardEnabled) {
+    if (isMobile && allowTapToOpenVirtualKeyboard && !isVirtualKeyboardEnabled) {
       setVirtualKeyboardEnabled(true);
     }
   };

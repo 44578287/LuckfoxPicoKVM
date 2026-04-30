@@ -600,6 +600,8 @@ export interface HidState {
 
   isVirtualKeyboardEnabled: boolean;
   setVirtualKeyboardEnabled: (enabled: boolean) => void;
+  allowTapToOpenVirtualKeyboard: boolean;
+  setAllowTapToOpenVirtualKeyboard: (enabled: boolean) => void;
 
   isPasteModeEnabled: boolean;
   setPasteModeEnabled: (enabled: boolean) => void;
@@ -665,6 +667,8 @@ export const useHidStore = create<HidState>((set, get) => ({
 
   isVirtualKeyboardEnabled: false,
   setVirtualKeyboardEnabled: enabled => set({ isVirtualKeyboardEnabled: enabled }),
+  allowTapToOpenVirtualKeyboard: true,
+  setAllowTapToOpenVirtualKeyboard: enabled => set({ allowTapToOpenVirtualKeyboard: enabled }),
 
   isPasteModeEnabled: false,
   setPasteModeEnabled: enabled => set({ isPasteModeEnabled: enabled }),

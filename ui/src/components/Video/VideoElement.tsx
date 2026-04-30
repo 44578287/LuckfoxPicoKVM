@@ -13,9 +13,10 @@ export const VideoElement = forwardRef<HTMLVideoElement, VideoElementProps>(
   ({ onPlaying, style, className }, ref) => {
     const setVirtualKeyboardEnabled = useHidStore(state => state.setVirtualKeyboardEnabled);
     const isVirtualKeyboardEnabled = useHidStore(state => state.isVirtualKeyboardEnabled);
+    const allowTapToOpenVirtualKeyboard = useHidStore(state => state.allowTapToOpenVirtualKeyboard);
 
     const handleClick = () => {
-      if (isMobile && !isVirtualKeyboardEnabled) {
+      if (isMobile && allowTapToOpenVirtualKeyboard && !isVirtualKeyboardEnabled) {
         setVirtualKeyboardEnabled(true);
       }
     };
