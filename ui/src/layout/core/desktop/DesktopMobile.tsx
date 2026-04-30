@@ -24,7 +24,7 @@ import KeyboardPanel from "@/layout/components_bottom/keyboard/KeyboardPanel";
 import Clipboard from "@/layout/components_side/Clipboard/Clipboard";
 import SettingsModal from "@/layout/components_setting";
 import  { MacroMoreList } from "@/layout/components_side/Macros/MacroTopBar";
-import { useMacrosSideTitleState , useHidStore, useMouseStore, useSettingsStore } from "@/hooks/stores";
+import { useMacrosSideTitleState , useHidStore, useMouseStore, useSettingsStore, useUiStore } from "@/hooks/stores";
 import MobileTerminal from "@/layout/components_bottom/terminal/index.mobile";
 import { dark_bg_desktop, dark_bg_style_fun } from "@/layout/theme_color";
 import PowerControl from "@/layout/components_side/Power";
@@ -39,6 +39,7 @@ import { usePasteHandler } from "@/layout/core/desktop/hooks/usePasteHandler";
 import UsbEpModeSelect from "@/layout/components_bottom/usbepmode/UsbEpModeSelect";
 import VirtualMediaSource from "@/layout/components_side/VirtualMediaSource";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
+import OcrOverlay from "@components/OcrOverlay";
 
 export default function MobileDesktop({ isFullscreen }: { isFullscreen?: number }) {
   const { $at } = useReactAt();
@@ -49,6 +50,7 @@ export default function MobileDesktop({ isFullscreen }: { isFullscreen?: number 
   const zoomContainerRef = useRef<HTMLDivElement>(null);
   const pasteCaptureRef = useRef<HTMLTextAreaElement>(null);
   const isReinitializingGadget = useHidStore(state => state.isReinitializingGadget);
+  const isOcrMode = useUiStore(state => state.isOcrMode);
   const macrosSideTitle = useMacrosSideTitleState(state => state.sideTitle);
 
   const videoEffects = useVideoEffects();
@@ -267,12 +269,17 @@ export default function MobileDesktop({ isFullscreen }: { isFullscreen?: number 
                           `h-full  w-full  ${dark_bg_style_fun(isDark)} object-contain transition-all duration-1000`,
                           {
                             "cursor-none": videoEffects.settings.isCursorHidden,
+                            "pointer-events-none": isOcrMode,
                             "opacity-0": overlays.shouldHideVideo,
                             "opacity-60!": overlays.showPointerLockBar,
                             "animate-slideUpFade  dark:border-slate-300/20":
                             videoStream.isPlaying,
                           },
                         )}
+                      />
+                      <OcrOverlay
+                        videoRef={videoElm as React.RefObject<HTMLVideoElement>}
+                        containerRef={zoomContainerRef as React.RefObject<HTMLDivElement>}
                       />
 
                     {(videoStream.peerConnectionState === "connected" || forceHttp) && (

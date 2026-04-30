@@ -64,6 +64,8 @@ interface UIState {
 
   disableVideoFocusTrap: boolean;
   setDisableVideoFocusTrap: (enabled: boolean) => void;
+  isOcrMode: boolean;
+  setOcrMode: (enabled: boolean) => void;
 
   isWakeOnLanModalVisible: boolean;
   setWakeOnLanModalVisibility: (enabled: boolean) => void;
@@ -91,6 +93,8 @@ export const useUiStore = create<UIState>(set => ({
 
   disableVideoFocusTrap: false,
   setDisableVideoFocusTrap: enabled => set({ disableVideoFocusTrap: enabled }),
+  isOcrMode: false,
+  setOcrMode: enabled => set({ isOcrMode: enabled }),
   isAnimationComplete: false,
   setIsAnimationComplete: enabled => set({ isAnimationComplete: enabled }),
 
@@ -392,6 +396,14 @@ interface SettingsState {
 
   overrideCtrlV: boolean;
   setOverrideCtrlV: (enabled: boolean) => void;
+  pasteShortcutEnabled: boolean;
+  setPasteShortcutEnabled: (enabled: boolean) => void;
+  pasteShortcut: string;
+  setPasteShortcut: (shortcut: string) => void;
+  ocrShortcutEnabled: boolean;
+  setOcrShortcutEnabled: (enabled: boolean) => void;
+  ocrShortcut: string;
+  setOcrShortcut: (shortcut: string) => void;
 
   // Video enhancement settings
   videoSaturation: number;
@@ -461,6 +473,14 @@ export const useSettingsStore = create(
 
       overrideCtrlV: false,
       setOverrideCtrlV: enabled => set({ overrideCtrlV: enabled }),
+      pasteShortcutEnabled: true,
+      setPasteShortcutEnabled: enabled => set({ pasteShortcutEnabled: enabled }),
+      pasteShortcut: "Ctrl+V",
+      setPasteShortcut: shortcut => set({ pasteShortcut: shortcut }),
+      ocrShortcutEnabled: true,
+      setOcrShortcutEnabled: enabled => set({ ocrShortcutEnabled: enabled }),
+      ocrShortcut: "Ctrl+C",
+      setOcrShortcut: shortcut => set({ ocrShortcut: shortcut }),
 
       // Video enhancement settings with default values (1.0 = normal)
       videoSaturation: 1.0,

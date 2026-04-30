@@ -5,10 +5,12 @@ import { useSettingsStore, useHidStore, useUiStore } from "@/hooks/stores";
 import { keys, modifiers } from "@/keyboardMappings";
 import { chars } from "@/keyboardLayouts";
 import notifications from "@/notifications";
+import { eventMatchesShortcut } from "@/utils/shortcuts";
 
 export const usePasteHandler = (pasteCaptureRef?: React.RefObject<HTMLTextAreaElement>) => {
   const [send] = useJsonRpc();
-  const overrideCtrlV = useSettingsStore(state => state.overrideCtrlV);
+  const pasteShortcutEnabled = useSettingsStore(state => state.pasteShortcutEnabled);
+  const pasteShortcut = useSettingsStore(state => state.pasteShortcut);
   const keyboardLayout = useSettingsStore(state => state.keyboardLayout);
   const setKeyboardLayout = useSettingsStore(state => state.setKeyboardLayout);
   const debugMode = useSettingsStore(state => state.debugMode);
@@ -140,12 +142,11 @@ export const usePasteHandler = (pasteCaptureRef?: React.RefObject<HTMLTextAreaEl
   }, [log, send, setKeyboardLayout]);
 
   useEffect(() => {
-    if (!overrideCtrlV) return;
+    if (!pasteShortcutEnabled) return;
 
     const onKeyDownCapture = (e: KeyboardEvent) => {
-      if (!overrideCtrlV) return;
-      if (!(e.ctrlKey || e.metaKey)) return;
-      if (e.code !== "KeyV" && e.key.toLowerCase() !== "v") return;
+      if (!pasteShortcutEnabled) return;
+      if (!eventMatchesShortcut(e, pasteShortcut)) return;
       if (isReinitializingGadget) return;
 
       const activeElement = document.activeElement as HTMLElement | null;
@@ -196,20 +197,20 @@ export const usePasteHandler = (pasteCaptureRef?: React.RefObject<HTMLTextAreaEl
     return () => {
       document.removeEventListener("keydown", onKeyDownCapture, { capture: true });
     };
-  }, [ensureFocusTrapPaused, isReinitializingGadget, log, overrideCtrlV, pasteCaptureRef, safeKeyboardLayout, sendTextToRemote]);
+  }, [ensureFocusTrapPaused, isReinitializingGadget, log, pasteShortcutEnabled, pasteShortcut, pasteCaptureRef, safeKeyboardLayout, sendTextToRemote]);
 
   const handleGlobalPaste = useCallback(async (e: React.ClipboardEvent<HTMLTextAreaElement> | ClipboardEvent) => {
-    if (!overrideCtrlV) return;
+    if (!pasteShortcutEnabled) return;
     e.preventDefault();
     
     const clipboardData = (e as React.ClipboardEvent).clipboardData || (e as ClipboardEvent).clipboardData;
     const txt = clipboardData?.getData("text") || "";
   
     await sendTextToRemote(txt);
-  }, [log, overrideCtrlV, safeKeyboardLayout, sendTextToRemote]);
+  }, [log, pasteShortcutEnabled, safeKeyboardLayout, sendTextToRemote]);
 
   return {
     handleGlobalPaste,
-    overrideCtrlV,
+    pasteShortcutEnabled,
   };
 };

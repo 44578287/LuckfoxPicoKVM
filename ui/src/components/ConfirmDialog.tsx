@@ -18,6 +18,7 @@ interface ConfirmDialogProps {
   onClose: () => void;
   title: string;
   description: React.ReactNode;
+  children?: React.ReactNode;
   variant?: Variant;
   confirmText?: string;
   cancelText?: string | null;
@@ -65,6 +66,7 @@ export function ConfirmDialog({
   onClose,
   title,
   description,
+  children,
   variant = "info",
   confirmText = "Confirm",
   cancelText = "Cancel",
@@ -107,9 +109,10 @@ export function ConfirmDialog({
                         {description}
                       </div>
                     </div>
+                    {children}
                   </div>
                 </div>
-                <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
+                <div className={cx("mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3", isConfirming && "pointer-events-none")}>
                   <Button
                     size="LG"
                     theme={buttonTheme}
@@ -157,10 +160,11 @@ export function ConfirmDialog({
                 <div className="mt-2 text-sm leading-snug text-slate-600 dark:text-[#ffffff]">
                   {description}
                 </div>
+                {children}
               </div>
             </div>
 
-            <div className="flex justify-end gap-x-2">
+            <div className={cx("flex justify-end gap-x-2", isConfirming && "pointer-events-none")}>
               {cancelText && (
                 <Button size="SM" theme="light" text={cancelText} onClick={onClose} />
               )}

@@ -1,8 +1,9 @@
 import { useCallback } from "react";
 
 import  useKeyboard  from "@/hooks/useKeyboard";
-import { useHidStore, useSettingsStore } from "@/hooks/stores";
+import { useHidStore, useSettingsStore, useUiStore } from "@/hooks/stores";
 import { keys, modifiers } from "@/keyboardMappings";
+import { eventMatchesShortcut } from "@/utils/shortcuts";
 
 export const useKeyboardEvents = (
   pasteCaptureRef?: React.RefObject<HTMLTextAreaElement>,
@@ -14,7 +15,9 @@ export const useKeyboardEvents = (
   const keyboardLedStateSyncAvailable = useHidStore(state => state.keyboardLedStateSyncAvailable);
   const keyboardLedSync = useSettingsStore(state => state.keyboardLedSync);
   const isKeyboardLedManagedByHost = keyboardLedSync !== "browser" && keyboardLedStateSyncAvailable;
-  const overrideCtrlV = useSettingsStore(state => state.overrideCtrlV);
+  const pasteShortcutEnabled = useSettingsStore(state => state.pasteShortcutEnabled);
+  const pasteShortcut = useSettingsStore(state => state.pasteShortcut);
+  const isOcrMode = useUiStore(state => state.isOcrMode);
 
   const handleModifierKeys = useCallback((e: KeyboardEvent, activeModifiers: number[]) => {
     const { shiftKey, ctrlKey, altKey, metaKey } = e;
@@ -28,15 +31,15 @@ export const useKeyboardEvents = (
   }, []);
 
   const keyDownHandler = useCallback(async (e: KeyboardEvent) => {
-    if (overrideCtrlV && (e.code === "KeyV" || e.key.toLowerCase() === "v") && (e.ctrlKey || e.metaKey)) {
-        console.log("Override Ctrl V");
-        if (isReinitializingGadget) return;
-        if (pasteCaptureRef && pasteCaptureRef.current) {
-          pasteCaptureRef.current.value = "";
-          pasteCaptureRef.current.focus();
-        }
-        return;
+    if (isOcrMode) return;
+    if (pasteShortcutEnabled && eventMatchesShortcut(e, pasteShortcut)) {
+      if (isReinitializingGadget) return;
+      if (pasteCaptureRef && pasteCaptureRef.current) {
+        pasteCaptureRef.current.value = "";
+        pasteCaptureRef.current.focus();
       }
+      return;
+    }
     if (isReinitializingGadget) return;
 
     e.preventDefault();
@@ -74,9 +77,10 @@ export const useKeyboardEvents = (
     
     // Still update the full state for legacy compatibility and UI display
     sendKeyboardEvent([...new Set(newKeys)], [...new Set(newModifiers)]);
-  }, [handleModifierKeys, sendKeyboardEvent, sendKeypress, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive, overrideCtrlV, pasteCaptureRef, isReinitializingGadget]);
+  }, [handleModifierKeys, sendKeyboardEvent, sendKeypress, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive, pasteShortcutEnabled, pasteShortcut, pasteCaptureRef, isReinitializingGadget, isOcrMode]);
 
   const keyUpHandler = useCallback((e: KeyboardEvent) => {
+    if (isOcrMode) return;
     if (isReinitializingGadget) return;
     e.preventDefault();
     const prev = useHidStore.getState();
@@ -101,7 +105,7 @@ export const useKeyboardEvents = (
     
     // Still update the full state for legacy compatibility and UI display
     sendKeyboardEvent([...new Set(newKeys)], [...new Set(newModifiers)]);
-  }, [handleModifierKeys, sendKeyboardEvent, sendKeypress, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive]);
+  }, [handleModifierKeys, sendKeyboardEvent, sendKeypress, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive, isOcrMode]);
 
   const setupKeyboardEvents = useCallback(() => {
     const abortController = new AbortController();

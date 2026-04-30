@@ -25,6 +25,7 @@ import { MacroMoreList } from "@/layout/components_side/Macros/MacroTopBar";
 import { useUiStore, useHidStore, useSettingsStore } from "@/hooks/stores";
 import { useTouchZoom } from "@/layout/core/desktop/hooks/useTouchZoom";
 import { usePasteHandler } from "@/layout/core/desktop/hooks/usePasteHandler";
+import OcrOverlay from "@components/OcrOverlay";
 
 export default function PCDesktop({ isFullscreen }: { isFullscreen?: number }) {
   const videoElm = useRef<HTMLVideoElement>(null);
@@ -38,6 +39,7 @@ export default function PCDesktop({ isFullscreen }: { isFullscreen?: number }) {
   const setTerminalType = useUiStore(state => state.setTerminalType);
   const terminalType = useUiStore(state => state.terminalType);
   const setVirtualKeyboardEnabled = useHidStore(state => state.setVirtualKeyboardEnabled);
+  const isOcrMode = useUiStore(state => state.isOcrMode);
 
   const forceHttp = useSettingsStore(state => state.forceHttp);
 
@@ -116,12 +118,17 @@ export default function PCDesktop({ isFullscreen }: { isFullscreen?: number }) {
                          `max-h-full min-h-[384px] max-w-full min-w-[512px]  object-contain transition-all duration-1000`,
                         {
                            "cursor-none": videoEffects.settings.isCursorHidden,
+                           "pointer-events-none": isOcrMode,
                            "opacity-0": overlays.shouldHideVideo,
                            "opacity-60!": overlays.showPointerLockBar,
                            "animate-slideUpFade  shadow-xs ":
                            videoStream.isPlaying,
                         },
                       )}
+                    />
+                    <OcrOverlay
+                      videoRef={videoElm as React.RefObject<HTMLVideoElement>}
+                      containerRef={zoomContainerRef as React.RefObject<HTMLDivElement>}
                     />
 
                     {(videoStream.peerConnectionState === "connected" || forceHttp) && (
