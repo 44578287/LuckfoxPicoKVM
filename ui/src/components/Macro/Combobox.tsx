@@ -27,7 +27,7 @@ const comboboxVariants = cva({
   variants: { size: sizes },
 });
 
-type BaseProps = React.ComponentProps<typeof HeadlessCombobox>;
+type BaseProps = React.ComponentProps<typeof HeadlessCombobox<ComboboxOption>>;
 
 interface ComboboxProps extends Omit<BaseProps, "displayValue"> {
   displayValue: (option: ComboboxOption) => string;

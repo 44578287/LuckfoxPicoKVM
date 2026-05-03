@@ -21,6 +21,12 @@ type WakeOnLanDevice struct {
 	MacAddress string `json:"macAddress"`
 }
 
+type TurnServer struct {
+	URL        string `json:"url"`
+	Username   string `json:"username"`
+	Credential string `json:"credential"`
+}
+
 // Constants for keyboard macro limits
 const (
 	MaxMacrosPerDevice = 25
@@ -81,6 +87,7 @@ func (m *KeyboardMacro) Validate() error {
 
 type Config struct {
 	STUN                 string                 `json:"stun"`
+	TurnServers          []TurnServer           `json:"turn_servers"`
 	JigglerEnabled       bool                   `json:"jiggler_enabled"`
 	AutoUpdateEnabled    bool                   `json:"auto_update_enabled"`
 	IncludePreRelease    bool                   `json:"include_pre_release"`
@@ -185,6 +192,7 @@ const sdConfigPath = "/mnt/sdcard/kvm_config.json"
 
 var defaultConfig = &Config{
 	STUN:                 "stun:stun.l.google.com:19302",
+	TurnServers:          []TurnServer{},
 	AutoUpdateEnabled:    false, // Set a default value
 	ActiveExtension:      "",
 	KeyboardMacros:       []KeyboardMacro{},
@@ -297,6 +305,10 @@ func LoadConfig() {
 
 	if loadedConfig.Firewall == nil {
 		loadedConfig.Firewall = defaultConfig.Firewall
+	}
+
+	if loadedConfig.TurnServers == nil {
+		loadedConfig.TurnServers = []TurnServer{}
 	}
 
 	config = &loadedConfig

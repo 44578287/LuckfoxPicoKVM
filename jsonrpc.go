@@ -852,6 +852,60 @@ func rpcSetConfigRaw(configStr string) error {
 	return nil
 }
 
+type RtcServersConfig struct {
+	STUN        string       `json:"stun"`
+	DefaultSTUN string       `json:"defaultStun"`
+	TurnServers []TurnServer `json:"turnServers"`
+}
+
+func rpcGetRtcServersConfig() (RtcServersConfig, error) {
+	return RtcServersConfig{
+		STUN:        config.STUN,
+		DefaultSTUN: DefaultSTUN,
+		TurnServers: config.TurnServers,
+	}, nil
+}
+
+func rpcSetStunServer(stun string) error {
+	config.STUN = stun
+	return SaveConfig()
+}
+
+type SetTurnServersParams struct {
+	Servers []TurnServer `json:"servers"`
+}
+
+func rpcSetTurnServers(params SetTurnServersParams) error {
+	config.TurnServers = params.Servers
+	if config.TurnServers == nil {
+		config.TurnServers = []TurnServer{}
+	}
+	return SaveConfig()
+}
+
+type IceServerJSON struct {
+	URLs       []string `json:"urls"`
+	Username   string   `json:"username,omitempty"`
+	Credential string   `json:"credential,omitempty"`
+}
+
+func rpcGetIceServers() ([]IceServerJSON, error) {
+	raw := buildICEServers()
+	out := make([]IceServerJSON, 0, len(raw))
+	for _, server := range raw {
+		credential := ""
+		if server.Credential != nil {
+			credential = fmt.Sprintf("%v", server.Credential)
+		}
+		out = append(out, IceServerJSON{
+			URLs:       server.URLs,
+			Username:   server.Username,
+			Credential: credential,
+		})
+	}
+	return out, nil
+}
+
 func rpcGetActiveExtension() (string, error) {
 	return config.ActiveExtension, nil
 }
@@ -1406,6 +1460,10 @@ var rpcHandlers = map[string]RPCHandler{
 	"resetConfig":               {Func: rpcResetConfig},
 	"getConfigRaw":              {Func: rpcGetConfigRaw},
 	"setConfigRaw":              {Func: rpcSetConfigRaw, Params: []string{"configStr"}},
+	"getRtcServersConfig":       {Func: rpcGetRtcServersConfig},
+	"setStunServer":             {Func: rpcSetStunServer, Params: []string{"stun"}},
+	"setTurnServers":            {Func: rpcSetTurnServers, Params: []string{"params"}},
+	"getIceServers":             {Func: rpcGetIceServers},
 	"setDisplayRotation":        {Func: rpcSetDisplayRotation, Params: []string{"params"}},
 	"getDisplayRotation":        {Func: rpcGetDisplayRotation},
 	"setBacklightSettings":      {Func: rpcSetBacklightSettings, Params: []string{"params"}},

@@ -23,6 +23,7 @@ import { LogDialog } from "@components/LogDialog";
 import { Dialog } from "@/layout/components_setting/access/auth";
 import AutoHeight from "@components/AutoHeight";
 import FirewallSettings from "./FirewallSettings";
+import WebRtcServersSettings from "./WebRtcServers";
 
 export interface TailScaleResponse {
   state: string;
@@ -996,6 +997,20 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
           <div className="h-px w-full bg-slate-800/10 dark:bg-slate-300/20" />
         </>
       )}
+
+      <div className="space-y-4">
+        <SettingsSectionHeader
+          title={$at("WebRTC Servers")}
+          description={$at("STUN and TURN servers used for peer connections")}
+        />
+        <GridCard>
+          <AutoHeight>
+            <div className="space-y-4 p-4">
+              <WebRtcServersSettings />
+            </div>
+          </AutoHeight>
+        </GridCard>
+      </div>
 
       <div className="space-y-4">
         <SettingsSectionHeader
