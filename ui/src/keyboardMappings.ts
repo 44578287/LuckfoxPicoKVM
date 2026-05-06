@@ -233,6 +233,17 @@ export const keyDisplayMap: Record<string, string> = {
 
 };
 
+export const latchingKeys = ["CapsLock", "ScrollLock", "NumLock", "MetaLeft", "MetaRight", "Compose", "Kana"];
+
+export function decodeModifiers(modifier: number) {
+  return {
+    isShiftActive: (modifier & (modifiers.ShiftLeft | modifiers.ShiftRight)) !== 0,
+    isControlActive: (modifier & (modifiers.ControlLeft | modifiers.ControlRight)) !== 0,
+    isAltActive: (modifier & (modifiers.AltLeft | modifiers.AltRight)) !== 0,
+    isMetaActive: (modifier & (modifiers.MetaLeft | modifiers.MetaRight)) !== 0,
+  };
+}
+
 export const keyDisplayMap2: Record<string, string> = {
   ...keyDisplayMap,
   ...{

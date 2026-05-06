@@ -14,7 +14,8 @@ import DetachIconRaw from "@/assets/detach-icon.svg";
 import { cx } from "@/cva.config";
 import { useHidStore, useSettingsStore, useUiStore } from "@/hooks/stores";
 import useKeyboard from "@/hooks/useKeyboard";
-import { keyDisplayMap, keyDisplayMap2, keys, modifiers, sKeyDisplayMap } from "@/keyboardMappings";
+import useKeyboardLayout from "@/hooks/useKeyboardLayout";
+import { keyDisplayMap2, keys, modifiers, sKeyDisplayMap, latchingKeys } from "@/keyboardMappings";
 import { dark_bg2_style} from "@/layout/theme_color";
 
 import GoBottomSvg from "@/assets/second/gobottom.svg?react";
@@ -33,6 +34,15 @@ function KeyboardWrapper() {
   );
 
   const { sendKeyboardEvent, resetKeyboardState } = useKeyboard();
+  const { selectedKeyboard } = useKeyboardLayout();
+
+  const keyDisplayMap = useMemo(() => {
+    return selectedKeyboard.keyDisplayMap;
+  }, [selectedKeyboard]);
+
+  const virtualKeyboardLayout = useMemo(() => {
+    return selectedKeyboard.virtualKeyboard;
+  }, [selectedKeyboard]);
 
   const [isDragging, setIsDragging] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -837,24 +847,7 @@ function KeyboardWrapper() {
                                 ? [{ class: "modifier-locked", buttons: modifierLockButtons }]
                                 : []
                             }
-                            layout={{
-                              default: [
-                                "Escape F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12",
-                                "Backquote Digit1 Digit2 Digit3 Digit4 Digit5 Digit6 Digit7 Digit8 Digit9 Digit0 Minus Equal Backspace",
-                                "Tab KeyQ KeyW KeyE KeyR KeyT KeyY KeyU KeyI KeyO KeyP BracketLeft BracketRight Backslash",
-                                "CapsLock KeyA KeyS KeyD KeyF KeyG KeyH KeyJ KeyK KeyL Semicolon Quote Enter",
-                                "ShiftLeft KeyZ KeyX KeyC KeyV KeyB KeyN KeyM Comma Period Slash ShiftRight",
-                                "ControlLeft AltLeft MetaLeft Space MetaRight AltRight",
-                              ],
-                              shift: [
-                                "Escape F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12",
-                                "(Backquote) (Digit1) (Digit2) (Digit3) (Digit4) (Digit5) (Digit6) (Digit7) (Digit8) (Digit9) (Digit0) (Minus) (Equal) (Backspace)",
-                                "Tab (KeyQ) (KeyW) (KeyE) (KeyR) (KeyT) (KeyY) (KeyU) (KeyI) (KeyO) (KeyP) (BracketLeft) (BracketRight) (Backslash)",
-                                "CapsLock (KeyA) (KeyS) (KeyD) (KeyF) (KeyG) (KeyH) (KeyJ) (KeyK) (KeyL) (Semicolon) (Quote) Enter",
-                                "ShiftLeft (KeyZ) (KeyX) (KeyC) (KeyV) (KeyB) (KeyN) (KeyM) (Comma) (Period) (Slash) ShiftRight",
-                                "ControlLeft AltLeft MetaLeft Space MetaRight AltRight",
-                              ],
-                            }}
+                            layout={virtualKeyboardLayout.main}
                             disableButtonHold={true}
                             syncInstanceInputs={true}
                             debug={false}
@@ -874,10 +867,7 @@ function KeyboardWrapper() {
                               layoutName={layoutName}
                               onKeyPress={onKeyDown}
                               display={keyDisplayMap}
-                              layout={{
-                                default: ["PrintScreen ScrollLock Pause", "Insert Home Pageup", "Delete End Pagedown"],
-                                shift: ["(PrintScreen) ScrollLock (Pause)", "Insert Home Pageup", "Delete End Pagedown"],
-                              }}
+                              layout={virtualKeyboardLayout.control}
                               syncInstanceInputs={true}
                               debug={false}
                             />
@@ -902,7 +892,7 @@ function KeyboardWrapper() {
                                   onKeyPress={onKeyDown}
                                   display={keyDisplayMap}
                                   layout={{
-                                    default: ["ArrowUp"],
+                                    default: [virtualKeyboardLayout.arrows?.default?.[0] || "ArrowUp"],
                                   }}
                                   syncInstanceInputs={true}
                                   debug={false}
@@ -916,7 +906,7 @@ function KeyboardWrapper() {
                                 onKeyPress={onKeyDown}
                                 display={keyDisplayMap}
                                 layout={{
-                                  default: ["ArrowLeft ArrowDown ArrowRight"],
+                                  default: [virtualKeyboardLayout.arrows?.default?.[1] || "ArrowLeft ArrowDown ArrowRight"],
                                 }}
                                 syncInstanceInputs={true}
                                 debug={false}
