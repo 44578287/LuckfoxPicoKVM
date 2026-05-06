@@ -117,16 +117,17 @@ const SettingsMacrosEdit: React.FC<MenuComponentProps> = ({ onMenuSelect,macroId
   disabled={isDeleting}
   />
   </div>
-  <MacroForm
-  initialData={macro}
-  onSubmit={handleUpdateMacro}
-  onCancel={() => {
-    console.log("MacroForm onCancel")
-    onMenuSelect("index");
-  }}
-  isSubmitting={isUpdating}
-
-  />
+  <div onKeyUp={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+    <MacroForm
+      initialData={macro}
+      onSubmit={handleUpdateMacro}
+      onCancel={() => {
+        console.log("MacroForm onCancel")
+        onMenuSelect("index");
+      }}
+      isSubmitting={isUpdating}
+    />
+  </div>
 
   <ConfirmDialog
     open={showDeleteConfirm}
