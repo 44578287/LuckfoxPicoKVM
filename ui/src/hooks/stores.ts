@@ -938,6 +938,9 @@ export interface IPv4StaticConfig {
 export interface NetworkSettings {
   hostname: string;
   domain: string;
+  http_proxy?: string;
+  https_proxy?: string;
+  all_proxy?: string;
   ipv4_mode: IPv4Mode;
   ipv4_request_address?: string;
   ipv4_static?: IPv4StaticConfig;

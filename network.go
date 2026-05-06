@@ -2,6 +2,8 @@ package kvm
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"kvm/internal/network"
 	"kvm/internal/udhcpc"
@@ -16,6 +18,27 @@ const (
 var (
 	networkState *network.NetworkInterfaceState
 )
+
+func setProxyEnvVar(key, value string) {
+	value = strings.TrimSpace(value)
+	upperKey := strings.ToUpper(key)
+	if value == "" {
+		_ = os.Unsetenv(key)
+		_ = os.Unsetenv(upperKey)
+		return
+	}
+	_ = os.Setenv(key, value)
+	_ = os.Setenv(upperKey, value)
+}
+
+func applyProxyEnvironment(networkConfig *network.NetworkConfig) {
+	if networkConfig == nil {
+		return
+	}
+	setProxyEnvVar("http_proxy", networkConfig.HTTPProxy.String)
+	setProxyEnvVar("https_proxy", networkConfig.HTTPSProxy.String)
+	setProxyEnvVar("all_proxy", networkConfig.ALLProxy.String)
+}
 
 func networkStateChanged() {
 	// do not block the main thread
@@ -33,6 +56,7 @@ func networkStateChanged() {
 
 func initNetwork() error {
 	ensureConfigLoaded()
+	applyProxyEnvironment(config.NetworkConfig)
 
 	state, err := network.NewNetworkInterfaceState(&network.NetworkInterfaceOptions{
 		DefaultHostname: GetDefaultHostname(),
@@ -131,6 +155,7 @@ func rpcSetNetworkSettings(settings network.RpcNetworkSettings) (*network.RpcNet
 	if err := SaveConfig(); err != nil {
 		return nil, err
 	}
+	applyProxyEnvironment(config.NetworkConfig)
 
 	return &network.RpcNetworkSettings{NetworkConfig: *config.NetworkConfig}, nil
 }

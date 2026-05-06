@@ -39,6 +39,9 @@ dayjs.extend(relativeTime);
 const defaultNetworkSettings: NetworkSettings = {
   hostname: "",
   domain: "",
+  http_proxy: "",
+  https_proxy: "",
+  all_proxy: "",
   ipv4_mode: "unknown",
   ipv6_mode: "unknown",
   lldp_mode: "unknown",
@@ -307,6 +310,10 @@ export default function SettingsNetwork() {
     setNetworkSettings({ ...networkSettings, domain: value });
   };
 
+  const handleProxyChange = (field: "http_proxy" | "https_proxy" | "all_proxy", value: string) => {
+    setNetworkSettings({ ...networkSettings, [field]: value });
+  };
+
   const handleDomainOptionChange = (value: string) => {
     setSelectedDomainOption(value);
     if (value !== "custom") {
@@ -537,6 +544,47 @@ export default function SettingsNetwork() {
             </SettingsItem>
           </div>
 
+          <div className="space-y-4">
+          <SettingsItem
+            title="HTTP Proxy"
+            description={$at("Configure program HTTP proxy (optional)")}
+            className={`${isMobile ? "w-full flex-col" : ""}`}
+          >
+            <Input
+              type="text"
+              value={networkSettings.http_proxy || ""}
+              placeholder="http://127.0.0.1:7890"
+              onChange={e => handleProxyChange("http_proxy", e.target.value)}
+              className={isMobile ? "!w-full !h-[36px]" : "!w-[37%] !h-[36px]"}
+            />
+          </SettingsItem>
+          <SettingsItem
+            title="HTTPS Proxy"
+            description={$at("Configure program HTTPS proxy (optional)")}
+            className={`${isMobile ? "w-full flex-col" : ""}`}
+          >
+            <Input
+              type="text"
+              value={networkSettings.https_proxy || ""}
+              placeholder="http://127.0.0.1:7890"
+              onChange={e => handleProxyChange("https_proxy", e.target.value)}
+              className={isMobile ? "!w-full !h-[36px]" : "!w-[37%] !h-[36px]"}
+            />
+          </SettingsItem>
+          <SettingsItem
+            title="ALL Proxy"
+            description={$at("Configure program ALL proxy (optional)")}
+            className={`${isMobile ? "w-full flex-col" : ""}`}
+          >
+            <Input
+              type="text"
+              value={networkSettings.all_proxy || ""}
+              placeholder="socks5://127.0.0.1:7890"
+              onChange={e => handleProxyChange("all_proxy", e.target.value)}
+              className={isMobile ? "!w-full !h-[36px]" : "!w-[37%] !h-[36px]"}
+            />
+          </SettingsItem>
+          </div>
           <AntdButton
             type="primary"
             disabled={
