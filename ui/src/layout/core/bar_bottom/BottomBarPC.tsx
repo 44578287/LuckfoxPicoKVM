@@ -44,12 +44,6 @@ export default function BottomBarPC() {
   const activeModifiers = useHidStore(state => state.activeModifiers);
   const audioMode = useAudioModeStore(state => state.audioMode);
   const usbEpMode = useUsbEpModeStore(state => state.usbEpMode);
-  // const videoSize = useVideoStore(
-  //   state => `${Math.round(state.width)}x${Math.round(state.height)}`,
-  // );
-  const videoSize = useVideoStore(
-    state => `${Math.round(state.clientWidth)}x${Math.round(state.clientHeight)}`,
-  );
   const setDisableFocusTrap = useUiStore(state => state.setDisableVideoFocusTrap);
   const toggleSidebarView = useUiStore(state => state.toggleSidebarView);
   const showPressedKeys = useSettingsStore(state => state.showPressedKeys);
@@ -89,10 +83,10 @@ export default function BottomBarPC() {
 
   const videoButtonLabel = useMemo(() => {
     if (forceHttp) {
-      return `${videoSize}`;
+      return "N/A fps";
     }
-    return `${videoSize} ${fps}fps `;
-  }, [forceHttp, videoSize, fps]);
+    return `${Math.round(fps)}fps`;
+  }, [forceHttp, fps]);
   useEffect(() => {
     send("getNetworkSettings", {}, resp => {
       if ("error" in resp) return;

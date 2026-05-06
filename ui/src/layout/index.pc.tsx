@@ -848,9 +848,9 @@ export default function PCHome() {
             <Desktop isFullscreen={isFullscreen} />
             <div
               style={{ animationDuration: "500ms" }}
-              className="animate-slideUpFade pointer-events-none absolute inset-0 flex items-center justify-center p-4"
+              className="animate-slideUpFade pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
             >
-              <div className={`relative h-full max-h-[720px] w-full  rounded-md`}>
+              <div className="relative h-full w-full">
                 {!!ConnectionStatusElement && ConnectionStatusElement}
                 {/*<ConnectionFailedOverlay show={true} setupPeerConnection={setupPeerConnection} />*/}
               </div>

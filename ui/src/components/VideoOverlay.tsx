@@ -84,7 +84,7 @@ export function LoadingConnectionOverlay({ show, text }: LoadingConnectionOverla
     <AnimatePresence>
       {show && (
         <motion.div
-          className="aspect-video h-full w-full"
+          className="absolute inset-0 h-full w-full"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0 } }}
@@ -124,7 +124,7 @@ export function ConnectionFailedOverlay({
     <AnimatePresence>
       {show && (
         <motion.div
-          className="aspect-video h-full w-full"
+          className="absolute inset-0 h-full w-full"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0 } }}
@@ -215,7 +215,7 @@ export function PeerConnectionDisconnectedOverlay({
     <AnimatePresence>
       {show && (
         <motion.div
-          className="aspect-video h-full w-full"
+          className="absolute inset-0 h-full w-full"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0 } }}
@@ -302,7 +302,7 @@ export function HDMIErrorOverlay({ show, hdmiState }: HDMIErrorOverlayProps) {
       <AnimatePresence>
         {show && isNoSignal && (
           <motion.div
-            className="absolute inset-0 aspect-video h-full w-full "
+            className="absolute inset-0 h-full w-full "
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -386,7 +386,7 @@ export function HDMIErrorOverlay({ show, hdmiState }: HDMIErrorOverlayProps) {
       <AnimatePresence>
         {show && isOtherError && (
           <motion.div
-            className="absolute inset-0 aspect-video h-full w-full"
+            className="absolute inset-0 h-full w-full"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -446,7 +446,7 @@ export function NoAutoplayPermissionsOverlay({
     <AnimatePresence>
       {show && (
         <motion.div
-          className="absolute inset-0 z-10 aspect-video h-full w-full"
+          className="absolute inset-0 z-10 h-full w-full"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

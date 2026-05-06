@@ -22,7 +22,6 @@ import {
   useRTCStore,
   useSettingsStore,
   useUiStore,
-  useVideoStore,
   useVpnStore,
 } from "@/hooks/stores";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
@@ -48,9 +47,6 @@ const views = [
 export default function BottomBarMobile() {
   const { $at } = useReactAt();
   const keyboardLedState = useHidStore(state => state.keyboardLedState);
-  const videoSize = useVideoStore(
-    state => `${Math.round(state.clientWidth)}x${Math.round(state.clientHeight)}`,
-  );
   const { isDark } = useTheme();
   const setDisableFocusTrap = useUiStore(state => state.setDisableVideoFocusTrap);
   const toggleSidebarView = useUiStore(state => state.toggleSidebarView);
@@ -79,10 +75,7 @@ export default function BottomBarMobile() {
 
       stats?.forEach(report => {
         if (report.type === "inbound-rtp") {
-          if(report.framesPerSecond){
-            setFps(report.framesPerSecond)
-          }
-
+          setFps(report.framesPerSecond ?? 0);
         }
       });
     })();
@@ -117,7 +110,7 @@ export default function BottomBarMobile() {
     { icon: isDark ? Video2SVG : VideoSVG, label: $at("video") },
     { icon: StateSvg, label: $at("status") },
   ];
-  const videoButtonLabel = forceHttp ? `${videoSize}` : `${videoSize} ${fps}fps `;
+  const videoButtonLabel = forceHttp ? "N/A fps" : `${Math.round(fps)}fps`;
   if(isVirtualKeyboardEnabled){
     return <></>
   }
