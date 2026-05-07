@@ -1649,6 +1649,8 @@ var rpcHandlers = map[string]RPCHandler{
 	"getVpnToolStatus":          {Func: rpcGetVpnToolStatus, Params: []string{"tool"}},
 	"listVpnToolReleases":       {Func: rpcListVpnToolReleases, Params: []string{"tool"}},
 	"installVpnTool":            {Func: rpcInstallVpnTool, Params: []string{"tool", "version", "assetName", "downloadURL"}},
+	"startVpnToolInstall":       {Func: rpcStartVpnToolInstall, Params: []string{"tool", "version", "assetName", "downloadURL"}},
+	"getVpnToolInstallTask":     {Func: rpcGetVpnToolInstallTask, Params: []string{"tool"}},
 	"useVpnToolVersion":         {Func: rpcUseVpnToolVersion, Params: []string{"tool", "version"}},
 	"uninstallVpnToolVersion":   {Func: rpcUninstallVpnToolVersion, Params: []string{"tool", "version"}},
 	"getStreamEncodecType":      {Func: rpcGetStreamEncodecType},

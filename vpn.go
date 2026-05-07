@@ -332,7 +332,7 @@ func rpcStartFrpc(frpcToml string) error {
 		if err := os.WriteFile(frpcTomlPath, []byte(frpcToml), 0600); err != nil {
 			return err
 		}
-		cmd := exec.Command("frpc", "-c", frpcTomlPath)
+		cmd := exec.Command(resolveVpnToolBinary("frpc", "frpc"), "-c", frpcTomlPath)
 		cmd.Stdout = nil
 		cmd.Stderr = nil
 		logFile, err := os.OpenFile(frpcLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
@@ -386,7 +386,9 @@ type CloudflaredStatus struct {
 }
 
 func cloudflaredRunning() bool {
-	cmd := exec.Command("pgrep", "-x", "cloudflared")
+	// Only treat long-running tunnel process as running.
+	// This avoids false positives from short-lived version checks like `cloudflared -v`.
+	cmd := exec.Command("pgrep", "-f", `cloudflared.*tunnel.*run`)
 	return cmd.Run() == nil
 }
 
@@ -401,7 +403,7 @@ func rpcStartCloudflared(token string) error {
 	if token == "" {
 		return fmt.Errorf("cloudflared token is empty")
 	}
-	cmd := exec.Command("cloudflared", "tunnel", "run", "--token", token)
+	cmd := exec.Command(resolveVpnToolBinary("cloudflared", "cloudflared"), "tunnel", "run", "--token", token)
 	logFile, err := os.OpenFile(cloudflaredLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
@@ -521,7 +523,7 @@ func rpcGetEasyTierLog() (string, error) {
 }
 
 func rpcGetEasyTierNodeInfo() (string, error) {
-	cmd := exec.Command("easytier-cli", "node")
+	cmd := exec.Command(resolveVpnToolBinary("easytier", "easytier-cli"), "node")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get easytier node info: %w", err)
@@ -543,7 +545,7 @@ func rpcStartEasyTier(name, secret, node string) error {
 		return fmt.Errorf("easytier config is invalid")
 	}
 
-	cmd := exec.Command("easytier-core", "-d", "--network-name", name, "--network-secret", secret, "-p", node)
+	cmd := exec.Command(resolveVpnToolBinary("easytier", "easytier-core"), "-d", "--network-name", name, "--network-secret", secret, "-p", node)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	logFile, err := os.OpenFile(easytierLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
@@ -639,7 +641,7 @@ func rpcGetVntLog() (string, error) {
 }
 
 func rpcGetVntInfo() (string, error) {
-	cmd := exec.Command("vnt-cli", "--info")
+	cmd := exec.Command(resolveVpnToolBinary("vnt", "vnt-cli"), "--info")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get vnt info: %w", err)
@@ -707,7 +709,7 @@ func rpcStartVnt(configMode, token, deviceId, name, serverAddr, configFile strin
 		args = append(args, "--compressor", "lz4")
 	}
 
-	cmd := exec.Command("vnt-cli", args...)
+	cmd := exec.Command(resolveVpnToolBinary("vnt", "vnt-cli"), args...)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	logFile, err := os.OpenFile(vntLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)

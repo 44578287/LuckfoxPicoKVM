@@ -71,6 +71,47 @@ export interface CloudflaredRunningResponse {
   running: boolean;
 }
 
+type ManagedVpnTool = "frpc" | "easytier" | "vnt" | "cloudflared";
+
+export interface VpnToolSystemInfo {
+  goos: string;
+  goarch: string;
+  uname_arch: string;
+  arch_label: string;
+  arch_keywords: string[];
+}
+
+export interface VpnToolStatus {
+  tool: string;
+  installed: boolean;
+  source: string;
+  current_version: string;
+  detected_version: string;
+  managed_versions: string[];
+}
+
+export interface VpnToolReleaseAsset {
+  name: string;
+  url: string;
+  arch_match: boolean;
+}
+
+export interface VpnToolRelease {
+  tag_name: string;
+  assets: VpnToolReleaseAsset[];
+}
+
+export interface VpnToolInstallTask {
+  tool: string;
+  running: boolean;
+  progress: number;
+  message: string;
+  logs: string[];
+  error: string;
+  version: string;
+  updated_at: number;
+}
+
 export interface WireguardStatus {
   running: boolean;
 }
@@ -198,6 +239,20 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
   const [cloudflaredLog, setCloudflaredLog] = useState<string>("");
   const [showCloudflaredLogModal, setShowCloudflaredLogModal] = useState(false);
 
+  const [vpnToolSystemInfo, setVpnToolSystemInfo] = useState<VpnToolSystemInfo | null>(null);
+  const [vpnToolStatusMap, setVpnToolStatusMap] = useState<Record<string, VpnToolStatus>>({});
+  const [vpnToolReleasesMap, setVpnToolReleasesMap] = useState<Record<string, VpnToolRelease[]>>({});
+  const [vpnToolSelectedVersionMap, setVpnToolSelectedVersionMap] = useState<Record<string, string>>({});
+  const [vpnToolSelectedAssetMap, setVpnToolSelectedAssetMap] = useState<Record<string, string>>({});
+  const [vpnToolBusyMap, setVpnToolBusyMap] = useState<Record<string, boolean>>({});
+  const [vpnToolInstallTaskMap, setVpnToolInstallTaskMap] = useState<Record<string, VpnToolInstallTask>>({});
+  const [vpnToolInstallPanelOpenMap, setVpnToolInstallPanelOpenMap] = useState<Record<string, boolean>>({
+    frpc: false,
+    easytier: false,
+    vnt: false,
+    cloudflared: false,
+  });
+
 
   const getTLSState = useCallback(() => {
     send("getTLSState", {}, resp => {
@@ -282,9 +337,155 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
     });
   }, [send]);
 
+  const managedTools: ManagedVpnTool[] = ["frpc", "easytier", "vnt", "cloudflared"];
+
+  const getVpnToolSystemInfo = useCallback(() => {
+    send("getVpnToolSystemInfo", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(`Failed to get system architecture info: ${resp.error.data || "Unknown error"}`);
+        return;
+      }
+      setVpnToolSystemInfo(resp.result as VpnToolSystemInfo);
+    });
+  }, [send]);
+
+  const getVpnToolStatus = useCallback((tool: ManagedVpnTool) => {
+    send("getVpnToolStatus", { tool }, resp => {
+      if ("error" in resp) {
+        notifications.error(`Failed to get ${tool} status: ${resp.error.data || "Unknown error"}`);
+        return;
+      }
+      setVpnToolStatusMap(prev => ({ ...prev, [tool]: resp.result as VpnToolStatus }));
+    });
+  }, [send]);
+
+  const listVpnToolReleases = useCallback((tool: ManagedVpnTool) => {
+    send("listVpnToolReleases", { tool }, resp => {
+      if ("error" in resp) {
+        notifications.error(`Failed to list ${tool} releases: ${resp.error.data || "Unknown error"}`);
+        return;
+      }
+      const releases = resp.result as VpnToolRelease[];
+      setVpnToolReleasesMap(prev => ({ ...prev, [tool]: releases }));
+      if (!releases.length) {
+        return;
+      }
+      setVpnToolSelectedVersionMap(prev => {
+        if (prev[tool]) return prev;
+        return { ...prev, [tool]: releases[0].tag_name };
+      });
+      setVpnToolSelectedAssetMap(prev => {
+        if (prev[tool]) return prev;
+        const firstRelease = releases[0];
+        const preferred = firstRelease.assets.find(asset => asset.arch_match) || firstRelease.assets[0];
+        return preferred ? { ...prev, [tool]: preferred.url } : prev;
+      });
+    });
+  }, [send]);
+
+  const refreshVpnToolManager = useCallback((tool: ManagedVpnTool, withReleases: boolean) => {
+    getVpnToolStatus(tool);
+    if (withReleases) {
+      listVpnToolReleases(tool);
+    }
+  }, [getVpnToolStatus, listVpnToolReleases]);
+
+  const getVpnToolInstallTask = useCallback((tool: ManagedVpnTool) => {
+    send("getVpnToolInstallTask", { tool }, resp => {
+      if ("error" in resp) {
+        return;
+      }
+      setVpnToolInstallTaskMap(prev => ({ ...prev, [tool]: resp.result as VpnToolInstallTask }));
+    });
+  }, [send]);
+
+  const handleVpnToolVersionChange = useCallback((tool: ManagedVpnTool, version: string) => {
+    setVpnToolSelectedVersionMap(prev => ({ ...prev, [tool]: version }));
+    const releases = vpnToolReleasesMap[tool] || [];
+    const selectedRelease = releases.find(release => release.tag_name === version);
+    if (!selectedRelease || !selectedRelease.assets.length) {
+      setVpnToolSelectedAssetMap(prev => ({ ...prev, [tool]: "" }));
+      return;
+    }
+    const preferred = selectedRelease.assets.find(asset => asset.arch_match) || selectedRelease.assets[0];
+    setVpnToolSelectedAssetMap(prev => ({ ...prev, [tool]: preferred?.url || "" }));
+  }, [vpnToolReleasesMap]);
+
+  const handleInstallVpnTool = useCallback((tool: ManagedVpnTool) => {
+    const version = vpnToolSelectedVersionMap[tool];
+    const downloadURL = vpnToolSelectedAssetMap[tool];
+    const releases = vpnToolReleasesMap[tool] || [];
+    const release = releases.find(item => item.tag_name === version);
+    const selectedAsset = release?.assets.find(asset => asset.url === downloadURL);
+    if (!version || !downloadURL || !selectedAsset) {
+      notifications.error(`Please select version and release asset for ${tool}`);
+      return;
+    }
+    setVpnToolBusyMap(prev => ({ ...prev, [tool]: true }));
+    send("startVpnToolInstall", { tool, version, assetName: selectedAsset.name, downloadURL }, resp => {
+      setVpnToolBusyMap(prev => ({ ...prev, [tool]: false }));
+      if ("error" in resp) {
+        notifications.error(`Failed to install ${tool}: ${resp.error.data || "Unknown error"}`);
+        return;
+      }
+      notifications.success(`${tool} install task started (${version})`);
+      getVpnToolInstallTask(tool);
+    });
+  }, [send, vpnToolSelectedVersionMap, vpnToolSelectedAssetMap, vpnToolReleasesMap, getVpnToolInstallTask]);
+
+  const handleUninstallVpnToolVersion = useCallback((tool: ManagedVpnTool, version: string) => {
+    if (!version) {
+      notifications.error("Please select installed version");
+      return;
+    }
+    setVpnToolBusyMap(prev => ({ ...prev, [tool]: true }));
+    send("uninstallVpnToolVersion", { tool, version }, resp => {
+      setVpnToolBusyMap(prev => ({ ...prev, [tool]: false }));
+      if ("error" in resp) {
+        notifications.error(`Failed to uninstall ${tool} version ${version}: ${resp.error.data || "Unknown error"}`);
+        return;
+      }
+      notifications.success(`${tool} ${version} uninstalled`);
+      refreshVpnToolManager(tool, true);
+    });
+  }, [send, refreshVpnToolManager]);
+
   useEffect(() => {
     getCloudflaredStatus();
   }, [getCloudflaredStatus]);
+
+  useEffect(() => {
+    getVpnToolSystemInfo();
+    managedTools.forEach(tool => {
+      refreshVpnToolManager(tool, false);
+      getVpnToolInstallTask(tool);
+    });
+  }, [getVpnToolSystemInfo, refreshVpnToolManager, getVpnToolInstallTask]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      managedTools.forEach(tool => {
+        getVpnToolInstallTask(tool);
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [getVpnToolInstallTask]);
+
+  useEffect(() => {
+    const tabToolMap: Partial<Record<string, ManagedVpnTool>> = {
+      frp: "frpc",
+      easytier: "easytier",
+      vnt: "vnt",
+      cloudflared: "cloudflared",
+    };
+    const tool = tabToolMap[activeTab];
+    if (tool) {
+      refreshVpnToolManager(tool, false);
+    }
+    if (activeTab === "cloudflared") {
+      getCloudflaredStatus();
+    }
+  }, [activeTab, refreshVpnToolManager, getCloudflaredStatus]);
 
   // Handle TLS mode change
   const handleTlsModeChange = (value: string) => {
@@ -870,6 +1071,154 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
     getVntConfigFile();
   }, [getVntStatus, getVntConfig]);
 
+  const renderVpnToolManager = (tool: ManagedVpnTool, label: string) => {
+    const status = vpnToolStatusMap[tool];
+    const releases = vpnToolReleasesMap[tool] || [];
+    const selectedVersion = vpnToolSelectedVersionMap[tool] || "";
+    const selectedRelease = releases.find(release => release.tag_name === selectedVersion);
+    const selectedAsset = vpnToolSelectedAssetMap[tool] || "";
+    const assets = selectedRelease?.assets || [];
+    const busy = vpnToolBusyMap[tool] || false;
+    const installTask = vpnToolInstallTaskMap[tool];
+    const installRunning = installTask?.running === true;
+    const installPanelOpen = vpnToolInstallPanelOpenMap[tool] || false;
+    const isInstalled = status?.installed === true;
+    const uninstallVersion = status?.current_version || status?.managed_versions?.[0] || "";
+
+    return (
+      <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              {label} {$at("Version Manager")}
+            </span>
+            <div className="flex items-center gap-x-2">
+              <Button
+                size="SM"
+                theme="light"
+                text={$at("Refresh")}
+                onClick={() => refreshVpnToolManager(tool, installPanelOpen)}
+                disabled={busy || installRunning}
+              />
+              <Button
+                size="SM"
+                theme="light"
+                text={installPanelOpen ? $at("Hide Install Actions") : $at("Show Install Actions")}
+                onClick={() => {
+                  const nextOpen = !installPanelOpen;
+                  setVpnToolInstallPanelOpenMap(prev => ({ ...prev, [tool]: nextOpen }));
+                  if (nextOpen) {
+                    listVpnToolReleases(tool);
+                  }
+                }}
+                disabled={busy || installRunning}
+              />
+            </div>
+          </div>
+
+          <div className="text-xs text-slate-500 dark:text-slate-400">
+            {$at("Install Status")}: {status?.installed ? $at("Installed") : $at("Not Installed")}
+            {status?.source ? ` (${status.source})` : ""}
+          </div>
+
+          <div className="text-xs text-slate-500 dark:text-slate-400">
+            {$at("Detected Version")}: {status?.detected_version || "-"}
+          </div>
+
+          {installPanelOpen ? (
+            <>
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                {$at("System Architecture")}: {vpnToolSystemInfo?.arch_label || "unknown"}
+                {vpnToolSystemInfo?.arch_keywords?.length
+                  ? ` (${vpnToolSystemInfo.arch_keywords.join(", ")})`
+                  : ""}
+              </div>
+              <div className="space-y-2">
+                <SettingsItem title={$at("Release Version")} description="">
+                  <Select
+                    className={isMobile ? "!w-full !h-[36px]" : "!w-[28%] !h-[36px]"}
+                    value={selectedVersion}
+                    onChange={value => handleVpnToolVersionChange(tool, value)}
+                    options={releases.map(release => ({
+                      value: release.tag_name,
+                      label: release.tag_name,
+                    }))}
+                  />
+                </SettingsItem>
+                <SettingsItem title={$at("Release Asset")} description="">
+                  <Select
+                    className={isMobile ? "!w-full !h-[36px]" : "!w-[60%] !h-[36px]"}
+                    value={selectedAsset}
+                    onChange={value => setVpnToolSelectedAssetMap(prev => ({ ...prev, [tool]: value }))}
+                    options={assets.map(asset => ({
+                      value: asset.url,
+                      label: `${asset.arch_match ? "[ARCH OK] " : ""}${asset.name}`,
+                    }))}
+                  />
+                </SettingsItem>
+              </div>
+              <div className="flex items-center gap-x-2">
+                {isInstalled ? (
+                  <>
+                    <Button
+                      size="SM"
+                      theme="primary"
+                      text={$at("Update")}
+                      onClick={() => handleInstallVpnTool(tool)}
+                      disabled={busy || installRunning || !selectedVersion || !selectedAsset}
+                    />
+                    <Button
+                      size="SM"
+                      theme="danger"
+                      text={$at("Uninstall")}
+                      onClick={() => handleUninstallVpnToolVersion(tool, uninstallVersion)}
+                      disabled={busy || installRunning || !uninstallVersion}
+                    />
+                  </>
+                ) : (
+                  <Button
+                    size="SM"
+                    theme="primary"
+                    text={$at("Install")}
+                    onClick={() => handleInstallVpnTool(tool)}
+                    disabled={busy || installRunning || !selectedVersion || !selectedAsset}
+                  />
+                )}
+              </div>
+              {installRunning && installTask ? (
+                <div className="space-y-2 rounded border border-slate-200 p-2 dark:border-slate-700">
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    {$at("Install Task")}: {installTask.message || "-"}
+                    {installTask.error ? ` (${installTask.error})` : ""}
+                  </div>
+                  <div className="h-2 w-full rounded bg-slate-200 dark:bg-slate-700">
+                    <div
+                      className="h-2 rounded bg-blue-500 transition-all"
+                      style={{ width: `${Math.max(0, Math.min(100, Math.round((installTask.progress || 0) * 100)))}%` }}
+                    />
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    {$at("Progress")}: {Math.max(0, Math.min(100, Math.round((installTask.progress || 0) * 100)))}%
+                  </div>
+                  {!!installTask.logs?.length && (
+                    <pre className="max-h-36 overflow-auto rounded bg-slate-50 p-2 text-[11px] text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                      {installTask.logs.join("\n")}
+                    </pre>
+                  )}
+                </div>
+              ) : null}
+              {status?.managed_versions?.length ? (
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  {$at("Installed Versions")}: {status.managed_versions.join(", ")}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
+
 
   return (
     <div className="space-y-4">
@@ -1307,6 +1656,7 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
                   <GridCard>
                     <div className="p-4">
                       <div className="space-y-4">
+                        {renderVpnToolManager("easytier", "EasyTier")}
                         { easyTierRunningStatus.running ? (  
                           <div className="flex-1 space-y-2">
                             <div className="flex justify-between border-t border-slate-800/10 pt-2 dark:border-slate-300/20">
@@ -1424,6 +1774,7 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
                   <GridCard>
                     <div className="p-4">
                       <div className="space-y-4">
+                        {renderVpnToolManager("vnt", "Vnt")}
                         { vntRunningStatus.running ? (  
   
                           <div className="flex-1 space-y-2">
@@ -1636,6 +1987,7 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
                   <GridCard>
                     <div className="p-4">
                       <div className="space-y-4">
+                        {renderVpnToolManager("cloudflared", "Cloudflare")}
                         {cloudflaredRunningStatus.running ? (
                           <div className="flex items-center gap-x-2">
                             <Button
@@ -1684,6 +2036,7 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
                   <GridCard>
                     <div className="p-4">
                       <div className="space-y-4">
+                        {renderVpnToolManager("frpc", "frpc")}
                         <TextAreaWithLabel
                           label={$at("Edit frpc.toml")}
                           placeholder={$at("Enter frpc configuration")}
