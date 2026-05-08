@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import  useKeyboard  from "@/hooks/useKeyboard";
 import { useHidStore, useSettingsStore, useUiStore } from "@/hooks/stores";
 import { keys, modifiers } from "@/keyboardMappings";
+import { keyboards } from "@/keyboardLayouts";
 import { eventMatchesShortcut } from "@/utils/shortcuts";
 
 export const useKeyboardEvents = (
@@ -18,6 +19,28 @@ export const useKeyboardEvents = (
   const pasteShortcutEnabled = useSettingsStore(state => state.pasteShortcutEnabled);
   const pasteShortcut = useSettingsStore(state => state.pasteShortcut);
   const isOcrMode = useUiStore(state => state.isOcrMode);
+  const keyboardLayout = useSettingsStore(state => state.keyboardLayout);
+
+  const remapCode = useCallback((code: string, key: string): string => {
+    const modifierCodes = ["ControlLeft", "ControlRight", "ShiftLeft", "ShiftRight", "AltLeft", "AltRight", "MetaLeft", "MetaRight", "CapsLock", "Tab", "Enter", "Backspace", "Delete", "Insert", "Home", "End", "PageUp", "PageDown", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "PrintScreen", "ScrollLock", "Pause", "ContextMenu", "Menu"];
+    if (modifierCodes.includes(code)) return code;
+    if (code.startsWith("Digit") || code.startsWith("Numpad")) return code;
+    if (code.startsWith("Key") && code.length === 4) {
+      const letter = code.charAt(3);
+      if (letter >= "A" && letter <= "Z") {
+        const isoCode = (keyboardLayout || "en-US").replace("_", "-");
+        const layout = keyboards.find(k => k.isoCode === isoCode);
+        if (layout && layout.chars) {
+          const charLower = key.toLowerCase();
+          const charEntry = layout.chars[charLower] || layout.chars[key];
+          if (charEntry && charEntry.key && typeof charEntry.key === "string" && charEntry.key !== code) {
+            return charEntry.key;
+          }
+        }
+      }
+    }
+    return code;
+  }, [keyboardLayout]);
 
   const handleModifierKeys = useCallback((e: KeyboardEvent, activeModifiers: number[]) => {
     const { shiftKey, ctrlKey, altKey, metaKey } = e;
@@ -59,6 +82,8 @@ export const useKeyboardEvents = (
       code = "IntlBackslash";
     }
 
+    code = remapCode(code, key);
+
     const newKeys = [...prev.activeKeys, keys[code]].filter(Boolean);
     const newModifiers = handleModifierKeys(e, [...prev.activeModifiers, modifiers[code]]);
 
@@ -77,13 +102,15 @@ export const useKeyboardEvents = (
     
     // Still update the full state for legacy compatibility and UI display
     sendKeyboardEvent([...new Set(newKeys)], [...new Set(newModifiers)]);
-  }, [handleModifierKeys, sendKeyboardEvent, sendKeypress, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive, pasteShortcutEnabled, pasteShortcut, pasteCaptureRef, isReinitializingGadget, isOcrMode]);
+  }, [handleModifierKeys, remapCode, sendKeyboardEvent, sendKeypress, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive, pasteShortcutEnabled, pasteShortcut, pasteCaptureRef, isReinitializingGadget, isOcrMode]);
 
   const keyUpHandler = useCallback((e: KeyboardEvent) => {
     if (isOcrMode) return;
     if (isReinitializingGadget) return;
     e.preventDefault();
     const prev = useHidStore.getState();
+    const key = e.key;
+    let code = remapCode(e.code, key);
 
     if (!isKeyboardLedManagedByHost) {
       setIsNumLockActive(e.getModifierState("NumLock"));
@@ -91,21 +118,21 @@ export const useKeyboardEvents = (
       setIsScrollLockActive(e.getModifierState("ScrollLock"));
     }
 
-    const newKeys = prev.activeKeys.filter(k => k !== keys[e.code]).filter(Boolean);
+    const newKeys = prev.activeKeys.filter(k => k !== keys[code]).filter(Boolean);
     const newModifiers = handleModifierKeys(
       e,
-      prev.activeModifiers.filter(k => k !== modifiers[e.code]),
+      prev.activeModifiers.filter(k => k !== modifiers[code]),
     );
 
     // Send per-key release event
-    const hidKey = keys[e.code];
+    const hidKey = keys[code];
     if (hidKey !== undefined) {
       sendKeypress(hidKey, false);
     }
     
     // Still update the full state for legacy compatibility and UI display
     sendKeyboardEvent([...new Set(newKeys)], [...new Set(newModifiers)]);
-  }, [handleModifierKeys, sendKeyboardEvent, sendKeypress, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive, isOcrMode]);
+  }, [handleModifierKeys, remapCode, sendKeyboardEvent, sendKeypress, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive, isOcrMode, isReinitializingGadget]);
 
   const setupKeyboardEvents = useCallback(() => {
     const abortController = new AbortController();

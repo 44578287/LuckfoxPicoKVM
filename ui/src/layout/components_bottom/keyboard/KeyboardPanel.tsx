@@ -6,7 +6,7 @@ import { CloseOutlined } from '@ant-design/icons';
 import { useReactAt } from "i18n-auto-extractor/react";
 
 import ScrollThrottlingSelect, { Option } from "@components/ScrollThrottlingSelect";
-import { layouts } from "@/keyboardLayouts";
+import { layouts, keyboards } from "@/keyboardLayouts";
 import { KeyboardLedSync, useSettingsStore } from "@/hooks/stores";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
 import notifications from "@/notifications";
@@ -24,11 +24,21 @@ const KeyboardPanel: React.FC = () => {
 
   const [layoutOptions, setLayoutOptions] = useState<Option[]>();
   const [maxShowCount, setMaxShowCount] = useState(3);
+
+  const layoutAbbrevMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    keyboards.forEach(kb => {
+      const oldCode = kb.isoCode.replace("-", "_");
+      map[oldCode] = oldCode;
+    });
+    return map;
+  }, []);
+
   useEffect(() => {
     const curLayoutOptions = (() => {
       const options = Object.entries(layouts).map(([code, language]) => ({
         value: code,
-        label: language,
+        label: `${language} (${layoutAbbrevMap[code] || code})`,
       }));
 
       const currentLayout = keyboardLayout ?? "";
@@ -47,7 +57,7 @@ const KeyboardPanel: React.FC = () => {
       return options;
     })();
     setLayoutOptions(curLayoutOptions);
-  }, [layouts, keyboardLayout]);
+  }, [layouts, keyboardLayout, layoutAbbrevMap]);
 
   const safeKeyboardLayout = useMemo(() => {
     if (keyboardLayout && keyboardLayout.length > 0)

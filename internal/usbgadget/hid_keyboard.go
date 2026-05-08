@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"reflect"
 	"strings"
 	"time"
@@ -211,15 +212,16 @@ func (u *UsbGadget) OpenKeyboardHidFile() error {
 }
 
 func (u *UsbGadget) keyboardWriteHidFile(data []byte) error {
-	if err := u.openKeyboardHidFile(); err != nil {
-		return err
+	var parts []string
+	for _, b := range data {
+		parts = append(parts, fmt.Sprintf("\\x%02x", b))
 	}
+	hexString := strings.Join(parts, "")
 
-	_, err := u.keyboardHidFile.Write(data)
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("echo -n -e '%s' > /dev/hidg0", hexString))
+	err := cmd.Run()
 	if err != nil {
 		u.logWithSupression("keyboardWriteHidFile", 100, u.log, err, "failed to write to hidg0")
-		u.keyboardHidFile.Close()
-		u.keyboardHidFile = nil
 		return err
 	}
 	u.resetLogSuppressionCounter("keyboardWriteHidFile")

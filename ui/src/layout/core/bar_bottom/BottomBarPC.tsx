@@ -27,6 +27,7 @@ import {
   useVpnStore,
 } from "@/hooks/stores";
 import { keys, modifiers } from "@/keyboardMappings";
+import { keyboards } from "@/keyboardLayouts";
 import BottomPopoverButton from "@components/PopoverButton";
 import MousePanel from "@components/MousePanel";
 import KeyboardPanel from "@/layout/components_bottom/keyboard/KeyboardPanel";
@@ -57,7 +58,13 @@ export default function BottomBarPC() {
 
 
   const keyboardLedState = useHidStore(state => state.keyboardLedState);
+  const keyboardLayout = useSettingsStore(state => state.keyboardLayout);
   const isTurnServerInUse = useRTCStore(state => state.isTurnServerInUse);
+
+  const layoutAbbrev = useMemo(() => {
+    if (!keyboardLayout) return "en_US";
+    return keyboardLayout;
+  }, [keyboardLayout]);
 
   const [hostname, setHostname] = useState("");
   const [send] = useJsonRpc();
@@ -164,6 +171,7 @@ export default function BottomBarPC() {
                   ledState={keyboardLedState?.scroll_lock}
                   text={$at("Scroll")}
                 />
+                <span className="pl-1 text-xs opacity-70" style={{ fontSize: 12 }}>{layoutAbbrev}</span>
               </div>
             }
             align="left"

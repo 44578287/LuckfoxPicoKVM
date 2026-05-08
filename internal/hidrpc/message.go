@@ -30,6 +30,10 @@ func MarshalKeyboardReport(modifier byte, keys []byte) []byte {
 	return data
 }
 
+func MarshalHandshake(version byte) []byte {
+	return []byte{MessageTypeHandshake, version}
+}
+
 func MarshalKeypressReport(key byte, press bool) []byte {
 	data := make([]byte, 3)
 	data[0] = MessageTypeKeypressReport

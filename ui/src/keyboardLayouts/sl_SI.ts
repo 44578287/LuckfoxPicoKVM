@@ -146,12 +146,19 @@ export const chars = {
   Delete: { key: "Delete" },
 } as Record<string, KeyCombo>;
 
+const sl_SI_keyDisplayMap = {
+  ...en_US.keyDisplayMap,
+  KeyY: "z",
+  KeyZ: "y",
+  "(KeyY)": "Z",
+  "(KeyZ)": "Y",
+} as Record<string, string>;
+
 export const sl_SI: KeyboardLayout = {
   isoCode: isoCode,
   name: name,
   chars: chars,
-  // TODO need to localize these maps and layouts
-  keyDisplayMap: en_US.keyDisplayMap,
+  keyDisplayMap: sl_SI_keyDisplayMap,
   modifierDisplayMap: en_US.modifierDisplayMap,
   virtualKeyboard: en_US.virtualKeyboard,
 };

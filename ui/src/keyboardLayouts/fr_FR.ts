@@ -140,11 +140,27 @@ export const chars = {
   Tab: { key: "Tab" },
 } as Record<string, KeyCombo>;
 
+const fr_FR_keyDisplayMap = {
+  ...keyDisplayMap,
+  KeyA: "q",
+  KeyQ: "a",
+  KeyW: "z",
+  KeyZ: "w",
+  Semicolon: "m",
+  KeyM: ",",
+  "(KeyA)": "Q",
+  "(KeyQ)": "A",
+  "(KeyW)": "Z",
+  "(KeyZ)": "W",
+  "(Semicolon)": "M",
+  "(KeyM)": "?",
+} as Record<string, string>;
+
 export const fr_FR: KeyboardLayout = {
   isoCode,
   name,
   chars,
-  keyDisplayMap,
+  keyDisplayMap: fr_FR_keyDisplayMap,
   modifierDisplayMap,
   virtualKeyboard,
 };

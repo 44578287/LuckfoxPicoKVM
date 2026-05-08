@@ -153,11 +153,19 @@ export const chars = {
   Tab: { key: "Tab" },
 } as Record<string, KeyCombo>;
 
+const de_DE_keyDisplayMap = {
+  ...keyDisplayMap,
+  KeyY: "z",
+  KeyZ: "y",
+  "(KeyY)": "Z",
+  "(KeyZ)": "Y",
+} as Record<string, string>;
+
 export const de_DE: KeyboardLayout = {
   isoCode,
   name,
   chars,
-  keyDisplayMap,
+  keyDisplayMap: de_DE_keyDisplayMap,
   modifierDisplayMap,
   virtualKeyboard,
 };

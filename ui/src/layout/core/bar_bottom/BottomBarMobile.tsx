@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Button as AntdButton, Typography } from "antd";
 import { useReactAt } from "i18n-auto-extractor/react";
 import KeyboardSVG from "@assets/second/keyboard.svg?react";
@@ -25,6 +25,7 @@ import {
   useVpnStore,
 } from "@/hooks/stores";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
+import { keyboards } from "@/keyboardLayouts";
 import {
   button_primary_color,
   dark_bd_style,
@@ -47,7 +48,13 @@ const views = [
 export default function BottomBarMobile() {
   const { $at } = useReactAt();
   const keyboardLedState = useHidStore(state => state.keyboardLedState);
+  const keyboardLayout = useSettingsStore(state => state.keyboardLayout);
   const { isDark } = useTheme();
+
+  const layoutAbbrev = useMemo(() => {
+    if (!keyboardLayout) return "en_US";
+    return keyboardLayout;
+  }, [keyboardLayout]);
   const setDisableFocusTrap = useUiStore(state => state.setDisableVideoFocusTrap);
   const toggleSidebarView = useUiStore(state => state.toggleSidebarView);
   const forceHttp = useSettingsStore(state => state.forceHttp);
@@ -144,6 +151,7 @@ export default function BottomBarMobile() {
           <LedStatusButton ledState={keyboardLedState?.num_lock} text={$at("Num")} />
           <LedStatusButton ledState={keyboardLedState?.caps_lock} text={$at("Caps")} />
           <LedStatusButton ledState={keyboardLedState?.scroll_lock} text={$at("Scroll")} />
+          <span className="pl-2 text-xs opacity-70">{layoutAbbrev}</span>
         </div>
         <div className="w-[20%] flex flex-row flex-wrap items-center justify-end">
           <AntdButton

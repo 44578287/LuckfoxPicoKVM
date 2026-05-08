@@ -157,6 +157,14 @@ type hidRpcHandler struct {
 	session *Session
 }
 
+func (h *hidRpcHandler) HandleHandshake(version byte) error {
+	if h.session.HidChannel != nil {
+		handshakeData := hidrpc.MarshalHandshake(version)
+		return h.session.HidChannel.Send(handshakeData)
+	}
+	return nil
+}
+
 func (h *hidRpcHandler) HandleKeyboardReport(modifier byte, keys []byte) error {
 	return rpcKeyboardReport(modifier, keys)
 }

@@ -3,6 +3,7 @@ package hidrpc
 import "fmt"
 
 type Handler interface {
+	HandleHandshake(version byte) error
 	HandleKeyboardReport(modifier byte, keys []byte) error
 	HandleKeypressReport(key byte, press bool) error
 	HandleKeypressKeepAlive() error
@@ -25,6 +26,11 @@ func (s *Server) HandleMessage(data []byte) error {
 	}
 
 	switch msg.Type {
+	case MessageTypeHandshake:
+		if len(msg.Data) < 1 {
+			return fmt.Errorf("invalid handshake length: %d", len(msg.Data))
+		}
+		return s.handler.HandleHandshake(msg.Data[0])
 	case MessageTypeKeyboardReport:
 		if len(msg.Data) < 7 {
 			return fmt.Errorf("invalid keyboard report length: %d", len(msg.Data))
