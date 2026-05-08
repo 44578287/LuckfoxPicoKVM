@@ -1496,6 +1496,61 @@ func rpcConfirmOtherSession() (bool, error) {
 	return true, nil
 }
 
+const jpegScreenshotPath = "/userdata/picokvm/screenshot/kvm_screenshot.jpg"
+
+// StartJpegCapture starts continuous JPEG capture mode.
+func StartJpegCapture() error {
+	_, err := CallCtrlAction("jpeg_capture_start", nil)
+	if err != nil {
+		return fmt.Errorf("failed to start JPEG capture: %w", err)
+	}
+	return nil
+}
+
+// StopJpegCapture stops continuous JPEG capture mode.
+func StopJpegCapture() error {
+	_, err := CallCtrlAction("jpeg_capture_stop", nil)
+	if err != nil {
+		return fmt.Errorf("failed to stop JPEG capture: %w", err)
+	}
+	return nil
+}
+
+// captureScreenshot captures a JPEG screenshot using hardware encoder.
+func captureScreenshot(format string) ([]byte, error) {
+	if format != "jpeg" && format != "jpg" {
+		return nil, fmt.Errorf("only JPEG format is supported")
+	}
+
+	logger.Info().Msg("triggering JPEG snapshot via jpeg_take_snapshot")
+
+	if err := os.MkdirAll("/userdata/picokvm/screenshot", 0o755); err != nil {
+		logger.Warn().Err(err).Msg("failed to create screenshot directory")
+	}
+
+	os.Remove(jpegScreenshotPath)
+
+	resp, err := CallCtrlAction("jpeg_take_snapshot", nil)
+	if err != nil {
+		logger.Error().Err(err).Msg("jpeg_take_snapshot failed")
+		return nil, fmt.Errorf("failed to trigger JPEG capture: %w", err)
+	}
+	logger.Info().Interface("response", resp).Msg("jpeg_take_snapshot response")
+
+	// Poll for file with timeout
+	maxAttempts := 10
+	for i := 0; i < maxAttempts; i++ {
+		if data, err := os.ReadFile(jpegScreenshotPath); err == nil && len(data) > 0 {
+			logger.Info().Int("size", len(data)).Int("attempts", i+1).Msg("JPEG captured successfully")
+			return data, nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	logger.Error().Str("path", jpegScreenshotPath).Msg("JPEG file not found after timeout")
+	return nil, fmt.Errorf("JPEG file not found at %s", jpegScreenshotPath)
+}
+
 var rpcHandlers = map[string]RPCHandler{
 	"ping":                      {Func: rpcPing},
 	"reboot":                    {Func: rpcReboot, Params: []string{"force"}},

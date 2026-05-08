@@ -185,6 +185,15 @@ func Main() {
 	//go RunFuseServer()
 	go RunWebServer()
 
+	// API and MCP services temporarily disabled for debugging
+	go func() {
+		StartAPIServer(8080)
+	}()
+
+	go func() {
+		StartMCP(8081, false)
+	}()
+
 	go RunWebSecureServer()
 	// Web secure server is started only if TLS mode is enabled
 	if config.TLSMode != "" {
