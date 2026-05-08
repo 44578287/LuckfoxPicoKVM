@@ -2,6 +2,7 @@ package kvm
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -136,6 +137,7 @@ type Config struct {
 	WireguardConfig      WireguardConfig        `json:"wireguard_config"`
 	NpuAppEnabled        bool                   `json:"npu_app_enabled"`
 	Firewall             *FirewallConfig        `json:"firewall"`
+	APIKey               string                 `json:"api_key"`
 }
 
 type FirewallConfig struct {
@@ -189,6 +191,10 @@ type WireguardConfig struct {
 
 const configPath = "/userdata/kvm_config.json"
 const sdConfigPath = "/mnt/sdcard/kvm_config.json"
+
+// builtOtaPublicKey is the hex-encoded Ed25519 public key for OTA signature verification,
+// injected via -ldflags at build time. Empty string disables signature verification.
+var builtOtaPublicKey = ""
 
 var defaultConfig = &Config{
 	STUN:                 "stun:stun.l.google.com:19302",
@@ -252,6 +258,75 @@ var (
 	configLock = &sync.Mutex{}
 )
 
+type ConfigMigrationFunc func(raw json.RawMessage) (json.RawMessage, error)
+
+var configMigrations = []ConfigMigrationFunc{
+	migrateLocalAuthMode,
+}
+
+func migrateLocalAuthMode(raw json.RawMessage) (json.RawMessage, error) {
+	var rawMap map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &rawMap); err != nil {
+		return nil, fmt.Errorf("migrateLocalAuthMode: failed to parse config JSON: %w", err)
+	}
+
+	if authModeRaw, exists := rawMap["localAuthMode"]; exists {
+		var authMode string
+		if err := json.Unmarshal(authModeRaw, &authMode); err == nil {
+			if authMode != "" {
+				validModes := map[string]bool{"password": true, "noPassword": true}
+				if !validModes[authMode] {
+					rawMap["localAuthMode"] = json.RawMessage(`"password"`)
+				}
+			}
+		} else {
+			delete(rawMap, "localAuthMode")
+		}
+	}
+
+	result, err := json.Marshal(rawMap)
+	if err != nil {
+		return nil, fmt.Errorf("migrateLocalAuthMode: failed to marshal migrated config: %w", err)
+	}
+	return result, nil
+}
+
+func runMigrations(raw json.RawMessage) (json.RawMessage, bool, error) {
+	current := raw
+	didMigrate := false
+	for i, migration := range configMigrations {
+		migrated, err := migration(current)
+		if err != nil {
+			return current, didMigrate, fmt.Errorf("migration %d failed: %w", i, err)
+		}
+		if string(migrated) != string(current) {
+			didMigrate = true
+			logger.Info().Int("migration", i).Msg("config migrated")
+		}
+		current = migrated
+	}
+	return current, didMigrate, nil
+}
+
+func writeRawConfig(path string, raw json.RawMessage) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("failed to create config file: %w", err)
+	}
+	defer file.Close()
+
+	var indented bytes.Buffer
+	if err := json.Indent(&indented, raw, "", "  "); err != nil {
+		return fmt.Errorf("failed to indent config JSON: %w", err)
+	}
+
+	if _, err := indented.WriteTo(file); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
+}
+
 func LoadConfig() {
 	configLock.Lock()
 	defer configLock.Unlock()
@@ -261,7 +336,6 @@ func LoadConfig() {
 		return
 	}
 
-	// load the default config
 	if defaultConfig.UsbConfig.SerialNumber == "" {
 		serialNumber, err := extractSerialNumber()
 		if err != nil {
@@ -273,24 +347,38 @@ func LoadConfig() {
 	loadedConfig := *defaultConfig
 	config = &loadedConfig
 
-	file, err := os.Open(configPath)
+	rawData, err := os.ReadFile(configPath)
 	if err != nil {
-		logger.Debug().Msg("default config file doesn't exist, using default")
+		logger.Debug().Msg("config file does not exist, using default")
 		return
 	}
-	defer file.Close()
 
-	// load and merge the default config with the user config
-	if err := json.NewDecoder(file).Decode(&loadedConfig); err != nil {
-		logger.Warn().Err(err).Msg("config file JSON parsing failed")
-		os.Remove(configPath)
-		if _, err := os.Stat(sdConfigPath); err == nil {
-			os.Remove(sdConfigPath)
+	migrated, didMigrate, err := runMigrations(json.RawMessage(rawData))
+	if err != nil {
+		logger.Warn().Err(err).Msg("config migration failed, preserving corrupt file")
+		corruptPath := configPath + ".corrupt"
+		_ = os.Rename(configPath, corruptPath)
+		logger.Info().Str("corrupt_path", corruptPath).Msg("corrupt config preserved for diagnosis")
+		return
+	}
+
+	if didMigrate {
+		if writeErr := writeRawConfig(configPath, migrated); writeErr != nil {
+			logger.Warn().Err(writeErr).Msg("failed to write migrated config, continuing with in-memory version")
+		} else {
+			logger.Info().Msg("migrated config saved to disk")
+			SyncConfigSD(false)
 		}
+	}
+
+	if err := json.Unmarshal(migrated, &loadedConfig); err != nil {
+		logger.Warn().Err(err).Msg("config file JSON parsing failed, preserving corrupt file")
+		corruptPath := configPath + ".corrupt"
+		_ = os.Rename(configPath, corruptPath)
+		logger.Info().Str("corrupt_path", corruptPath).Msg("corrupt config preserved for diagnosis")
 		return
 	}
 
-	// merge the user config with the default config
 	if loadedConfig.UsbConfig == nil {
 		loadedConfig.UsbConfig = defaultConfig.UsbConfig
 	}

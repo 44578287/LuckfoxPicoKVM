@@ -22,6 +22,15 @@ export interface SystemVersionInfo {
   remote?: { appVersion: string; systemVersion: string };
   systemUpdateAvailable: boolean;
   appUpdateAvailable: boolean;
+  appSignatureMissing?: boolean;
+  systemSignatureMissing?: boolean;
+  appSignatureAbsent?: boolean;
+  systemSignatureAbsent?: boolean;
+  appSignatureInvalid?: boolean;
+  systemSignatureInvalid?: boolean;
+  appNoPublicKey?: boolean;
+  systemNoPublicKey?: boolean;
+  signatureVerified?: boolean;
   error?: string;
 }
 
@@ -38,6 +47,13 @@ export default function SettingsVersion() {
   const { bootStorageType } = useBootStorageType();
   const isBootFromSD = bootStorageType === "sd";
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
+  const [signatureStatusLoading, setSignatureStatusLoading] = useState(true);
+  const [signatureStatus, setSignatureStatus] = useState<{
+    appSignatureAbsent: boolean;
+    appSignatureInvalid: boolean;
+    appNoPublicKey: boolean;
+    signatureVerified: boolean;
+  } | null>(null);
   const updatePanelRef = useRef<HTMLDivElement | null>(null);
   const [updateSource, setUpdateSource] = useState("github");
   const [customUpdateBaseURL, setCustomUpdateBaseURL] = useState("");
@@ -81,6 +97,23 @@ export default function SettingsVersion() {
       setAutoUpdate(enabled);
     });
   };
+
+  useEffect(() => {
+    setSignatureStatusLoading(true);
+    send("getSelfSignatureStatus", {}, resp => {
+      setSignatureStatusLoading(false);
+      if ("error" in resp) return;
+      const sigStatus = resp.result as {
+        appSignatureAbsent: boolean;
+        appSignatureInvalid: boolean;
+        appNoPublicKey: boolean;
+      };
+      const hasSigFiles = !sigStatus.appSignatureAbsent;
+      const noPublicKey = sigStatus.appNoPublicKey;
+      const signatureVerified = hasSigFiles && !noPublicKey && !sigStatus.appSignatureInvalid;
+      setSignatureStatus({ ...sigStatus, signatureVerified });
+    });
+  }, [send]);
 
   const applyUpdateSource = useCallback(
     (source: string) => {
@@ -203,6 +236,11 @@ export default function SettingsVersion() {
                 </>
               )
             }
+          />
+
+          <SignatureStatusCard
+            signatureStatus={signatureStatus}
+            signatureStatusLoading={signatureStatusLoading}
           />
 
           {!isBootFromSD && (
@@ -382,6 +420,7 @@ function UpdateContent({
         <SystemUpToDateState
           checkUpdate={() => setModalView("loading")}
           onClose={onClose}
+          versionInfo={versionInfo}
         />
       )}
 
@@ -407,23 +446,58 @@ function LoadingState({
 
   const getVersionInfo = useCallback(() => {
     return new Promise<SystemVersionInfo>((resolve, reject) => {
-      send("getUpdateStatus", {}, async resp => {
-        if ("error" in resp) {
-          notifications.error(`Failed to check for updates: ${resp.error}`);
-          reject(new Error("Failed to check for updates"));
-        } else {
-          const result = resp.result as SystemVersionInfo;
-          setAppVersion(result.local.appVersion);
-          setSystemVersion(result.local.systemVersion);
-
-          if (result.error) {
-            notifications.error(`Failed to check for updates: ${result.error}`);
-            reject(new Error("Failed to check for updates"));
-          } else {
-            resolve(result);
-          }
-        }
-      });
+      Promise.all([
+        new Promise<SystemVersionInfo>((res, rej) => {
+          send("getUpdateStatus", {}, resp => {
+            if ("error" in resp) {
+              notifications.error(`Failed to check for updates: ${resp.error}`);
+              rej(new Error("Failed to check for updates"));
+            } else {
+              const result = resp.result as SystemVersionInfo;
+              setAppVersion(result.local.appVersion);
+              setSystemVersion(result.local.systemVersion);
+              if (result.error) {
+                notifications.error(`Failed to check for updates: ${result.error}`);
+                rej(new Error("Failed to check for updates"));
+              } else {
+                res(result);
+              }
+            }
+          });
+        }),
+        new Promise<SystemVersionInfo>((res, rej) => {
+          send("getSelfSignatureStatus", {}, resp => {
+            if ("error" in resp) {
+              rej(new Error("Failed to get signature status"));
+            } else {
+              const sigStatus = resp.result as {
+                appSignatureAbsent: boolean;
+                appSignatureInvalid: boolean;
+                appNoPublicKey: boolean;
+              };
+              const hasSigFiles = !sigStatus.appSignatureAbsent;
+              const signatureVerified = hasSigFiles && !sigStatus.appNoPublicKey && !sigStatus.appSignatureInvalid;
+              const partial: Partial<SystemVersionInfo> = {
+                appSignatureAbsent: sigStatus.appSignatureAbsent,
+                appSignatureInvalid: sigStatus.appSignatureInvalid,
+                appNoPublicKey: sigStatus.appNoPublicKey,
+                signatureVerified,
+              };
+              res(partial as SystemVersionInfo);
+            }
+          });
+        }),
+      ])
+        .then(([versionResult, sigResult]) => {
+          resolve({
+            ...versionResult,
+            appSignatureAbsent: sigResult.appSignatureAbsent,
+            appSignatureInvalid: sigResult.appSignatureInvalid,
+            appNoPublicKey: sigResult.appNoPublicKey,
+            signatureVerified: sigResult.signatureVerified,
+          });
+        })
+        .catch(reject);
     });
   }, [send, setAppVersion, setSystemVersion]);
 
@@ -669,11 +743,17 @@ function UpdatingDeviceState({
 function SystemUpToDateState({
   checkUpdate,
   onClose,
+  versionInfo,
 }: {
   checkUpdate: () => void;
   onClose: () => void;
+  versionInfo: SystemVersionInfo | null;
 }) {
   const { $at } = useReactAt();
+  const hasAbsentSig = versionInfo?.appSignatureAbsent;
+  const hasInvalidSig = versionInfo?.appSignatureInvalid;
+  const hasNoPublicKey = versionInfo?.appNoPublicKey;
+
   return (
     <div className="flex flex-col items-start justify-start space-y-4 text-left">
       <div className="text-left">
@@ -683,6 +763,50 @@ function SystemUpToDateState({
         <p className="text-sm text-slate-600 dark:text-slate-300">
           {$at("Your system is running the latest version. No updates are currently available.")}
         </p>
+
+        {hasAbsentSig && (
+          <div className="mt-4 rounded-md border border-yellow-500 bg-yellow-50 p-3 dark:border-yellow-600 dark:bg-yellow-900/30">
+            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+              {$at("Missing Signature File")}
+            </p>
+            <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-300">
+              {$at("The current firmware is missing signature files. Integrity cannot be fully verified.")}
+            </p>
+          </div>
+        )}
+
+        {hasInvalidSig && (
+          <div className="mt-4 rounded-md border border-red-500 bg-red-50 p-3 dark:border-red-600 dark:bg-red-900/30">
+            <p className="text-sm font-medium text-red-800 dark:text-red-200">
+              {$at("Signature Verification Failed")}
+            </p>
+            <p className="mt-1 text-xs text-red-700 dark:text-red-300">
+              {$at("The signature file exists but does not match the firmware. This may indicate tampering.")}
+            </p>
+          </div>
+        )}
+
+        {hasNoPublicKey && (
+          <div className="mt-4 rounded-md border border-yellow-500 bg-yellow-50 p-3 dark:border-yellow-600 dark:bg-yellow-900/30">
+            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+              {$at("No Embedded Public Key")}
+            </p>
+            <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-300">
+              {$at("This build does not have an OTA public key embedded. Signature verification is unavailable.")}
+            </p>
+          </div>
+        )}
+
+        {versionInfo?.signatureVerified && (
+          <div className="mt-4 rounded-md border border-green-500 bg-green-50 p-3 dark:border-green-600 dark:bg-green-900/30">
+            <p className="text-sm font-medium text-green-800 dark:text-green-200">
+              {$at("Signature Verified")}
+            </p>
+            <p className="mt-1 text-xs text-green-700 dark:text-green-300">
+              {$at("Firmware signature has been verified and is valid.")}
+            </p>
+          </div>
+        )}
 
         <div className="mt-4 flex gap-x-2">
           <AntdButton type="primary" onClick={checkUpdate}>
@@ -824,4 +948,102 @@ function UpdateErrorState({
       </div>
     </div>
   );
+}
+
+function SignatureStatusCard({
+  signatureStatus,
+  signatureStatusLoading,
+}: {
+  signatureStatus: {
+    appSignatureAbsent: boolean;
+    appSignatureInvalid: boolean;
+    appNoPublicKey: boolean;
+    signatureVerified: boolean;
+  } | null;
+  signatureStatusLoading: boolean;
+}) {
+  const { $at } = useReactAt();
+  if (signatureStatusLoading) {
+    return (
+      <div className="rounded-md border border-slate-300 bg-slate-50 p-3 dark:border-slate-600 dark:bg-slate-900/30">
+        <div className="flex items-center gap-x-2">
+          <LoadingSpinner className="h-4 w-4 text-[rgba(22,152,217,1)] dark:text-[rgba(45,106,229,1)]" />
+          <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+            {$at("Verifying signature...")}
+          </p>
+        </div>
+        <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+          {$at("Please wait while verifying firmware signature.")}
+        </p>
+      </div>
+    );
+  }
+
+  if (!signatureStatus) {
+    return (
+      <div className="rounded-md border border-yellow-500 bg-yellow-50 p-3 dark:border-yellow-600 dark:bg-yellow-900/30">
+        <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+          {$at("Signature Status Unavailable")}
+        </p>
+        <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-300">
+          {$at("Unable to retrieve signature verification status.")}
+        </p>
+      </div>
+    );
+  }
+
+  if (signatureStatus.signatureVerified) {
+    return (
+      <div className="rounded-md border border-green-500 bg-green-50 p-3 dark:border-green-600 dark:bg-green-900/30">
+        <p className="text-sm font-medium text-green-800 dark:text-green-200">
+          <CheckCircleIcon className="inline h-4 w-4 mr-1" />
+          {$at("Signature Verified")}
+        </p>
+        <p className="mt-1 text-xs text-green-700 dark:text-green-300">
+          {$at("Firmware signature has been verified and is valid.")}
+        </p>
+      </div>
+    );
+  }
+
+  if (signatureStatus.appSignatureAbsent) {
+    return (
+      <div className="rounded-md border border-yellow-500 bg-yellow-50 p-3 dark:border-yellow-600 dark:bg-yellow-900/30">
+        <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+          {$at("Missing Signature File")}
+        </p>
+        <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-300">
+          {$at("The current firmware is missing signature files. Integrity cannot be fully verified.")}
+        </p>
+      </div>
+    );
+  }
+
+  if (signatureStatus.appSignatureInvalid) {
+    return (
+      <div className="rounded-md border border-red-500 bg-red-50 p-3 dark:border-red-600 dark:bg-red-900/30">
+        <p className="text-sm font-medium text-red-800 dark:text-red-200">
+          {$at("Signature Verification Failed")}
+        </p>
+        <p className="mt-1 text-xs text-red-700 dark:text-red-300">
+          {$at("The signature file exists but does not match the firmware. This may indicate tampering.")}
+        </p>
+      </div>
+    );
+  }
+
+  if (signatureStatus.appNoPublicKey) {
+    return (
+      <div className="rounded-md border border-yellow-500 bg-yellow-50 p-3 dark:border-yellow-600 dark:bg-yellow-900/30">
+        <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+          {$at("No Embedded Public Key")}
+        </p>
+        <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-300">
+          {$at("This build does not have an OTA public key embedded. Signature verification is unavailable.")}
+        </p>
+      </div>
+    );
+  }
+
+  return null;
 }

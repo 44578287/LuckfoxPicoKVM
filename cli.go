@@ -410,20 +410,23 @@ var signerKeygenCmd = &cobra.Command{
 }
 
 var signerSignCmd = &cobra.Command{
-	Use:   "sign --key <private-key-path> <firmware-file>",
+	Use:   "sign --key <private-key> <firmware-file>",
 	Short: "Sign a firmware file",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		keyPath, _ := cmd.Flags().GetString("key")
+		keyArg, _ := cmd.Flags().GetString("key")
 		filePath := args[0]
 
-		if keyPath == "" {
+		if keyArg == "" {
 			return fmt.Errorf("--key is required")
 		}
 
-		privateKey, err := os.ReadFile(keyPath)
+		privateKey, err := os.ReadFile(keyArg)
 		if err != nil {
-			return fmt.Errorf("reading private key: %w", err)
+			privateKey, err = hex.DecodeString(keyArg)
+			if err != nil {
+				return fmt.Errorf("invalid private key: not a valid file path or hex string")
+			}
 		}
 
 		if len(privateKey) != ed25519.PrivateKeySize {
@@ -450,9 +453,9 @@ var signerSignCmd = &cobra.Command{
 }
 
 var signerVerifyCmd = &cobra.Command{
-	Use:   "verify --pubkey <pubkey-path-or-hex> <firmware-file> [<sig-file>]",
+	Use:   "verify [--pubkey <pubkey-path-or-hex>] <firmware-file> [<sig-file>]",
 	Short: "Verify firmware signature",
-	Args:  cobra.MinimumNArgs(1),
+	Args:  cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		pubKeyArg, _ := cmd.Flags().GetString("pubkey")
 		filePath := args[0]
@@ -461,16 +464,23 @@ var signerVerifyCmd = &cobra.Command{
 			sigPath = args[1]
 		}
 
-		if pubKeyArg == "" {
-			return fmt.Errorf("--pubkey is required")
-		}
-
 		if sigPath == "" {
 			sigPath = filePath + ".sig"
 		}
 
 		var publicKey ed25519.PublicKey
-		if _, err := os.Stat(pubKeyArg); err == nil {
+
+		if pubKeyArg == "" {
+			keyStr := strings.TrimSpace(builtOtaPublicKey)
+			if keyStr == "" {
+				return fmt.Errorf("no --pubkey provided and no OTA public key embedded in binary")
+			}
+			keyBytes, err := hex.DecodeString(keyStr)
+			if err != nil {
+				return fmt.Errorf("decoding embedded public key hex: %w", err)
+			}
+			publicKey = ed25519.PublicKey(keyBytes)
+		} else if _, err := os.Stat(pubKeyArg); err == nil {
 			keyBytes, err := os.ReadFile(pubKeyArg)
 			if err != nil {
 				return fmt.Errorf("reading public key file: %w", err)

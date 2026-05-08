@@ -38,8 +38,8 @@ const appendStatToMap = <T extends { timestamp: number }>(
 };
 
 // Constants and types
-export type AvailableSidebarViews ="ConsoleLogViewer"|"MacroMoreList"|"Fullscreen"|"TerminalTabsMobile"|"SettingsModal"|"ClipboardMobile"|"KeyboardPanel"|"MousePanel"|"SettingsVideo"
-  |"connection-stats"|"Clipboard"|"PowerControl"|"Macros"|"VirtualMedia"|"SharedFolders"|null;
+export type AvailableSidebarViews = "ConsoleLogViewer" | "MacroMoreList" | "Fullscreen" | "TerminalTabsMobile" | "SettingsModal" | "ClipboardMobile" | "KeyboardPanel" | "MousePanel" | "SettingsVideo"
+  | "connection-stats" | "Clipboard" | "PowerControl" | "Macros" | "VirtualMedia" | "SharedFolders" | "UsbEpModeSelect" | "UsbStatusPanel" | null;
 export type AvailableTerminalTypes = "kvm" | "serial" | "none";
 
 export interface User {
@@ -189,9 +189,6 @@ interface RTCState {
 
   serialConsole: RTCDataChannel | null;
   setSerialConsole: (channel: RTCDataChannel | null) => void;
-
-  hidChannel: RTCDataChannel | null;
-  setHidChannel: (channel: RTCDataChannel | null) => void;
 }
 
 export const useRTCStore = create<RTCState>(set => ({
@@ -200,9 +197,6 @@ export const useRTCStore = create<RTCState>(set => ({
 
   rpcDataChannel: null,
   setRpcDataChannel: channel => set({ rpcDataChannel: channel }),
-
-  hidChannel: null,
-  setHidChannel: channel => set({ hidChannel: channel }),
 
   transceiver: null,
   setTransceiver: transceiver => set({ transceiver }),
@@ -592,9 +586,6 @@ export interface HidState {
   keyboardLedStateSyncAvailable: boolean;
   setKeyboardLedStateSyncAvailable: (available: boolean) => void;
 
-  rpcHidReady: boolean;
-  setRpcHidReady: (ready: boolean) => void;
-
   keysDownState?: { modifier: number; keys: number[] };
   setKeysDownState: (state: { modifier: number; keys: number[] }) => void;
 
@@ -655,9 +646,6 @@ export const useHidStore = create<HidState>((set, get) => ({
     keyboardLedState.scroll_lock = active;
     set({ keyboardLedState });
   },
-
-  rpcHidReady: false,
-  setRpcHidReady: ready => set({ rpcHidReady: ready }),
 
   keysDownState: undefined,
   setKeysDownState: state => set({ keysDownState: state }),
@@ -741,6 +729,13 @@ export interface UpdateState {
 
     systemUpdateProgress: number;
     systemUpdatedAt: string | null;
+
+    appSignatureMissing: boolean;
+    systemSignatureMissing: boolean;
+    appSignatureAbsent: boolean;
+    appSignatureInvalid: boolean;
+    appNoPublicKey: boolean;
+    signatureVerified: boolean;
   };
   setOtaState: (state: UpdateState["otaState"]) => void;
   setUpdateDialogHasBeenMinimized: (hasBeenMinimized: boolean) => void;
@@ -789,6 +784,12 @@ export const useUpdateStore = create<UpdateState>(set => ({
     appUpdatedAt: null,
     systemUpdateProgress: 0,
     systemUpdatedAt: null,
+    appSignatureMissing: false,
+    systemSignatureMissing: false,
+    appSignatureAbsent: false,
+    appSignatureInvalid: false,
+    appNoPublicKey: false,
+    signatureVerified: false,
   },
 
   updateDialogHasBeenMinimized: false,
