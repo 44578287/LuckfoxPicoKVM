@@ -7,31 +7,17 @@ export const usePointerLock = (videoElm: React.RefObject<HTMLVideoElement>) => {
   const settings = useSettingsStore();
   const isPointerLockPossible = window.location.protocol === "https:" || window.location.hostname === "localhost";
 
-  const checkNavigatorPermissions = useCallback(async (permissionName: string) => {
-    if (!navigator.permissions?.query) return false;
+  const requestPointerLock = useCallback(async () => {
+    if (!isPointerLockPossible || !videoElm.current || document.pointerLockElement || settings.mouseMode !== "relative") {
+      return;
+    }
 
     try {
-      const { state } = await navigator.permissions.query({
-        name: permissionName as PermissionName
-      });
-      return state === "granted";
-    } catch {
-      return false;
+      await videoElm.current.requestPointerLock();
+    } catch (err) {
+      console.warn("[pointer-lock] requestPointerLock failed:", err);
     }
-  }, []);
-
-  const requestPointerLock = useCallback(async () => {
-    if (!isPointerLockPossible || !videoElm.current || document.pointerLockElement) return;
-
-    const isPointerLockGranted = await checkNavigatorPermissions("pointer-lock");
-    if (isPointerLockGranted && settings.mouseMode === "relative") {
-      try {
-        await videoElm.current.requestPointerLock();
-      } catch {
-        // ignore errors
-      }
-    }
-  }, [checkNavigatorPermissions, isPointerLockPossible, settings.mouseMode, videoElm]);
+  }, [isPointerLockPossible, settings.mouseMode, videoElm]);
 
   useEffect(() => {
     if (!isPointerLockPossible || !videoElm.current) return;
@@ -40,6 +26,7 @@ export const usePointerLock = (videoElm: React.RefObject<HTMLVideoElement>) => {
       setIsPointerLockActive(!!document.pointerLockElement);
     };
 
+    handlePointerLockChange();
     document.addEventListener("pointerlockchange", handlePointerLockChange);
     return () => document.removeEventListener("pointerlockchange", handlePointerLockChange);
   }, [isPointerLockPossible, videoElm]);
