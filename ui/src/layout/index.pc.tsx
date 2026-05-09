@@ -363,6 +363,18 @@ export default function PCHome() {
     try {
       console.log("[setupPeerConnection] Creating peer connection");
       setLoadingMessage("Creating peer connection...");
+      let fetchedIceServers: RTCIceServer[] = [];
+      if (!iceConfig?.iceServers) {
+        try {
+          const res = await api.GET("/api/ice-servers");
+          const data = await res.json();
+          fetchedIceServers = data.iceServers ?? [];
+        } catch (e) {
+          console.error("failed to fetch ICE servers, fallback", e);
+          fetchedIceServers = [{ urls: ["stun:stun.l.google.com:19302"] }];
+        }
+      }
+
       pc = new RTCPeerConnection({
         // We only use STUN or TURN servers if we're in the cloud
         //...(isInCloud && iceConfig?.iceServers
@@ -370,13 +382,7 @@ export default function PCHome() {
         //  : {}),
         ...(iceConfig?.iceServers
           ? { iceServers: [iceConfig?.iceServers] }
-          : {
-            iceServers: [
-              {
-                urls: ['stun:stun.l.google.com:19302']
-              }
-            ]
-          }),
+          : { iceServers: fetchedIceServers }),
       });
 
       setPeerConnectionState(pc.connectionState);

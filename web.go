@@ -168,6 +168,7 @@ func setupRouter() *gin.Engine {
 		protected.GET("/storage/download", handleDownloadHttp)
 		protected.GET("/storage/sd-download", handleSDDownloadHttp)
 		protected.POST("/api/rpc", handleRpcRequest)
+		protected.GET("/api/ice-servers", handleGetIceServers)
 		protected.GET("/terminal/ws", handleTerminalWS)
 		protected.GET("/serial/ws", handleSerialWS)
 		protected.GET("/video/stream", handleVideoStream)
@@ -905,6 +906,16 @@ func handleRpcRequest(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+func handleGetIceServers(c *gin.Context) {
+	LoadConfig()
+	servers, err := rpcGetIceServers()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"iceServers": servers})
 }
 
 func handleVideoStream(c *gin.Context) {

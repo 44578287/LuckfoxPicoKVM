@@ -205,7 +205,8 @@ export function MacroStepCard({
           )}
           <div className="relative w-full">
             <Combobox
-              onChange={(value: { value: string; label: string }) => {
+              onChange={value => {
+                if (!value) return;
                 onKeySelect(value);
                 onKeyQueryChange('');
               }}

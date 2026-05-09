@@ -34,6 +34,33 @@ type SessionConfig struct {
 	Logger     *zerolog.Logger
 }
 
+const DefaultSTUN = "stun:stun.l.google.com:19302"
+
+func buildICEServers() []webrtc.ICEServer {
+	if config == nil {
+		LoadConfig()
+	}
+
+	stunURL := config.STUN
+	if stunURL == "" {
+		stunURL = DefaultSTUN
+	}
+
+	servers := []webrtc.ICEServer{{URLs: []string{stunURL}}}
+	for _, turnServer := range config.TurnServers {
+		if turnServer.URL == "" {
+			continue
+		}
+		servers = append(servers, webrtc.ICEServer{
+			URLs:       []string{turnServer.URL},
+			Username:   turnServer.Username,
+			Credential: turnServer.Credential,
+		})
+	}
+
+	return servers
+}
+
 func (s *Session) ExchangeOffer(offerStr string) (string, error) {
 	b, err := base64.StdEncoding.DecodeString(offerStr)
 	if err != nil {
@@ -86,16 +113,7 @@ func newSession(sessionConfig SessionConfig) (*Session, error) {
 		scopedLogger = webrtcLogger
 	}
 
-	iceServers := []webrtc.ICEServer{
-		{
-			URLs: []string{"stun:stun.l.google.com:19302"},
-		},
-	}
-	if config.STUN != "" {
-		iceServers = append(iceServers, webrtc.ICEServer{
-			URLs: []string{config.STUN},
-		})
-	}
+	iceServers := buildICEServers()
 
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(webrtcSettingEngine))
 	peerConnection, err := api.NewPeerConnection(webrtc.Configuration{
