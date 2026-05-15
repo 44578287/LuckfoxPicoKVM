@@ -43,6 +43,10 @@ var (
 	videoCmdLock = &sync.Mutex{}
 )
 
+// jpegReadyCh is written by the ctrl socket event handler and read by captureScreenshot.
+// Buffered to 1 so the jpeg thread doesn't block if captureScreenshot has already timed out.
+var jpegReadyCh = make(chan struct{}, 1)
+
 func CallCtrlAction(action string, params map[string]interface{}) (*CtrlResponse, error) {
 	lock.Lock()
 	defer lock.Unlock()
@@ -76,7 +80,7 @@ func CallCtrlAction(action string, params map[string]interface{}) (*CtrlResponse
 
 	select {
 	case response := <-responseChan:
-		delete(ongoingRequests, seq)
+		delete(ongoingRequests, ctrlAction.Seq)
 		if response.Error != "" {
 			return nil, ErrorfL(
 				&scopedLogger,
@@ -87,7 +91,7 @@ func CallCtrlAction(action string, params map[string]interface{}) (*CtrlResponse
 		return response, nil
 	case <-time.After(5 * time.Second):
 		close(responseChan)
-		delete(ongoingRequests, seq)
+		delete(ongoingRequests, ctrlAction.Seq)
 		return nil, ErrorfL(&scopedLogger, "timeout waiting for response", nil)
 	}
 }
@@ -194,12 +198,11 @@ func handleCtrlClient(conn net.Conn) {
 			scopedLogger.Warn().Err(err).Msg("error reading from ctrl sock")
 			break
 		}
-		readMsg := string(readBuf[:n])
 
 		ctrlResp := CtrlResponse{}
-		err = json.Unmarshal([]byte(readMsg), &ctrlResp)
+		err = json.Unmarshal(readBuf[:n], &ctrlResp)
 		if err != nil {
-			scopedLogger.Warn().Err(err).Str("data", readMsg).Msg("error parsing ctrl sock msg")
+			scopedLogger.Warn().Err(err).Str("data", string(readBuf[:n])).Msg("error parsing ctrl sock msg")
 			continue
 		}
 		scopedLogger.Trace().Interface("data", ctrlResp).Msg("ctrl sock msg")
@@ -213,6 +216,11 @@ func handleCtrlClient(conn net.Conn) {
 		switch ctrlResp.Event {
 		case "video_input_state":
 			HandleVideoStateMessage(ctrlResp)
+		case "jpeg_ready":
+			select {
+			case jpegReadyCh <- struct{}{}:
+			default:
+			}
 		}
 	}
 
@@ -242,9 +250,7 @@ func handleVideoClient(conn net.Conn) {
 		lastFrame = now
 
 		// Broadcast to HTTP clients
-		dataCopy := make([]byte, n)
-		copy(dataCopy, inboundPacket[:n])
-		videoBroadcaster.Broadcast(dataCopy)
+		videoBroadcaster.Broadcast(inboundPacket[:n])
 
 		if currentSession != nil {
 			err := currentSession.VideoTrack.WriteSample(media.Sample{Data: inboundPacket[:n], Duration: sinceLastFrame})

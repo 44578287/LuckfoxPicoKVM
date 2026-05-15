@@ -942,20 +942,23 @@ func handleVideoStream(c *gin.Context) {
 
 	for {
 		select {
-		case data, ok := <-ch:
+		case frame, ok := <-ch:
 			if !ok {
 				logger.Info().Int("total_frames", frameCount).Msg("video broadcaster channel closed")
 				return
 			}
+			data := frame.Data()
 			frameCount++
 			if frameCount == 1 {
 				logger.Info().Int("size", len(data)).Msg("first video frame received")
 			}
 			if _, err := c.Writer.Write(data); err != nil {
 				logger.Warn().Err(err).Int("total_frames", frameCount).Msg("error writing video data")
+				frame.Release()
 				return
 			}
 			c.Writer.Flush()
+			frame.Release()
 		case <-ctx.Done():
 			logger.Info().Int("total_frames", frameCount).Msg("client disconnected")
 			return
