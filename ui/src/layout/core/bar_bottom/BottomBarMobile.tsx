@@ -176,11 +176,13 @@ export default function BottomBarMobile() {
           text={$at("HDMI")}
           isActive={!!peerConnectionState}
         />
-        <ConnectionStatusButton
-          icon={usbState === "configured" ? <Usb2SVG /> : <UsbSVG />}
-          text={$at("USB")}
-          isActive={usbState === "configured"}
-        />
+        <div onClick={() => toggleSidebarView("UsbStatusPanel")}>
+          <ConnectionStatusButton
+            icon={usbState === "configured" ? <Usb2SVG /> : <UsbSVG />}
+            text={$at("USB")}
+            isActive={usbState === "configured"}
+          />
+        </div>
         <VpnStatusButton
           text={$at("TailScale")}
           peerState={peerConnectionState}

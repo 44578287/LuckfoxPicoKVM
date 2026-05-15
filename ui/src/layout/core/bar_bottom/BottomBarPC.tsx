@@ -32,6 +32,7 @@ import BottomPopoverButton from "@components/PopoverButton";
 import MousePanel from "@components/MousePanel";
 import KeyboardPanel from "@/layout/components_bottom/keyboard/KeyboardPanel";
 import UsbEpModeSelect from "@/layout/components_bottom/usbepmode/UsbEpModeSelect";
+import UsbStatusPanel from "@/layout/components_bottom/usb_status/UsbStatusPanel";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
 import { dark_bg2_style, selected_bt_bg } from "@/layout/theme_color";
 import { useThemeSettings } from "@routes/login_page/useLocalAuth";
@@ -115,10 +116,12 @@ export default function BottomBarPC() {
               isActive={hdmiState === "ready"}
             />
 
-            <ConnectionStatusButton
-              icon={usbState === "configured" ? <Usb2SVG fontSize={16} /> : <UsbSVG fontSize={16} />}
-              text={$at("USB")}
-              isActive={usbState === "configured"}
+            <BottomPopoverButton
+              buttonIconNode={usbState === "configured" ? <Usb2SVG fontSize={16} /> : <UsbSVG fontSize={16} />}
+              buttonText={$at("USB")}
+              style={{ color: usbState === "configured" ? "rgba(0, 205, 27, 1)" : "inherit" }}
+              panelContent={<UsbStatusPanel />}
+              align="left"
             />
 
             <VpnStatusButton
