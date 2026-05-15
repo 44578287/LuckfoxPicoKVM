@@ -11,6 +11,7 @@ interface PopoverButtonProps {
   align?: "left" | "right";
   buttonClassName?: string;
   panelClassName?: string;
+  style?: React.CSSProperties;
 }
 
 const BottomPopoverButton: React.FC<PopoverButtonProps> = ({
@@ -18,6 +19,7 @@ const BottomPopoverButton: React.FC<PopoverButtonProps> = ({
                                                              buttonIconNode,
                                                              panelContent,
                                                              align = "left",
+                                                             style,
                                                            }) => {
   const setDisableFocusTrap = useUiStore(state => state.setDisableVideoFocusTrap);
   return (
@@ -28,7 +30,7 @@ const BottomPopoverButton: React.FC<PopoverButtonProps> = ({
           <>
             <PopoverButton
               as="div"
-              style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+              style={{ display: "flex", justifyContent: "center", alignItems: "center", ...style }}>
               <div
                 onClick={() => {
                   setDisableFocusTrap(true);

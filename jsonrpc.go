@@ -535,6 +535,14 @@ func rpcTryUpdate() error {
 	return nil
 }
 
+func rpcUpdateSignatures() (*SignatureUpdateResult, error) {
+	result, err := UpdateSignatures(context.Background())
+	if err != nil {
+		logger.Warn().Err(err).Msg("failed to update signatures")
+	}
+	return result, err
+}
+
 func rpcGetCustomUpdateBaseURL() (string, error) {
 	return customUpdateBaseURL, nil
 }
@@ -1657,6 +1665,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"getUpdateStatus":           {Func: rpcGetUpdateStatus},
 	"getSelfSignatureStatus":    {Func: rpcGetSelfSignatureStatus},
 	"tryUpdate":                 {Func: rpcTryUpdate},
+	"updateSignatures":          {Func: rpcUpdateSignatures},
 	"getCustomUpdateBaseURL":    {Func: rpcGetCustomUpdateBaseURL},
 	"setCustomUpdateBaseURL":    {Func: rpcSetCustomUpdateBaseURL, Params: []string{"baseURL"}},
 	"getUpdateDownloadProxy":    {Func: rpcGetUpdateDownloadProxy},

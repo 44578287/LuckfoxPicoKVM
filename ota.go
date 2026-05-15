@@ -1296,6 +1296,7 @@ func cleanupUpdateTempFiles(logger *zerolog.Logger) {
 		"/userdata/picokvm/bin/kvm_app.sig.unverified",
 		"/userdata/picokvm/update_system.zip.unverified",
 		"/userdata/picokvm/update_system.zip.sig.unverified",
+		"/userdata/picokvm/update_system.zip",
 		"/userdata/picokvm/update_system.tar.unverified",
 		"/userdata/picokvm/update_system.tar.sig.unverified",
 		"/userdata/picokvm/update_system.tar",
@@ -1543,6 +1544,7 @@ func TryUpdate(ctx context.Context, deviceId string, includePreRelease bool) err
 	}
 
 	if rebootNeeded {
+		cleanupUpdateTempFiles(&scopedLogger)
 		scopedLogger.Info().Msg("System Rebooting in 10s")
 		time.Sleep(10 * time.Second)
 		cmd := exec.Command("reboot")
@@ -1671,7 +1673,8 @@ func verifyFileSignature(
 		return true, fmt.Errorf("error reading file for signature verification: %w", err)
 	}
 
-	if !ed25519.Verify(publicKey, fileBytes, sigBytes) {
+	fileHash := sha256.Sum256(fileBytes)
+	if !ed25519.Verify(publicKey, fileHash[:], sigBytes) {
 		return true, fmt.Errorf("Ed25519 signature verification failed for %s", unverifiedPath)
 	}
 
@@ -1696,5 +1699,53 @@ func verifyLocalFileSignature(filePath string, sigPath string, publicKey ed25519
 	if err != nil {
 		return false
 	}
-	return ed25519.Verify(publicKey, fileBytes, sigBytes)
+	fileHash := sha256.Sum256(fileBytes)
+	return ed25519.Verify(publicKey, fileHash[:], sigBytes)
+}
+
+type SignatureUpdateResult struct {
+	AppSignatureUpdated    bool   `json:"appSignatureUpdated"`
+	SystemSignatureUpdated bool   `json:"systemSignatureUpdated"`
+	AppSignatureValid      bool   `json:"appSignatureValid"`
+	SystemSignatureValid   bool   `json:"systemSignatureValid"`
+	Error                  string `json:"error,omitempty"`
+}
+
+func UpdateSignatures(ctx context.Context) (*SignatureUpdateResult, error) {
+	result := &SignatureUpdateResult{}
+
+	remoteMetadata, err := fetchUpdateMetadata(ctx, "", false)
+	if err != nil {
+		result.Error = fmt.Sprintf("failed to fetch remote metadata: %v", err)
+		return result, fmt.Errorf("failed to fetch remote metadata: %w", err)
+	}
+
+	publicKey := getOTAPublicKey()
+
+	appBinPath := "/userdata/picokvm/bin/kvm_app"
+	appSigPath := appBinPath + ".sig"
+
+	if strings.TrimSpace(remoteMetadata.AppSigUrl) != "" {
+		err := downloadFile(ctx, appSigPath, remoteMetadata.AppSigUrl, nil, nil)
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to download app signature: %v", err)
+			return result, fmt.Errorf("failed to download app signature: %w", err)
+		}
+		result.AppSignatureUpdated = true
+
+		sigUnverified := appSigPath + ".unverified"
+		if _, statErr := os.Stat(sigUnverified); statErr == nil {
+			_ = os.Remove(appSigPath)
+			if renameErr := os.Rename(sigUnverified, appSigPath); renameErr != nil {
+				result.Error = fmt.Sprintf("failed to rename app signature: %v", renameErr)
+				return result, fmt.Errorf("failed to rename app signature: %w", renameErr)
+			}
+		}
+
+		if publicKey != nil {
+			result.AppSignatureValid = verifyLocalFileSignature(appBinPath, appSigPath, publicKey)
+		}
+	}
+
+	return result, nil
 }

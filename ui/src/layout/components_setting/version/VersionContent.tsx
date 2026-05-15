@@ -750,9 +750,42 @@ function SystemUpToDateState({
   versionInfo: SystemVersionInfo | null;
 }) {
   const { $at } = useReactAt();
+  const [send] = useJsonRpc();
+  const [sigUpdateLoading, setSigUpdateLoading] = useState(false);
+  const [sigUpdateResult, setSigUpdateResult] = useState<string | null>(null);
   const hasAbsentSig = versionInfo?.appSignatureAbsent;
   const hasInvalidSig = versionInfo?.appSignatureInvalid;
   const hasNoPublicKey = versionInfo?.appNoPublicKey;
+
+  const handleUpdateSignatures = useCallback(() => {
+    setSigUpdateLoading(true);
+    setSigUpdateResult(null);
+    send("updateSignatures", {}, resp => {
+      setSigUpdateLoading(false);
+      if ("error" in resp) {
+        setSigUpdateResult(`Failed: ${resp.error.data || "Unknown error"}`);
+        notifications.error(`Signature update failed: ${resp.error.data || "Unknown error"}`);
+      } else {
+        const result = resp.result as {
+          appSignatureUpdated: boolean;
+          systemSignatureUpdated: boolean;
+          appSignatureValid: boolean;
+          systemSignatureValid: boolean;
+          error?: string;
+        };
+        if (result.error) {
+          setSigUpdateResult(`Failed: ${result.error}`);
+          notifications.error(`Signature update failed: ${result.error}`);
+        } else {
+          const parts: string[] = [];
+          if (result.appSignatureUpdated) parts.push("App signature updated");
+          if (result.systemSignatureUpdated) parts.push("System signature updated");
+          setSigUpdateResult(parts.join(", ") || "No signatures to update");
+          notifications.success("Signatures updated successfully");
+        }
+      }
+    });
+  }, [send]);
 
   return (
     <div className="flex flex-col items-start justify-start space-y-4 text-left">
@@ -797,17 +830,6 @@ function SystemUpToDateState({
           </div>
         )}
 
-        {versionInfo?.signatureVerified && (
-          <div className="mt-4 rounded-md border border-green-500 bg-green-50 p-3 dark:border-green-600 dark:bg-green-900/30">
-            <p className="text-sm font-medium text-green-800 dark:text-green-200">
-              {$at("Signature Verified")}
-            </p>
-            <p className="mt-1 text-xs text-green-700 dark:text-green-300">
-              {$at("Firmware signature has been verified and is valid.")}
-            </p>
-          </div>
-        )}
-
         <div className="mt-4 flex gap-x-2">
           <AntdButton type="primary" onClick={checkUpdate}>
             {$at("Check Again")}
@@ -815,6 +837,32 @@ function SystemUpToDateState({
           <AntdButton type="primary" onClick={onClose}>
             {$at("Back")}
           </AntdButton>
+        </div>
+
+        <p className="text-base font-semibold text-black dark:text-white">
+          {$at("Update Signatures")}
+        </p>
+        <p className="mb-2 text-sm text-slate-600 dark:text-slate-300">
+          {$at("Update the signature of kvm_app to the latest version. If the current version is not up to date, signature verification will fail.")}
+        </p>
+
+        {sigUpdateResult && (
+          <div className="rounded-md border border-blue-500 bg-blue-50 p-3 dark:border-blue-600 dark:bg-blue-900/30">
+            <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+              {$at("Signature Update Result")}
+            </p>
+            <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+              {sigUpdateResult}
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-start gap-x-2">
+            <AntdButton type="primary" loading={sigUpdateLoading} onClick={handleUpdateSignatures}>
+              {$at("Update")}
+            </AntdButton>
+          </div>
         </div>
       </div>
     </div>
@@ -839,6 +887,40 @@ function UpdateAvailableState({
   onSaveUpdateDownloadProxy: () => void;
 }) {
   const { $at } = useReactAt();
+  const [send] = useJsonRpc();
+  const [sigUpdateLoading, setSigUpdateLoading] = useState(false);
+  const [sigUpdateResult, setSigUpdateResult] = useState<string | null>(null);
+
+  const handleUpdateSignatures = useCallback(() => {
+    setSigUpdateLoading(true);
+    setSigUpdateResult(null);
+    send("updateSignatures", {}, resp => {
+      setSigUpdateLoading(false);
+      if ("error" in resp) {
+        setSigUpdateResult(`Failed: ${resp.error.data || "Unknown error"}`);
+        notifications.error(`Signature update failed: ${resp.error.data || "Unknown error"}`);
+      } else {
+        const result = resp.result as {
+          appSignatureUpdated: boolean;
+          systemSignatureUpdated: boolean;
+          appSignatureValid: boolean;
+          systemSignatureValid: boolean;
+          error?: string;
+        };
+        if (result.error) {
+          setSigUpdateResult(`Failed: ${result.error}`);
+          notifications.error(`Signature update failed: ${result.error}`);
+        } else {
+          const parts: string[] = [];
+          if (result.appSignatureUpdated) parts.push("App signature updated");
+          if (result.systemSignatureUpdated) parts.push("System signature updated");
+          setSigUpdateResult(parts.join(", ") || "No signatures to update");
+          notifications.success("Signatures updated successfully");
+        }
+      }
+    });
+  }, [send]);
+
   return (
     <div className="flex flex-col items-start justify-start space-y-4 text-left">
       <div className="w-full space-y-4">
@@ -885,6 +967,32 @@ function UpdateAvailableState({
               </AntdButton>
               <AntdButton type="primary" onClick={onClose}>
                 {$at("Do it later")}
+              </AntdButton>
+            </div>
+          </div>
+
+          <p className="text-base font-semibold text-black dark:text-white">
+            {$at("Update Signatures")}
+          </p>
+          <p className="mb-2 text-sm text-slate-600 dark:text-slate-300">
+            {$at("Update the signature of kvm_app to the latest version. If the current version is not up to date, signature verification will fail.")}
+          </p>
+
+          {sigUpdateResult && (
+            <div className="rounded-md border border-blue-500 bg-blue-50 p-3 dark:border-blue-600 dark:bg-blue-900/30">
+              <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                {$at("Signature Update Result")}
+              </p>
+              <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                {sigUpdateResult}
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-start gap-x-2">
+              <AntdButton type="primary" loading={sigUpdateLoading} onClick={handleUpdateSignatures}>
+                {$at("Update")}
               </AntdButton>
             </div>
           </div>

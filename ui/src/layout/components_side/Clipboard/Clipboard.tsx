@@ -379,7 +379,7 @@ export default function Clipboard() {
             className={`${isMobile ? "w-full" : ""}`}
             onClick={handleOpenOcr}
           >
-            {$at("Open OCR")}
+            {$at("Open")}
           </Button>
         </SettingsItem>
       </div>

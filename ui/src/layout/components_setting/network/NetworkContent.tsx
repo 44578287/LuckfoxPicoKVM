@@ -546,7 +546,7 @@ export default function SettingsNetwork() {
 
           <div className="space-y-4">
           <SettingsItem
-            title="HTTP Proxy"
+            title={$at("HTTP Proxy")}
             description={$at("Configure program HTTP proxy (optional)")}
             className={`${isMobile ? "w-full flex-col" : ""}`}
           >
@@ -559,7 +559,7 @@ export default function SettingsNetwork() {
             />
           </SettingsItem>
           <SettingsItem
-            title="HTTPS Proxy"
+            title={$at("HTTPS Proxy")}
             description={$at("Configure program HTTPS proxy (optional)")}
             className={`${isMobile ? "w-full flex-col" : ""}`}
           >
@@ -572,7 +572,7 @@ export default function SettingsNetwork() {
             />
           </SettingsItem>
           <SettingsItem
-            title="ALL Proxy"
+            title={$at("ALL Proxy")}
             description={$at("Configure program ALL proxy (optional)")}
             className={`${isMobile ? "w-full flex-col" : ""}`}
           >

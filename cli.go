@@ -438,7 +438,8 @@ var signerSignCmd = &cobra.Command{
 			return fmt.Errorf("reading firmware file: %w", err)
 		}
 
-		signature := ed25519.Sign(ed25519.PrivateKey(privateKey), fileData)
+		fileHash := sha256.Sum256(fileData)
+		signature := ed25519.Sign(ed25519.PrivateKey(privateKey), fileHash[:])
 
 		sigPath := filePath + ".sig"
 		if err := os.WriteFile(sigPath, signature, 0644); err != nil {
@@ -512,13 +513,13 @@ var signerVerifyCmd = &cobra.Command{
 			return fmt.Errorf("invalid signature size: got %d bytes, expected %d", len(sigBytes), ed25519.SignatureSize)
 		}
 
-		if !ed25519.Verify(publicKey, fileData, sigBytes) {
+		fileHash := sha256.Sum256(fileData)
+		if !ed25519.Verify(publicKey, fileHash[:], sigBytes) {
 			return fmt.Errorf("VERIFICATION FAILED: signature is invalid")
 		}
 
-		hash := sha256.Sum256(fileData)
 		fmt.Fprintf(os.Stderr, "VERIFICATION OK: signature is valid\n")
-		fmt.Fprintf(os.Stderr, "SHA256: %s\n", hex.EncodeToString(hash[:]))
+		fmt.Fprintf(os.Stderr, "SHA256: %s\n", hex.EncodeToString(fileHash[:]))
 		return nil
 	},
 }
