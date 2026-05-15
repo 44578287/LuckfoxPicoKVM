@@ -18,6 +18,20 @@ func Main() {
 	SyncConfigSD(true)
 	LoadConfig()
 
+	if config.APIKey == "" {
+		key, err := generateAPIKey()
+		if err != nil {
+			logger.Warn().Err(err).Msg("failed to generate API key")
+		} else {
+			config.APIKey = key
+			if err := SaveConfig(); err != nil {
+				logger.Warn().Err(err).Msg("failed to save API key to config")
+			} else {
+				logger.Info().Msg("generated new API key")
+			}
+		}
+	}
+
 	var cancel context.CancelFunc
 	appCtx, cancel = context.WithCancel(context.Background())
 	defer cancel()

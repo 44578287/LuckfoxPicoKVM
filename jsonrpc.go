@@ -79,15 +79,12 @@ func writeJSONRPCEvent(event string, params interface{}, session *Session) {
 	}
 
 	requestString := string(requestBytes)
-	scopedLogger := jsonRpcLogger.With().
-		Str("data", requestString).
-		Logger()
 
-	scopedLogger.Info().Msg("sending JSONRPC event")
+	jsonRpcLogger.Trace().Str("event", event).Msg("sending JSONRPC event")
 
 	err = session.RPCChannel.SendText(requestString)
 	if err != nil {
-		scopedLogger.Warn().Err(err).Msg("error sending JSONRPC event")
+		jsonRpcLogger.Warn().Err(err).Str("event", event).Msg("error sending JSONRPC event")
 		return
 	}
 }
@@ -495,6 +492,36 @@ func rpcGetUpdateStatus() (*UpdateStatus, error) {
 	}
 
 	return updateStatus, nil
+}
+
+type SelfSignatureStatus struct {
+	AppSignatureAbsent  bool `json:"appSignatureAbsent,omitempty"`
+	AppSignatureInvalid bool `json:"appSignatureInvalid,omitempty"`
+	AppNoPublicKey      bool `json:"appNoPublicKey,omitempty"`
+}
+
+func rpcGetSelfSignatureStatus() (*SelfSignatureStatus, error) {
+	return getSelfSignatureStatus(), nil
+}
+
+func getSelfSignatureStatus() *SelfSignatureStatus {
+	status := &SelfSignatureStatus{}
+	publicKey := getOTAPublicKey()
+
+	appBinPath := "/userdata/picokvm/bin/kvm_app"
+	appSigPath := appBinPath + ".sig"
+
+	status.AppSignatureAbsent = isSigFileAbsent(appSigPath)
+
+	if !status.AppSignatureAbsent {
+		if publicKey == nil {
+			status.AppNoPublicKey = true
+		} else {
+			status.AppSignatureInvalid = !verifyLocalFileSignature(appBinPath, appSigPath, publicKey)
+		}
+	}
+
+	return status
 }
 
 func rpcTryUpdate() error {
@@ -1298,6 +1325,30 @@ func rpcSetLocalLoopbackOnly(enabled bool) error {
 	return nil
 }
 
+func rpcGetApiKey() (string, error) {
+	return config.APIKey, nil
+}
+
+func rpcSetApiKey(apiKey string) error {
+	config.APIKey = apiKey
+	if err := SaveConfig(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+	return nil
+}
+
+func rpcGenerateApiKey() (string, error) {
+	key, err := generateAPIKey()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate API key: %w", err)
+	}
+	config.APIKey = key
+	if err := SaveConfig(); err != nil {
+		return "", fmt.Errorf("failed to save config: %w", err)
+	}
+	return key, nil
+}
+
 type IOSettings struct {
 	IO0Status bool `json:"io0Status"`
 	IO1Status bool `json:"io1Status"`
@@ -1530,25 +1581,41 @@ func captureScreenshot(format string) ([]byte, error) {
 
 	os.Remove(jpegScreenshotPath)
 
-	resp, err := CallCtrlAction("jpeg_take_snapshot", nil)
+	// drain any stale signal before triggering
+	select {
+	case <-jpegReadyCh:
+	default:
+	}
+
+	_, err := CallCtrlAction("jpeg_take_snapshot", nil)
 	if err != nil {
 		logger.Error().Err(err).Msg("jpeg_take_snapshot failed")
 		return nil, fmt.Errorf("failed to trigger JPEG capture: %w", err)
 	}
-	logger.Info().Interface("response", resp).Msg("jpeg_take_snapshot response")
 
-	// Poll for file with timeout
-	maxAttempts := 10
-	for i := 0; i < maxAttempts; i++ {
-		if data, err := os.ReadFile(jpegScreenshotPath); err == nil && len(data) > 0 {
-			logger.Info().Int("size", len(data)).Int("attempts", i+1).Msg("JPEG captured successfully")
-			return data, nil
+	// wait for jpeg_ready event from native, fall back to polling on timeout
+	timeout := time.NewTimer(2 * time.Second)
+	defer timeout.Stop()
+	select {
+	case <-jpegReadyCh:
+	case <-timeout.C:
+		logger.Warn().Msg("jpeg_ready event not received within 2s, falling back to polling")
+		for i := 0; i < 5; i++ {
+			if data, err := os.ReadFile(jpegScreenshotPath); err == nil && len(data) > 0 {
+				logger.Info().Int("size", len(data)).Msg("JPEG captured (fallback polling)")
+				return data, nil
+			}
+			time.Sleep(200 * time.Millisecond)
 		}
-		time.Sleep(200 * time.Millisecond)
+		return nil, fmt.Errorf("JPEG file not found at %s", jpegScreenshotPath)
 	}
 
-	logger.Error().Str("path", jpegScreenshotPath).Msg("JPEG file not found after timeout")
-	return nil, fmt.Errorf("JPEG file not found at %s", jpegScreenshotPath)
+	data, err := os.ReadFile(jpegScreenshotPath)
+	if err != nil || len(data) == 0 {
+		return nil, fmt.Errorf("JPEG file not readable after jpeg_ready event: %w", err)
+	}
+	logger.Info().Int("size", len(data)).Msg("JPEG captured successfully")
+	return data, nil
 }
 
 var rpcHandlers = map[string]RPCHandler{
@@ -1588,6 +1655,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"setDevChannelState":        {Func: rpcSetDevChannelState, Params: []string{"enabled"}},
 	"getLocalUpdateStatus":      {Func: rpcGetLocalUpdateStatus},
 	"getUpdateStatus":           {Func: rpcGetUpdateStatus},
+	"getSelfSignatureStatus":    {Func: rpcGetSelfSignatureStatus},
 	"tryUpdate":                 {Func: rpcTryUpdate},
 	"getCustomUpdateBaseURL":    {Func: rpcGetCustomUpdateBaseURL},
 	"setCustomUpdateBaseURL":    {Func: rpcSetCustomUpdateBaseURL, Params: []string{"baseURL"}},
@@ -1596,6 +1664,9 @@ var rpcHandlers = map[string]RPCHandler{
 	"getDevModeState":           {Func: rpcGetDevModeState},
 	"getSSHKeyState":            {Func: rpcGetSSHKeyState},
 	"setSSHKeyState":            {Func: rpcSetSSHKeyState, Params: []string{"sshKey"}},
+	"getApiKey":                 {Func: rpcGetApiKey},
+	"setApiKey":                 {Func: rpcSetApiKey, Params: []string{"apiKey"}},
+	"generateApiKey":            {Func: rpcGenerateApiKey},
 	"getTLSState":               {Func: rpcGetTLSState},
 	"setTLSState":               {Func: rpcSetTLSState, Params: []string{"state"}},
 	"setMassStorageMode":        {Func: rpcSetMassStorageMode, Params: []string{"mode"}},

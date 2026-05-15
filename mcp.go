@@ -26,9 +26,12 @@ func StartMCP(port int, stdio bool) {
 	// SSE mode
 	addr := fmt.Sprintf(":%d", port)
 	sseServer := server.NewSSEServer(s)
-	handler := sseServer.SSEHandler()
 
-	// Add auth for non-localhost
+	mux := http.NewServeMux()
+	mux.Handle("/sse", sseServer.SSEHandler())
+	mux.Handle("/message", sseServer.MessageHandler())
+
+	var handler http.Handler = mux
 	if config.APIKey != "" {
 		handler = withAPIKeyAuth(handler, config.APIKey)
 	}

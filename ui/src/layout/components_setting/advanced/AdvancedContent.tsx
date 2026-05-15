@@ -28,6 +28,9 @@ export default function SettingsAdvanced() {
   const [configContent, setConfigContent] = useState("");
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [localLoopbackOnly, setLocalLoopbackOnly] = useState(false);
+  const [apiKey, setApiKey] = useState<string>("");
+  const [apiKeyInput, setApiKeyInput] = useState<string>("");
+  const [showApiKeyClearWarning, setShowApiKeyClearWarning] = useState(false);
 
   const settings = useSettingsStore();
   const isReinitializingGadget = useHidStore(state => state.isReinitializingGadget);
@@ -52,6 +55,13 @@ export default function SettingsAdvanced() {
     send("getLocalLoopbackOnly", {}, resp => {
       if ("error" in resp) return;
       setLocalLoopbackOnly(resp.result as boolean);
+    });
+
+    send("getApiKey", {}, resp => {
+      if ("error" in resp) return;
+      const key = resp.result as string;
+      setApiKey(key);
+      setApiKeyInput(key);
     });
   }, [send, setDeveloperMode]);
 
@@ -106,6 +116,54 @@ export default function SettingsAdvanced() {
       }
       notifications.success("Configuration reset to default successfully");
     });
+  }, [send]);
+
+  const handleUpdateApiKey = useCallback(() => {
+    if (apiKeyInput === "") {
+      setShowApiKeyClearWarning(true);
+      return;
+    }
+    send("setApiKey", { apiKey: apiKeyInput }, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to update API key: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+      setApiKey(apiKeyInput);
+      notifications.success("API key updated successfully");
+    });
+  }, [send, apiKeyInput]);
+
+  const handleGenerateApiKey = useCallback(() => {
+    send("generateApiKey", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to generate API key: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+      const newKey = resp.result as string;
+      setApiKey(newKey);
+      setApiKeyInput(newKey);
+      notifications.success("New API key generated and saved");
+    });
+  }, [send]);
+
+  const confirmClearApiKey = useCallback(() => {
+    send("generateApiKey", {}, resp => {
+      if ("error" in resp) {
+        notifications.error(
+          `Failed to generate API key: ${resp.error.data || "Unknown error"}`,
+        );
+        return;
+      }
+      const newKey = resp.result as string;
+      setApiKey(newKey);
+      setApiKeyInput(newKey);
+      notifications.success("New API key generated and saved");
+    });
+    setShowApiKeyClearWarning(false);
   }, [send]);
 
   const handleUpdateSSHKey = useCallback(() => {
@@ -234,6 +292,42 @@ export default function SettingsAdvanced() {
                   className={isMobile?"w-full":""}
                 >
                   {$at("Update SSH Key")}
+                </AntdButton>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isOnDevice && (
+          <div className="space-y-4">
+            <SettingsItem
+              title={$at("API Key")}
+              description={$at("API key for MCP and REST API authentication")}
+            />
+            <div className="space-y-4">
+              <TextAreaWithLabel
+                label={$at("API Key")}
+                value={apiKeyInput || ""}
+                rows={2}
+                onChange={e => setApiKeyInput(e.target.value)}
+                placeholder={$at("Enter API key or leave empty to auto-generate")}
+              />
+              <p className="text-xs text-slate-600 dark:text-[#ffffff]">
+                {$at("Used for authenticating MCP and REST API requests.")}
+              </p>
+              <div className="flex items-center gap-x-2">
+                <AntdButton
+                  type="primary"
+                  onClick={handleUpdateApiKey}
+                  className={isMobile?"w-full":""}
+                >
+                  {$at("Save API Key")}
+                </AntdButton>
+                <AntdButton
+                  onClick={handleGenerateApiKey}
+                  className={isMobile?"w-full":""}
+                >
+                  {$at("Generate New")}
                 </AntdButton>
               </div>
             </div>
@@ -377,6 +471,28 @@ export default function SettingsAdvanced() {
         variant="warning"
         confirmText="I Understand, Enable Anyway"
         onConfirm={confirmLoopbackModeEnable}
+      />
+
+      <ConfirmDialog
+        open={showApiKeyClearWarning}
+        onClose={() => {
+          setShowApiKeyClearWarning(false);
+        }}
+        title={$at("Clear API Key?")}
+        description={
+          <>
+            <p>
+              {$at("Setting the API key to empty will auto-generate a new random key.")}
+            </p>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">
+              {$at("Make sure to update your clients with the new key after saving.")}
+            </p>
+          </>
+        }
+        variant="warning"
+        cancelText={$at("Cancel")}
+        confirmText={$at("Generate New Key")}
+        onConfirm={confirmClearApiKey}
       />
 
       <ConfirmDialog
