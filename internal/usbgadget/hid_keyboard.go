@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"reflect"
 	"strings"
 	"time"
@@ -132,10 +131,10 @@ func (u *UsbGadget) GetKeyboardState() KeyboardState {
 	return u.keyboardState
 }
 
-func (u *UsbGadget) listenKeyboardEvents() {
+func (u *UsbGadget) listenKeyboardEvents(ctx context.Context, file *os.File) {
 	var path string
-	if u.keyboardHidFile != nil {
-		path = u.keyboardHidFile.Name()
+	if file != nil {
+		path = file.Name()
 	}
 	l := u.log.With().Str("listener", "keyboardEvents").Str("path", path).Logger()
 	l.Trace().Msg("starting")
@@ -144,12 +143,12 @@ func (u *UsbGadget) listenKeyboardEvents() {
 		buf := make([]byte, hidReadBufferSize)
 		for {
 			select {
-			case <-u.keyboardStateCtx.Done():
+			case <-ctx.Done():
 				l.Info().Msg("context done")
 				return
 			default:
 				l.Trace().Msg("reading from keyboard")
-				if u.keyboardHidFile == nil {
+				if file == nil {
 					u.logWithSupression("keyboardHidFileNil", 100, &l, nil, "keyboardHidFile is nil")
 					// show the error every 100 times to avoid spamming the logs
 					time.Sleep(time.Second)
@@ -158,16 +157,26 @@ func (u *UsbGadget) listenKeyboardEvents() {
 				// reset the counter
 				u.resetLogSuppressionCounter("keyboardHidFileNil")
 
-				n, err := u.keyboardHidFile.Read(buf)
+				n, err := file.Read(buf)
 				if err != nil {
+					if ctx.Err() != nil {
+						l.Info().Msg("context canceled while reading keyboard HID file")
+						return
+					}
+
 					u.logWithSupression("keyboardHidFileRead", 100, &l, err, "failed to read")
-					continue
+					if reopenErr := u.reopenKeyboardHidFile(); reopenErr != nil {
+						u.logWithSupression("keyboardHidFileReopen", 100, &l, reopenErr, "failed to reopen keyboard HID file")
+					} else {
+						u.resetLogSuppressionCounter("keyboardHidFileReopen")
+					}
+					return
 				}
 				u.resetLogSuppressionCounter("keyboardHidFileRead")
 
 				l.Trace().Int("n", n).Bytes("buf", buf).Msg("got data from keyboard")
-				if n != 1 {
-					l.Trace().Int("n", n).Msg("expected 1 byte, got")
+				if n < 1 {
+					l.Info().Int("n", n).Msg("expected at least 1 byte, got 0")
 					continue
 				}
 				u.updateKeyboardState(buf[0])
@@ -176,13 +185,52 @@ func (u *UsbGadget) listenKeyboardEvents() {
 	}()
 }
 
-func (u *UsbGadget) openKeyboardHidFile() error {
+func openWithTimeout(name string, flag int, perm os.FileMode, timeout time.Duration) (*os.File, error) {
+	type result struct {
+		file *os.File
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		f, err := os.OpenFile(name, flag, perm)
+		ch <- result{f, err}
+	}()
+
+	select {
+	case r := <-ch:
+		return r.file, r.err
+	case <-time.After(timeout):
+		// Drain the channel in the background to close the leaked fd if the
+		// open eventually succeeds.
+		go func() {
+			if r := <-ch; r.file != nil {
+				r.file.Close()
+			}
+		}()
+		return nil, fmt.Errorf("open %s: timed out after %s", name, timeout)
+	}
+}
+
+func (u *UsbGadget) closeKeyboardHidFileLocked() {
+	if u.keyboardStateCancel != nil {
+		u.keyboardStateCancel()
+		u.keyboardStateCancel = nil
+	}
+
 	if u.keyboardHidFile != nil {
+		u.keyboardHidFile.Close()
+		u.keyboardHidFile = nil
+	}
+}
+
+func (u *UsbGadget) openKeyboardHidFileLocked(forceReopen bool) error {
+	if forceReopen {
+		u.closeKeyboardHidFileLocked()
+	} else if u.keyboardHidFile != nil {
 		return nil
 	}
 
-	var err error
-	u.keyboardHidFile, err = os.OpenFile("/dev/hidg0", os.O_RDWR, 0666)
+	file, err := openWithTimeout("/dev/hidg0", os.O_RDWR, 0666, 3*time.Second)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "no such device") {
 			u.log.Error().
@@ -197,34 +245,62 @@ func (u *UsbGadget) openKeyboardHidFile() error {
 		return fmt.Errorf("failed to open hidg0: %w", err)
 	}
 
-	if u.keyboardStateCancel != nil {
-		u.keyboardStateCancel()
-	}
-
-	u.keyboardStateCtx, u.keyboardStateCancel = context.WithCancel(context.Background())
-	u.listenKeyboardEvents()
+	ctx, cancel := context.WithCancel(context.Background())
+	u.keyboardHidFile = file
+	u.keyboardStateCtx = ctx
+	u.keyboardStateCancel = cancel
+	u.listenKeyboardEvents(ctx, file)
 
 	return nil
+}
+
+func (u *UsbGadget) openKeyboardHidFile() error {
+	u.keyboardLock.Lock()
+	defer u.keyboardLock.Unlock()
+
+	return u.openKeyboardHidFileLocked(false)
+}
+
+func (u *UsbGadget) reopenKeyboardHidFile() error {
+	u.keyboardLock.Lock()
+	defer u.keyboardLock.Unlock()
+
+	return u.openKeyboardHidFileLocked(true)
 }
 
 func (u *UsbGadget) OpenKeyboardHidFile() error {
 	return u.openKeyboardHidFile()
 }
 
-func (u *UsbGadget) keyboardWriteHidFile(data []byte) error {
-	var parts []string
-	for _, b := range data {
-		parts = append(parts, fmt.Sprintf("\\x%02x", b))
-	}
-	hexString := strings.Join(parts, "")
+func (u *UsbGadget) ReopenKeyboardHidFile() error {
+	return u.reopenKeyboardHidFile()
+}
 
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("echo -n -e '%s' > /dev/hidg0", hexString))
-	err := cmd.Run()
+func (u *UsbGadget) keyboardWriteHidFileLocked(modifier byte, keys []byte) error {
+	if len(keys) > 6 {
+		keys = keys[:6]
+	}
+	if len(keys) < 6 {
+		keys = append(keys, make([]byte, 6-len(keys))...)
+	}
+
+	data := []byte{modifier, 0, keys[0], keys[1], keys[2], keys[3], keys[4], keys[5]}
+
+	if u.keyboardHidFile == nil {
+		if err := u.openKeyboardHidFileLocked(false); err != nil {
+			return err
+		}
+	}
+
+	_, err := u.writeWithTimeout(u.keyboardHidFile, data)
 	if err != nil {
 		u.logWithSupression("keyboardWriteHidFile", 100, u.log, err, "failed to write to hidg0")
+		u.closeKeyboardHidFileLocked()
 		return err
 	}
 	u.resetLogSuppressionCounter("keyboardWriteHidFile")
+
+	u.resetUserInputTime()
 	return nil
 }
 
@@ -366,23 +442,6 @@ func (u *UsbGadget) KeypressKeepAlive() error {
 		}
 	}
 
-	return nil
-}
-
-func (u *UsbGadget) keyboardWriteHidFileLocked(modifier byte, keys []byte) error {
-	if len(keys) > 6 {
-		keys = keys[:6]
-	}
-	if len(keys) < 6 {
-		keys = append(keys, make([]byte, 6-len(keys))...)
-	}
-
-	err := u.keyboardWriteHidFile([]byte{modifier, 0, keys[0], keys[1], keys[2], keys[3], keys[4], keys[5]})
-	if err != nil {
-		return err
-	}
-
-	u.resetUserInputTime()
 	return nil
 }
 

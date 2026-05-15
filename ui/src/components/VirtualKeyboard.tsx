@@ -270,6 +270,7 @@ function KeyboardWrapper() {
             setIsCapsLockActive(false);
           }
           sendKeyboardEvent([keys["CapsLock"]], []);
+          setTimeout(resetKeyboardState, 100);
           return;
         }
       }

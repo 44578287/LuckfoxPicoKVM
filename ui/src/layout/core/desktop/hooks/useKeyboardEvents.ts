@@ -10,7 +10,7 @@ export const useKeyboardEvents = (
   pasteCaptureRef?: React.RefObject<HTMLTextAreaElement>,
   isReinitializingGadget?: boolean
 ) => {
-  const { sendKeyboardEvent, sendKeypress, resetKeyboardState } = useKeyboard();
+  const { sendKeyboardEvent, resetKeyboardState } = useKeyboard();
   const { setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive } = useHidStore();
 
   const keyboardLedStateSyncAvailable = useHidStore(state => state.keyboardLedStateSyncAvailable);
@@ -65,6 +65,11 @@ export const useKeyboardEvents = (
     }
     if (isReinitializingGadget) return;
 
+    if (e.repeat) {
+      e.preventDefault();
+      return;
+    }
+
     e.preventDefault();
     const prev = useHidStore.getState();
     let code = e.code;
@@ -94,15 +99,8 @@ export const useKeyboardEvents = (
       }, 10);
     }
 
-    // Send per-key press event
-    const hidKey = keys[code];
-    if (hidKey !== undefined) {
-      sendKeypress(hidKey, true);
-    }
-    
-    // Still update the full state for legacy compatibility and UI display
     sendKeyboardEvent([...new Set(newKeys)], [...new Set(newModifiers)]);
-  }, [handleModifierKeys, remapCode, sendKeyboardEvent, sendKeypress, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive, pasteShortcutEnabled, pasteShortcut, pasteCaptureRef, isReinitializingGadget, isOcrMode]);
+  }, [handleModifierKeys, remapCode, sendKeyboardEvent, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive, pasteShortcutEnabled, pasteShortcut, pasteCaptureRef, isReinitializingGadget, isOcrMode]);
 
   const keyUpHandler = useCallback((e: KeyboardEvent) => {
     if (isOcrMode) return;
@@ -124,15 +122,8 @@ export const useKeyboardEvents = (
       prev.activeModifiers.filter(k => k !== modifiers[code]),
     );
 
-    // Send per-key release event
-    const hidKey = keys[code];
-    if (hidKey !== undefined) {
-      sendKeypress(hidKey, false);
-    }
-    
-    // Still update the full state for legacy compatibility and UI display
     sendKeyboardEvent([...new Set(newKeys)], [...new Set(newModifiers)]);
-  }, [handleModifierKeys, remapCode, sendKeyboardEvent, sendKeypress, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive, isOcrMode, isReinitializingGadget]);
+  }, [handleModifierKeys, remapCode, sendKeyboardEvent, isKeyboardLedManagedByHost, setIsNumLockActive, setIsCapsLockActive, setIsScrollLockActive, isOcrMode, isReinitializingGadget]);
 
   const setupKeyboardEvents = useCallback(() => {
     const abortController = new AbortController();

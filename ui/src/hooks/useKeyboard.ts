@@ -3,12 +3,10 @@ import { useCallback, useEffect, useRef } from "react";
 import notifications from "@/notifications";
 import { useHidStore, useRTCStore, useSettingsStore } from "@/hooks/stores";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
-import { useHidRpc } from "@/hooks/useHidRpc";
 import { keys, modifiers } from "@/keyboardMappings";
 
 export default function useKeyboard() {
   const [send] = useJsonRpc();
-  const { rpcHidReady, reportKeypressEvent, reportKeyboardEvent, reportKeypressKeepAlive } = useHidRpc();
 
   const rpcDataChannel = useRTCStore(state => state.rpcDataChannel);
   const forceHttp = useSettingsStore(state => state.forceHttp);
@@ -30,80 +28,45 @@ export default function useKeyboard() {
       if (usbState !== "configured") return;
       const accModifier = modifiers.reduce((acc, val) => acc + val, 0);
 
-      // Try HID-RPC first
-      if (rpcHidReady && !forceHttp) {
-        reportKeyboardEvent(accModifier, keys);
-      } else {
-        // Fallback to JSON-RPC
-        send("keyboardReport", { keys, modifier: accModifier }, resp => {
-          if ("error" in resp) {
-            const msg = (resp.error.data as string) || resp.error.message || "";
-            if (msg.includes("cannot send after transport endpoint shutdown") && usbState === "configured") {
-              notifications.error("Please check if the cable and connection are stable.", { duration: 5000 });
-            }
+      // Fallback to JSON-RPC
+      send("keyboardReport", { keys, modifier: accModifier }, resp => {
+        if ("error" in resp) {
+          const msg = (resp.error.data as string) || resp.error.message || "";
+          if (msg.includes("cannot send after transport endpoint shutdown") && usbState === "configured") {
+            notifications.error("Please check if the cable and connection are stable.", { duration: 5000 });
           }
-        });
-      }
+        }
+      });
 
       // We do this for the info bar to display the currently pressed keys for the user
       updateActiveKeysAndModifiers({ keys: keys, modifiers: modifiers });
     },
-    [forceHttp, rpcDataChannel?.readyState, rpcHidReady, reportKeyboardEvent, send, updateActiveKeysAndModifiers, isReinitializingGadget, usbState],
+    [forceHttp, rpcDataChannel?.readyState, send, updateActiveKeysAndModifiers, isReinitializingGadget, usbState],
   );
 
-  // Send per-key press/release (new HID-RPC method)
+  // Send per-key press/release
   const sendKeypress = useCallback(
     (key: number, press: boolean) => {
       if (isReinitializingGadget || usbState !== "configured") return;
 
-      if (rpcHidReady && !forceHttp) {
-        reportKeypressEvent(key, press);
-        
-        // Track held keys for keepalive
-        if (press) {
-          heldKeysRef.current.add(key);
-          // Start keepalive interval if not already running
-          if (!keepaliveIntervalRef.current) {
-            keepaliveIntervalRef.current = setInterval(() => {
-              if (heldKeysRef.current.size > 0) {
-                reportKeypressKeepAlive();
-              }
-            }, 50);
-          }
-        } else {
-          heldKeysRef.current.delete(key);
-          if (heldKeysRef.current.size === 0 && keepaliveIntervalRef.current) {
-            clearInterval(keepaliveIntervalRef.current);
-            keepaliveIntervalRef.current = null;
-          }
-        }
-      } else {
-        // Legacy: simulate device-side key handling
-        // This maintains the 6-key buffer on the frontend for legacy compatibility
-        // ... (existing logic would go here, but for now use sendKeyboardEvent)
-        // For simplicity in migration, we fall back to full state reports
-        const modifier = press ? 0 : 0; // Simplified - would need proper modifier tracking
-        sendKeyboardEvent(press ? [key] : [], [modifier]);
-      }
+      // Legacy: simulate device-side key handling
+      // This maintains the 6-key buffer on the frontend for legacy compatibility
+      // For simplicity in migration, we fall back to full state reports
+      const modifier = press ? 0 : 0; // Simplified - would need proper modifier tracking
+      sendKeyboardEvent(press ? [key] : [], [modifier]);
     },
-    [rpcHidReady, forceHttp, reportKeypressEvent, reportKeypressKeepAlive, isReinitializingGadget, usbState, sendKeyboardEvent]
+    [isReinitializingGadget, usbState, sendKeyboardEvent]
   );
 
   const resetKeyboardState = useCallback(() => {
     // Release all held keys
-    if (rpcHidReady && !forceHttp) {
-      heldKeysRef.current.forEach(key => {
-        reportKeypressEvent(key, false);
-      });
-    } else {
-      sendKeyboardEvent([], []);
-    }
+    sendKeyboardEvent([], []);
     heldKeysRef.current.clear();
     if (keepaliveIntervalRef.current) {
       clearInterval(keepaliveIntervalRef.current);
       keepaliveIntervalRef.current = null;
     }
-  }, [rpcHidReady, forceHttp, reportKeypressEvent, sendKeyboardEvent]);
+  }, [sendKeyboardEvent]);
 
   // Cleanup on unmount
   useEffect(() => {

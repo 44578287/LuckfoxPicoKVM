@@ -34,7 +34,9 @@ export const useMouseEvents = (
       if (!force && settings.mouseMode !== "relative") return;
       // Don't send mouse events while reinitializing gadget
       if (isReinitializingGadget) return;
-      send("relMouseReport", { dx: calcDelta(x), dy: calcDelta(y), buttons });
+      const dx = calcDelta(x);
+      const dy = calcDelta(y);
+      send("relMouseReport", { dx, dy, buttons });
       setMouseMove({ x, y, buttons });
     },
     [send, setMouseMove, settings.mouseMode, isReinitializingGadget],
