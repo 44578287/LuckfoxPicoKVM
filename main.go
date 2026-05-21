@@ -161,6 +161,7 @@ func Main() {
 		if err := initImagesFolder(); err != nil {
 			logger.Warn().Err(err).Msg("failed to init images folder")
 		}
+		remountPersistedVirtualMediaState()
 		initJiggler()
 
 		initSystemInfo()

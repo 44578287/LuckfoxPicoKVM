@@ -169,9 +169,10 @@ func rpcCheckMountUrl(url string) (*VirtualMediaUrlInfo, error) {
 type VirtualMediaSource string
 
 const (
-	WebRTC  VirtualMediaSource = "WebRTC"
-	HTTP    VirtualMediaSource = "HTTP"
-	Storage VirtualMediaSource = "Storage"
+	WebRTC    VirtualMediaSource = "WebRTC"
+	HTTP      VirtualMediaSource = "HTTP"
+	Storage   VirtualMediaSource = "Storage"
+	SDStorage VirtualMediaSource = "SDStorage"
 )
 
 type VirtualMediaMode string
@@ -186,6 +187,7 @@ type VirtualMediaState struct {
 	Mode     VirtualMediaMode   `json:"mode"`
 	Filename string             `json:"filename,omitempty"`
 	URL      string             `json:"url,omitempty"`
+	Path     string             `json:"path,omitempty"`
 	Size     int64              `json:"size"`
 }
 
@@ -212,6 +214,7 @@ func rpcUnmountImage() error {
 		nbdDevice = nil
 	}
 	currentVirtualMediaState = nil
+	clearPersistedVirtualMediaState()
 	return nil
 }
 
@@ -270,6 +273,46 @@ func setInitialVirtualMediaState() error {
 
 	logger.Info().Interface("initial_virtual_media_state", initialState).Msg("initial virtual media state set")
 	return nil
+}
+
+func persistVirtualMediaState(state *VirtualMediaState) {
+	config.PersistedVirtualMediaState = state
+	if err := SaveConfig(); err != nil {
+		logger.Error().Err(err).Msg("failed to persist virtual media state")
+	}
+}
+
+func clearPersistedVirtualMediaState() {
+	config.PersistedVirtualMediaState = nil
+	if err := SaveConfig(); err != nil {
+		logger.Error().Err(err).Msg("failed to clear persisted virtual media state")
+	}
+}
+
+func remountPersistedVirtualMediaState() {
+	if config.PersistedVirtualMediaState == nil {
+		return
+	}
+
+	state := config.PersistedVirtualMediaState
+	logger.Info().Interface("state", state).Msg("attempting to remount persisted virtual media")
+
+	var err error
+	switch state.Source {
+	case Storage:
+		err = rpcMountWithStorage(state.Filename, state.Mode)
+	case SDStorage:
+		err = rpcMountWithSDStorage(state.Filename, state.Mode)
+	default:
+		logger.Warn().Str("source", string(state.Source)).Msg("unsupported source for auto-remount, clearing state")
+		clearPersistedVirtualMediaState()
+		return
+	}
+
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to remount persisted virtual media, clearing state")
+		clearPersistedVirtualMediaState()
+	}
 }
 
 func rpcMountWithHTTP(url string, mode VirtualMediaMode) error {
@@ -383,8 +426,10 @@ func rpcMountWithStorage(filename string, mode VirtualMediaMode) error {
 		Source:   Storage,
 		Mode:     mode,
 		Filename: filename,
+		Path:     fullPath,
 		Size:     fileInfo.Size(),
 	}
+	persistVirtualMediaState(currentVirtualMediaState)
 	return nil
 }
 
@@ -415,11 +460,13 @@ func rpcMountWithSDStorage(filename string, mode VirtualMediaMode) error {
 		return fmt.Errorf("failed to set mass storage image: %w", err)
 	}
 	currentVirtualMediaState = &VirtualMediaState{
-		Source:   Storage,
+		Source:   SDStorage,
 		Mode:     mode,
 		Filename: filename,
+		Path:     fullPath,
 		Size:     fileInfo.Size(),
 	}
+	persistVirtualMediaState(currentVirtualMediaState)
 	return nil
 }
 

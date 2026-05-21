@@ -90,6 +90,7 @@ const MediaMountedDetails = forwardRef<HTMLDivElement, {
           </div>
         );
       case "Storage":
+      case "SDStorage":
         return (
           <div className="w-full flex" style={{ justifyContent: "space-between", alignItems: "center" }}>
 
@@ -117,7 +118,7 @@ const MediaMountedDetails = forwardRef<HTMLDivElement, {
 
     <div className="space-y-4 py-3">
       <h3 className="text-base font-semibold text-black dark:text-white">
-        {$at("Mounted from KVM storage")}
+        {source === "SDStorage" ? $at("Mounted from SD card") : $at("Mounted from KVM storage")}
       </h3>
       <div ref={ref} className="grid h-full grid-rows-(--grid-headerBody)">
         <div className="h-full space-y-4">

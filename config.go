@@ -137,9 +137,10 @@ type Config struct {
 	VntConfig            VntConfig              `json:"vnt_config"`
 	WireguardAutoStart   bool                   `json:"wireguard_autostart"`
 	WireguardConfig      WireguardConfig        `json:"wireguard_config"`
-	NpuAppEnabled        bool                   `json:"npu_app_enabled"`
-	Firewall             *FirewallConfig        `json:"firewall"`
-	APIKey               string                 `json:"api_key"`
+	NpuAppEnabled               bool                   `json:"npu_app_enabled"`
+	Firewall                    *FirewallConfig        `json:"firewall"`
+	APIKey                      string                 `json:"api_key"`
+	PersistedVirtualMediaState  *VirtualMediaState     `json:"persisted_virtual_media_state,omitempty"`
 }
 
 type FirewallConfig struct {
