@@ -186,9 +186,9 @@ export const useMouseEvents = (
       const scrollValue = isAccel ? accelScrollValue : noAccelScrollValue;
 
       const clampedScrollValue = Math.max(-127, Math.min(127, scrollValue));
-      const invertedScrollValue = -clampedScrollValue;
+      const wheelY = settings.invertScroll ? clampedScrollValue : -clampedScrollValue;
 
-      send("wheelReport", { wheelY: invertedScrollValue });
+      send("wheelReport", { wheelY, mouseMode: settings.mouseMode });
 
       if (settings.scrollThrottling && !blockWheelEvent) {
         setBlockWheelEvent(true);

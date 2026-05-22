@@ -692,7 +692,7 @@ export default function MobileDesktop({ isFullscreen }: { isFullscreen?: number 
                               "flex h-8 w-8 items-center justify-center rounded-full text-white text-xs active:scale-90 transition-transform duration-100",
                               isDark ? "bg-gray-500/70" : "bg-black/30",
                             )}
-                            onClick={() => { send("wheelReport", { wheelY: 1 }); }}
+                            onClick={() => { send("wheelReport", { wheelY: 1, mouseMode }); }}
                           >
                             ▲
                           </div>
@@ -718,7 +718,7 @@ export default function MobileDesktop({ isFullscreen }: { isFullscreen?: number 
                               "mt-1 flex h-8 w-8 items-center justify-center rounded-full text-white text-xs active:scale-90 transition-transform duration-100",
                               isDark ? "bg-gray-500/70" : "bg-black/30",
                             )}
-                            onClick={() => { send("wheelReport", { wheelY: -1 }); }}
+                            onClick={() => { send("wheelReport", { wheelY: -1, mouseMode }); }}
                           >
                             ▼
                           </div>

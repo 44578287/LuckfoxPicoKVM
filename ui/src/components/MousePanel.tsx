@@ -28,6 +28,7 @@ const inputModeOptions: Option[] = [
 const othersOptions: Option[] = [
   { label: "Hide Cursor", value: "hide-cursor" },
   { label: "Jiggler", value: "jiggler" },
+  { label: "Invert Scroll", value: "invert-scroll" },
 ];
 
 const MousePanel: React.FC = () => { 
@@ -56,6 +57,17 @@ const MousePanel: React.FC = () => {
     }
   }, [hideCursor]);
 
+  const invertScroll = useSettingsStore(state => state.invertScroll);
+  const setInvertScroll = useSettingsStore(state => state.setInvertScroll);
+
+  useEffect(() => {
+    if (invertScroll) {
+      setOthers((prevItems: string[]) => [...prevItems, "invert-scroll"]);
+    } else {
+      setOthers((prevItems) => prevItems.filter(item => item !== "invert-scroll"));
+    }
+  }, [invertScroll]);
+
   const handleOtherChange = (data: string[] | string) => {
     console.log(data);
     console.log(data.includes("jiggler"));
@@ -65,6 +77,9 @@ const MousePanel: React.FC = () => {
     }
     if (data.includes("jiggler") != others.includes("jiggler")) {
       handleJigglerChange(data.includes("jiggler"));
+    }
+    if (data.includes("invert-scroll") != others.includes("invert-scroll")) {
+      setInvertScroll(data.includes("invert-scroll"));
     }
   };
 

@@ -124,10 +124,13 @@ func rpcAbsMouseReport(x, y int, buttons uint8) error {
 }
 
 func rpcRelMouseReport(dx, dy int8, buttons uint8) error {
-	return gadget.RelMouseReport(dx, dy, buttons)
+	return gadget.RelMouseReport(dx, dy, buttons, 0)
 }
 
-func rpcWheelReport(wheelY int8) error {
+func rpcWheelReport(wheelY int8, mouseMode string) error {
+	if mouseMode == "relative" {
+		return gadget.RelMouseReport(0, 0, 0, wheelY)
+	}
 	return gadget.AbsMouseWheelReport(wheelY)
 }
 
