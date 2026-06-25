@@ -205,6 +205,10 @@ func rpcReinitializeUsbGadget() error {
 		}
 	}
 
+	// Close stale HID file descriptors before recreating the gadget.
+	// Backported from upstream jetkvm/kvm commit 15dc380.
+	gadget.ResetHIDFiles()
+
 	// Recreate the gadget instance similar to program restart
 	gadget = usbgadget.NewUsbGadget(
 		"kvm",
@@ -270,6 +274,10 @@ func rpcReinitializeUsbGadgetSoft() error {
 			usbLogger.Warn().Err(err).Msg("failed to unmount virtual media before USB soft reinit")
 		}
 	}
+
+	// Close stale HID file descriptors before rebinding USB.
+	// Backported from upstream jetkvm/kvm commit 15dc380.
+	gadget.ResetHIDFiles()
 
 	// Update gadget configuration (will rebind USB inside)
 	if err := gadget.UpdateGadgetConfig(); err != nil {
