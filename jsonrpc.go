@@ -39,6 +39,10 @@ type JSONRPCEvent struct {
 	Params  interface{} `json:"params,omitempty"`
 }
 
+func isJSONRPCNotification(request JSONRPCRequest) bool {
+	return request.ID == nil
+}
+
 type DisplayRotationSettings struct {
 	Rotation string `json:"rotation"`
 }
@@ -152,6 +156,10 @@ func onRPCMessage(message webrtc.DataChannelMessage, session *Session) {
 
 	response, _ := DispatchRPCRequest(request)
 
+	if isJSONRPCNotification(request) {
+		return
+	}
+
 	scopedLogger.Trace().Interface("result", response.Result).Msg("RPC handler returned")
 
 	writeJSONRPCResponse(response, session)
@@ -163,6 +171,22 @@ func rpcPing() (string, error) {
 
 type BootStorageTypeResponse struct {
 	Type string `json:"type"`
+}
+
+func rpcGetLocalPackageInfo() (*LocalPackageInfo, error) {
+	return GetLocalPackageInfo()
+}
+
+func rpcClearLocalPackage() error {
+	otaUploadMutex.Lock()
+	defer otaUploadMutex.Unlock()
+
+	if otaState.Updating {
+		return fmt.Errorf("update already in progress")
+	}
+
+	cleanupLocalPackage()
+	return nil
 }
 
 func rpcGetBootStorageType() (*BootStorageTypeResponse, error) {
@@ -369,18 +393,6 @@ func rpcGetNpuAppStatus() (bool, error) {
 	return config.NpuAppEnabled, nil
 }
 
-func rpcGetAutoUpdateState() (bool, error) {
-	return config.AutoUpdateEnabled, nil
-}
-
-func rpcSetAutoUpdateState(enabled bool) (bool, error) {
-	config.AutoUpdateEnabled = enabled
-	if err := SaveConfig(); err != nil {
-		return config.AutoUpdateEnabled, fmt.Errorf("failed to save config: %w", err)
-	}
-	return enabled, nil
-}
-
 func rpcGetEDID() (string, error) {
 	resp, err := CallCtrlAction("get_edid", nil)
 	if err != nil {
@@ -456,18 +468,6 @@ func rpcGetForceHpd() (bool, error) {
 	}
 }
 
-func rpcGetDevChannelState() (bool, error) {
-	return config.IncludePreRelease, nil
-}
-
-func rpcSetDevChannelState(enabled bool) error {
-	config.IncludePreRelease = enabled
-	if err := SaveConfig(); err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
-	}
-	return nil
-}
-
 func rpcGetLocalUpdateStatus() (*LocalMetadata, error) {
 	var localStatus LocalMetadata
 	systemVersionLocal, appVersionLocal, err := GetLocalVersion()
@@ -480,8 +480,7 @@ func rpcGetLocalUpdateStatus() (*LocalMetadata, error) {
 }
 
 func rpcGetUpdateStatus() (*UpdateStatus, error) {
-	includePreRelease := config.IncludePreRelease
-	updateStatus, err := GetUpdateStatus(context.Background(), GetDeviceID(), includePreRelease)
+	updateStatus, err := GetUpdateStatus(context.Background(), GetDeviceID())
 	// to ensure backwards compatibility,
 	// if there's an error, we won't return an error, but we will set the error field
 	if err != nil {
@@ -525,9 +524,8 @@ func getSelfSignatureStatus() *SelfSignatureStatus {
 }
 
 func rpcTryUpdate() error {
-	includePreRelease := config.IncludePreRelease
 	go func() {
-		err := TryUpdate(context.Background(), GetDeviceID(), includePreRelease)
+		err := TryUpdate(context.Background(), GetDeviceID())
 		if err != nil {
 			logger.Warn().Err(err).Msg("failed to try update")
 		}
@@ -1502,13 +1500,22 @@ func rpcGetLedGreenMode() (string, error) {
 func rpcGetLedYellowMode() (string, error) {
 	return config.LEDYellowMode, nil
 }
-
-func rpcGetAutoMountSystemInfo() (bool, error) {
-	return config.AutoMountSystemInfo, nil
+func rpcGetAutoMountImage() (*AutoMountImageConfig, error) {
+	return config.AutoMountImage, nil
 }
 
-func rpcSetAutoMountSystemInfo(enabled bool) error {
-	config.AutoMountSystemInfo = enabled
+func rpcSetAutoMountImage(filename string, source string) error {
+	if filename == "" {
+		config.AutoMountImage = nil
+	} else {
+		if source != "kvm" && source != "sd" {
+			return fmt.Errorf("invalid source: %s, must be 'kvm' or 'sd'", source)
+		}
+		config.AutoMountImage = &AutoMountImageConfig{
+			Filename: filename,
+			Source:   source,
+		}
+	}
 	if err := SaveConfig(); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
@@ -1653,14 +1660,10 @@ var rpcHandlers = map[string]RPCHandler{
 	"sendWOLMagicPacket":        {Func: rpcSendWOLMagicPacket, Params: []string{"macAddress"}},
 	"getStreamQualityFactor":    {Func: rpcGetStreamQualityFactor},
 	"setStreamQualityFactor":    {Func: rpcSetStreamQualityFactor, Params: []string{"factor"}},
-	"getAutoUpdateState":        {Func: rpcGetAutoUpdateState},
-	"setAutoUpdateState":        {Func: rpcSetAutoUpdateState, Params: []string{"enabled"}},
 	"getEDID":                   {Func: rpcGetEDID},
 	"setEDID":                   {Func: rpcSetEDID, Params: []string{"edid"}},
 	"setForceHpd":               {Func: rpcSetForceHpd, Params: []string{"forceHpd"}},
 	"getForceHpd":               {Func: rpcGetForceHpd},
-	"getDevChannelState":        {Func: rpcGetDevChannelState},
-	"setDevChannelState":        {Func: rpcSetDevChannelState, Params: []string{"enabled"}},
 	"getLocalUpdateStatus":      {Func: rpcGetLocalUpdateStatus},
 	"getUpdateStatus":           {Func: rpcGetUpdateStatus},
 	"getSelfSignatureStatus":    {Func: rpcGetSelfSignatureStatus},
@@ -1699,8 +1702,8 @@ var rpcHandlers = map[string]RPCHandler{
 	"mountWithWebRTC":           {Func: rpcMountWithWebRTC, Params: []string{"filename", "size", "mode"}},
 	"mountWithStorage":          {Func: rpcMountWithStorage, Params: []string{"filename", "mode"}},
 	"mountWithSDStorage":        {Func: rpcMountWithSDStorage, Params: []string{"filename", "mode"}},
-	"setAutoMountSystemInfo":    {Func: rpcSetAutoMountSystemInfo, Params: []string{"enabled"}},
-	"getAutoMountSystemInfo":    {Func: rpcGetAutoMountSystemInfo},
+	"setAutoMountImage":         {Func: rpcSetAutoMountImage, Params: []string{"filename", "source"}},
+	"getAutoMountImage":         {Func: rpcGetAutoMountImage},
 	"confirmOtherSession":       {Func: rpcConfirmOtherSession},
 	"listStorageFiles":          {Func: rpcListStorageFiles},
 	"deleteStorageFile":         {Func: rpcDeleteStorageFile, Params: []string{"filename"}},
@@ -1803,4 +1806,16 @@ var rpcHandlers = map[string]RPCHandler{
 	"getFirewallConfig":         {Func: rpcGetFirewallConfig},
 	"setFirewallConfig":         {Func: rpcSetFirewallConfig, Params: []string{"config"}},
 	"getBootStorageType":        {Func: rpcGetBootStorageType},
+	"getLocalPackageInfo":       {Func: rpcGetLocalPackageInfo},
+	"clearLocalPackage":         {Func: rpcClearLocalPackage},
+	"getNetbirdStatus":          {Func: rpcGetNetbirdStatus},
+	"startNetbird":              {Func: rpcStartNetbird},
+	"stopNetbird":               {Func: rpcStopNetbird},
+	"netbirdUp":                 {Func: rpcNetbirdUp, Params: []string{"managementUrl"}},
+	"netbirdDown":               {Func: rpcNetbirdDown},
+	"getNetbirdLog":             {Func: rpcGetNetbirdLog},
+	"getNetbirdVersion":         {Func: rpcGetNetbirdVersion},
+	"getNetbirdUpLog":           {Func: rpcGetNetbirdUpLog},
+	"getNetbirdStatusText":      {Func: rpcGetNetbirdStatusText},
+	"getVpnAutoStartStatus":     {Func: rpcGetVpnAutoStartStatus},
 }

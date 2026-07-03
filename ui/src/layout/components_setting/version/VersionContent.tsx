@@ -6,7 +6,6 @@ import { CheckCircleIcon } from "@heroicons/react/20/solid";
 import { isMobile } from "react-device-detect";
 
 import { useJsonRpc } from "@/hooks/useJsonRpc";
-import { useBootStorageType } from "@/hooks/useBootStorage";
 import { SettingsPageHeader } from "@components/Settings/SettingsPageheader";
 import { SettingsItem } from "@components/Settings/SettingsView";
 import Card from "@components/Card";
@@ -16,7 +15,8 @@ import { InputFieldWithLabel } from "@components/InputField";
 import { UpdateState, useDeviceStore, useUpdateStore } from "@/hooks/stores";
 import notifications from "@/notifications";
 import { formatters } from "@/utils";
-
+import UploadSvg from "@/assets/second/upload.svg?react";
+import { text_primary_color } from "@/layout/theme_color";
 export interface SystemVersionInfo {
   local: { appVersion: string; systemVersion: string };
   remote?: { appVersion: string; systemVersion: string };
@@ -39,13 +39,67 @@ export interface LocalVersionInfo {
   systemVersion: string;
 }
 
+export interface LocalPackageInfo {
+  appVersion: string;
+  systemVersion: string;
+  hasApp: boolean;
+  hasSystem: boolean;
+}
+
+type UploadLocalPackageOptions = {
+  onUploadProgress?: (progress: number) => void;
+  onUploadComplete?: () => void;
+};
+
+const uploadLocalPackage = async (
+  file: File,
+  options?: UploadLocalPackageOptions,
+): Promise<void> => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = event => {
+      if (!event.lengthComputable || !options?.onUploadProgress) return;
+      const progress = Math.min((event.loaded / event.total) * 100, 100);
+      options.onUploadProgress(progress);
+    };
+    xhr.upload.onload = () => {
+      options?.onUploadProgress?.(100);
+      options?.onUploadComplete?.();
+    };
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        resolve();
+      } else {
+        try {
+          const resp = JSON.parse(xhr.responseText);
+          reject(new Error(resp.error || "Upload failed"));
+        } catch {
+          reject(new Error(xhr.responseText || "Upload failed"));
+        }
+      }
+    };
+    xhr.onerror = () => reject(new Error("Network error"));
+    xhr.open("POST", "/ota/upload-local-pkg");
+    xhr.send(formData);
+  });
+};
+
 export default function SettingsVersion() {
   const [send] = useJsonRpc();
   const [autoUpdate, setAutoUpdate] = useState(true);
   const { $at } = useReactAt();
-  const { setModalView, otaState } = useUpdateStore();
-  const { bootStorageType } = useBootStorageType();
-  const isBootFromSD = bootStorageType === "sd";
+  const {
+    setModalView,
+    modalView,
+    otaState,
+    versionUpdateSource: updateSource,
+    setVersionUpdateSource: setUpdateSource,
+    versionLocalPackageInfo: localPackageInfo,
+    setVersionLocalPackageInfo: setLocalPackageInfo,
+  } = useUpdateStore();
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
   const [signatureStatusLoading, setSignatureStatusLoading] = useState(true);
   const [signatureStatus, setSignatureStatus] = useState<{
@@ -55,7 +109,6 @@ export default function SettingsVersion() {
     signatureVerified: boolean;
   } | null>(null);
   const updatePanelRef = useRef<HTMLDivElement | null>(null);
-  const [updateSource, setUpdateSource] = useState("github");
   const [customUpdateBaseURL, setCustomUpdateBaseURL] = useState("");
   const [updateDownloadProxy, setUpdateDownloadProxy] = useState("");
 
@@ -83,6 +136,27 @@ export default function SettingsVersion() {
     send("getUpdateDownloadProxy", {}, resp => {
       if ("error" in resp) return;
       setUpdateDownloadProxy(resp.result as string);
+    });
+  }, [send]);
+
+  useEffect(() => {
+    if (updateSource !== "local" || localPackageInfo) return;
+
+    send("getLocalPackageInfo", {}, resp => {
+      if ("error" in resp) return;
+      setLocalPackageInfo(resp.result as LocalPackageInfo);
+    });
+  }, [localPackageInfo, send, setLocalPackageInfo, updateSource]);
+
+  const clearLocalPackage = useCallback(() => {
+    return new Promise<void>((resolve, reject) => {
+      send("clearLocalPackage", {}, resp => {
+        if ("error" in resp) {
+          reject(new Error((resp.error.data as string) || "Failed to clear local package"));
+        } else {
+          resolve();
+        }
+      });
     });
   }, [send]);
 
@@ -153,9 +227,25 @@ export default function SettingsVersion() {
     });
   }, [send, updateDownloadProxy]);
 
-  const closeUpdateDialog = useCallback(() => {
+  const closeUpdateDialog = useCallback(async () => {
+    if (updateSource === "local" && otaState.error) {
+      try {
+        await clearLocalPackage();
+        setLocalPackageInfo(null);
+      } catch (err) {
+        notifications.error(err instanceof Error ? err.message : "Failed to clear local package");
+        return;
+      }
+    }
+
     setIsUpdateDialogOpen(false);
-  }, []);
+  }, [clearLocalPackage, otaState.error, setLocalPackageInfo, updateSource]);
+
+  const resetLocalPackageUi = useCallback(() => {
+    setLocalPackageInfo(null);
+    setIsUpdateDialogOpen(false);
+    setModalView("loading");
+  }, [setLocalPackageInfo, setModalView]);
 
   const openUpdatePanel = useCallback(() => {
     setIsUpdateDialogOpen(true);
@@ -199,16 +289,30 @@ export default function SettingsVersion() {
     setModalView("updating");
   }, [send, setModalView]);
 
+  const startLocalUpdate = useCallback(() => {
+    send("setUpdateSource", { source: "local" }, resp => {
+      if ("error" in resp) {
+        notifications.error(`Failed to set update source: ${resp.error.data || "Unknown error"}`);
+        return;
+      }
+
+      setIsUpdateDialogOpen(true);
+      setModalView("updating");
+      setTimeout(() => updatePanelRef.current?.scrollIntoView({ block: "nearest" }), 0);
+      send("tryUpdate", {});
+    });
+  }, [send, setModalView]);
+
   useEffect(() => {
     if (!isUpdateDialogOpen) return;
     if (otaState.updating) {
       setModalView("updating");
     } else if (otaState.error) {
       setModalView("error");
-    } else {
+    } else if (modalView !== "updating") {
       setModalView("loading");
     }
-  }, [isUpdateDialogOpen, otaState.updating, otaState.error, setModalView]);
+  }, [isUpdateDialogOpen, modalView, otaState.updating, otaState.error, setModalView]);
 
   return (
     <div className="space-y-4">
@@ -243,7 +347,6 @@ export default function SettingsVersion() {
             signatureStatusLoading={signatureStatusLoading}
           />
 
-          {!isBootFromSD && (
             <>
               <UpdateSourceSettings
                 updateSource={updateSource}
@@ -253,13 +356,33 @@ export default function SettingsVersion() {
                 onSaveCustomUpdateBaseURL={applyCustomUpdateBaseURL}
               />
 
-              <div className="flex items-center justify-start">
-                <AntdButton type="primary" onClick={checkForUpdates} className={isMobile ? "w-full" : ""}>
-                  {$at("Check for Updates")}
-                </AntdButton>
-              </div>
+              {updateSource === "local" ? (
+                <LocalPackageUpload
+                  packageInfo={localPackageInfo}
+                  onClearPackage={clearLocalPackage}
+                  onPackageReady={(info) => setLocalPackageInfo(info)}
+                  onPackageReset={resetLocalPackageUi}
+                />
+              ) : (
+                <div className="flex items-center justify-start">
+                  <AntdButton type="primary" onClick={checkForUpdates} className={isMobile ? "w-full" : ""}>
+                    {$at("Check for Updates")}
+                  </AntdButton>
+                </div>
+              )}
+              
+              {updateSource === "local" && localPackageInfo && !isUpdateDialogOpen && (
+                <div className="flex items-center justify-start">
+                  <AntdButton
+                    type="primary"
+                    onClick={startLocalUpdate}
+                    className={isMobile ? "w-full" : ""}
+                  >
+                    {$at("Start Update")}
+                  </AntdButton>
+                </div>
+              )}
             </>
-          )}
 
           <div className="hidden">
             <SettingsItem
@@ -293,11 +416,302 @@ export default function SettingsVersion() {
   );
 }
 
+function LocalPackageUpload({
+  packageInfo,
+  onClearPackage,
+  onPackageReady,
+  onPackageReset,
+}: {
+  packageInfo: LocalPackageInfo | null;
+  onClearPackage: () => Promise<void>;
+  onPackageReady: (info: LocalPackageInfo) => void;
+  onPackageReset: () => void;
+}) {
+  const { $at } = useReactAt();
+  const [send] = useJsonRpc();
+  const [uploading, setUploading] = useState(false);
+  const [clearingPackage, setClearingPackage] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStage, setUploadStage] = useState<"idle" | "uploading" | "extracting" | "readingInfo">(
+    "idle",
+  );
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith(".zip")) {
+      setError($at("File must be a .zip archive"));
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    setUploadProgress(0);
+    setUploadStage("uploading");
+
+    try {
+      await uploadLocalPackage(file, {
+        onUploadProgress: progress => {
+          setUploadProgress(progress);
+        },
+        onUploadComplete: () => {
+          setUploadProgress(100);
+          setUploadStage("extracting");
+        },
+      });
+
+      setUploadStage("readingInfo");
+      const result = await new Promise<LocalPackageInfo>((resolve, reject) => {
+        send("getLocalPackageInfo", {}, (resp) => {
+          if ("error" in resp) {
+            reject(new Error(resp.error.data || "Failed to get package info"));
+          } else {
+            resolve(resp.result as LocalPackageInfo);
+          }
+        });
+      });
+
+      onPackageReady(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      setUploadStage("idle");
+    }
+  };
+
+  const handleReset = async () => {
+    setClearingPackage(true);
+    try {
+      await onClearPackage();
+      setError(null);
+      setUploadProgress(0);
+      setUploadStage("idle");
+      onPackageReset();
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (err) {
+      notifications.error(err instanceof Error ? err.message : "Failed to clear local package");
+    } finally {
+      setClearingPackage(false);
+    }
+  };
+
+  // Show package info after successful upload
+  if (packageInfo) {
+    return (
+      <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+        <LocalPackageStepTimeline
+          activeStep={4}
+          title={$at("Package ready")}
+          description={$at("Upload, extraction, and package parsing are complete.")}
+        />
+        <div className="mb-2 flex items-center gap-2">
+          <CheckCircleIcon className="h-5 w-5 text-green-500" />
+          <p className="text-sm font-medium text-green-800 dark:text-green-200">
+            {$at("Package uploaded successfully")}
+          </p>
+        </div>
+        <div className="ml-7 space-y-1 text-sm text-slate-600 dark:text-slate-400">
+          {packageInfo.hasApp && (
+            <p>{$at("App Version")}: {packageInfo.appVersion}</p>
+          )}
+          {packageInfo.hasSystem && (
+            <p>{$at("System Version")}: {packageInfo.systemVersion}</p>
+          )}
+        </div>
+        <button
+          onClick={handleReset}
+          disabled={clearingPackage}
+          className="mt-3 ml-7 text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400"
+        >
+          {clearingPackage ? $at("Removing package...") : $at("Upload different package")}
+        </button>
+      </div>
+    );
+  }
+
+  // File upload area
+  return (
+    <div>
+      <label
+        className={`block cursor-pointer ${uploading ? "pointer-events-none opacity-50" : ""}`}
+      >
+        <Card
+          className="transition-all duration-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/50"
+        >
+          <div className="w-full px-4 py-6">
+            <div className="flex flex-col items-center justify-center text-center">
+              <div className="space-y-1">
+                <div className="inline-block">
+                  <div className="p-1">
+                    <UploadSvg className={`h-[24px] w-[24px] shrink-0 ${text_primary_color}`} />
+                  </div>
+                </div>
+                <div
+                  style={{ fontSize: "14px", fontWeight: "400" }}
+                  className="text-[rgba(22,152,217,1)] dark:text-white"
+                >
+                  {$at("Choose upgrade package (.zip)")}
+                </div>
+              </div>
+            </div>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".zip"
+            onChange={handleFileSelect}
+            disabled={uploading}
+            className="hidden"
+          />
+        </Card>
+      </label>
+      {uploading && (
+        <div className="mt-3">
+          <LocalPackageUploadStatus stage={uploadStage} uploadProgress={uploadProgress} />
+        </div>
+      )}
+      {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+    </div>
+  );
+}
+
+function LocalPackageStepTimeline({
+  activeStep,
+  transitionProgress = 0,
+  title,
+  description,
+  showSpinner = false,
+  statusText,
+}: {
+  activeStep: number;
+  transitionProgress?: number;
+  title: string;
+  description: string;
+  showSpinner?: boolean;
+  statusText?: string;
+}) {
+  const steps = ["Start", "Uploaded", "Extracted", "Parsed"];
+  const clampedStep = Math.max(1, Math.min(activeStep, steps.length));
+  const clampedTransitionProgress = Math.max(0, Math.min(transitionProgress, 100));
+
+  return (
+    <div className="rounded-lg border border-sky-100 bg-sky-50/70 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            {showSpinner ? (
+              <LoadingSpinner className="h-5 w-5 text-[rgba(22,152,217,1)] dark:text-[rgba(120,184,255,1)]" />
+            ) : null}
+            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{title}</p>
+          </div>
+          {statusText ? (
+            <span className="text-xs font-medium text-[rgba(22,152,217,1)] dark:text-[rgba(120,184,255,1)]">
+              {statusText}
+            </span>
+          ) : null}
+        </div>
+        <p className="text-xs text-slate-600 dark:text-slate-300">{description}</p>
+      </div>
+      <div className="mt-3 flex items-center gap-2">
+        {steps.map((step, index) => {
+          const stepNumber = index + 1;
+          const active = stepNumber <= clampedStep;
+          const isLast = index === steps.length - 1;
+          return (
+            <div key={step} className={`flex min-w-0 items-center ${isLast ? "" : "flex-1"}`}>
+              <span
+                className={`h-3 w-3 shrink-0 rounded-full border transition-colors duration-300 ${
+                  active
+                    ? "border-[rgba(22,152,217,1)] bg-[rgba(22,152,217,1)] dark:border-[rgba(120,184,255,1)] dark:bg-[rgba(120,184,255,1)]"
+                    : "border-sky-200 bg-white dark:border-slate-600 dark:bg-slate-800"
+                }`}
+              />
+              {!isLast && (
+                <span className="relative mx-2 h-[2px] flex-1 rounded-full bg-sky-200 dark:bg-slate-700">
+                  <span
+                    className={`absolute left-0 top-0 h-full rounded-full transition-all duration-300 ${
+                      stepNumber < clampedStep || (stepNumber === clampedStep && clampedTransitionProgress > 0)
+                        ? "bg-[rgba(22,152,217,1)] dark:bg-[rgba(120,184,255,1)]"
+                        : "bg-transparent"
+                    }`}
+                    style={{
+                      width:
+                        stepNumber < clampedStep
+                          ? "100%"
+                          : stepNumber === clampedStep
+                            ? `${clampedTransitionProgress}%`
+                            : "0%",
+                    }}
+                  />
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function LocalPackageUploadStatus({
+  stage,
+  uploadProgress,
+}: {
+  stage: "idle" | "uploading" | "extracting" | "readingInfo";
+  uploadProgress: number;
+}) {
+  const { $at } = useReactAt();
+
+  if (stage === "uploading") {
+    return (
+      <LocalPackageStepTimeline
+        activeStep={1}
+        transitionProgress={uploadProgress}
+        title={$at("Uploading package")}
+        description={$at("Please wait while the local upgrade package is being uploaded.")}
+        showSpinner
+        statusText={`${Math.round(uploadProgress)}%`}
+      />
+    );
+  }
+
+  if (stage === "extracting") {
+    return (
+      <LocalPackageStepTimeline
+        activeStep={2}
+        title={$at("Extracting package")}
+        description={$at("The device is unpacking and validating the uploaded package.")}
+        showSpinner
+      />
+    );
+  }
+
+  if (stage === "readingInfo") {
+    return (
+      <LocalPackageStepTimeline
+        activeStep={3}
+        title={$at("Reading package information")}
+        description={$at("Checking version.txt and detecting included app and system files.")}
+        showSpinner
+      />
+    );
+  }
+
+  return null;
+}
+
 const updateSourceOptions = [
   //{ value: "cdn", label: "CDN" },
   { value: "github", label: "github" },
   //{ value: "gitee", label: "gitee" },
   { value: "custom", label: "custom" },
+  { value: "local", label: "local" },
 ];
 
 function UpdateSourceSettings({
@@ -365,7 +779,6 @@ function UpdateContent({
 }) {
   const [versionInfo, setVersionInfo] = useState<null | SystemVersionInfo>(null);
   const { modalView, setModalView, otaState } = useUpdateStore();
-  const [send] = useJsonRpc();
 
   const onFinishedLoading = useCallback(
     async (info: SystemVersionInfo) => {
@@ -413,7 +826,7 @@ function UpdateContent({
       )}
 
       {modalView === "updating" && (
-        <UpdatingDeviceState otaState={otaState} onMinimizeUpgradeDialog={onClose} />
+        <UpdatingDeviceState otaState={otaState} updateSource={updateSource} onMinimizeUpgradeDialog={onClose} />
       )}
 
       {modalView === "upToDate" && (
@@ -563,9 +976,11 @@ function LoadingState({
 
 function UpdatingDeviceState({
   otaState,
+  updateSource,
   onMinimizeUpgradeDialog,
 }: {
   otaState: UpdateState["otaState"];
+  updateSource: string;
   onMinimizeUpgradeDialog: () => void;
 }) {
   const formatProgress = (progress: number) => `${Math.round(progress)}%`;
@@ -603,9 +1018,23 @@ function UpdatingDeviceState({
     const downloadFinishedAt = otaState[`${type}DownloadFinishedAt`];
     const verfiedAt = otaState[`${type}VerifiedAt`];
     const updatedAt = otaState[`${type}UpdatedAt`];
+    const downloadProgress = otaState[`${type}DownloadProgress`] ?? 0;
+    const verificationProgress = otaState[`${type}VerificationProgress`] ?? 0;
     const downloadSpeedBps = (otaState as any)[`${type}DownloadSpeedBps`] as number | undefined;
     const formattedSpeed =
       downloadSpeedBps && downloadSpeedBps > 0 ? `${formatters.bytes(downloadSpeedBps, 1)}/s` : null;
+
+    if (updateSource === "local") {
+      if (updatedAt) {
+        return "Awaiting reboot";
+      } else if (verfiedAt) {
+        return `Installing ${type} update...`;
+      } else if (verificationProgress > 0 || downloadProgress >= 1) {
+        return `Verifying ${type} update...`;
+      } else {
+        return `Preparing local ${type} update...`;
+      }
+    }
 
     if (!otaState.metadataFetchedAt) {
       return "Fetching update information...";

@@ -17,6 +17,7 @@ var appCtx context.Context
 func Main() {
 	SyncConfigSD(true)
 	LoadConfig()
+	cleanupStaleLocalPackageOnStartup()
 
 	if config.APIKey == "" {
 		key, err := generateAPIKey()
@@ -165,8 +166,8 @@ func Main() {
 		initJiggler()
 
 		initSystemInfo()
+		initAutoMountImage()
 	}
-
 	// initialize GPIO
 	initGPIO()
 
@@ -189,8 +190,7 @@ func Main() {
 	//			time.Sleep(1 * time.Minute)
 	//			continue
 	//		}
-	//		includePreRelease := config.IncludePreRelease
-	//		err = TryUpdate(context.Background(), GetDeviceID(), includePreRelease)
+	//		err = TryUpdate(context.Background(), GetDeviceID())
 	//		if err != nil {
 	//			logger.Warn().Err(err).Msg("failed to auto update")
 	//		}

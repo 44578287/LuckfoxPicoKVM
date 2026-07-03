@@ -165,6 +165,8 @@ func setupRouter() *gin.Engine {
 		protected.PUT("/auth/password-local", handleUpdatePassword)
 		protected.DELETE("/auth/local-password", handleDeletePassword)
 		protected.POST("/storage/upload", handleUploadHttp)
+		protected.POST("/ota/upload", handleOTAUploadHttp)
+		protected.POST("/ota/upload-local-pkg", handleLocalPackageUploadHttp)
 		protected.GET("/storage/download", handleDownloadHttp)
 		protected.GET("/storage/sd-download", handleSDDownloadHttp)
 		protected.POST("/api/rpc", handleRpcRequest)
@@ -874,6 +876,11 @@ func handleRpcRequest(c *gin.Context) {
 	httpSessionMu.Unlock()
 
 	if invalid {
+		if isJSONRPCNotification(req) {
+			c.Status(http.StatusNoContent)
+			return
+		}
+
 		response := JSONRPCResponse{
 			JSONRPC: "2.0",
 			Error: map[string]interface{}{
@@ -896,6 +903,11 @@ func handleRpcRequest(c *gin.Context) {
 	}
 
 	response, _ := DispatchRPCRequest(req)
+
+	if isJSONRPCNotification(req) {
+		c.Status(http.StatusNoContent)
+		return
+	}
 
 	if event != nil {
 		c.JSON(http.StatusOK, gin.H{
