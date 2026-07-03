@@ -141,6 +141,10 @@ type Config struct {
 	Firewall                   *FirewallConfig        `json:"firewall"`
 	APIKey                     string                 `json:"api_key"`
 	PersistedVirtualMediaState *VirtualMediaState     `json:"persisted_virtual_media_state,omitempty"`
+	SerialBaudRate             int                    `json:"serial_baud_rate,omitempty"`
+	SerialDataBits             int                    `json:"serial_data_bits,omitempty"`
+	SerialStopBits             string                 `json:"serial_stop_bits,omitempty"` // "1", "1.5", "2"
+	SerialParity               string                 `json:"serial_parity,omitempty"`   // "none", "odd", "even", "mark", "space"
 }
 
 type AutoMountImageConfig struct {
@@ -409,6 +413,9 @@ func LoadConfig() {
 	}
 
 	config = &loadedConfig
+
+	// Load serial port settings from config
+	loadSerialSettingsFromConfig()
 
 	logging.GetRootLogger().UpdateLogLevel(config.DefaultLogLevel)
 

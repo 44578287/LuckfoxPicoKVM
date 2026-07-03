@@ -55,6 +55,9 @@ func GetLocalPackageInfo() (*LocalPackageInfo, error) {
 	versionPath := filepath.Join(pkgDir, "version.txt")
 	data, err := os.ReadFile(versionPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("failed to read version.txt: %w", err)
 	}
 
@@ -1698,6 +1701,26 @@ func getOTAPublicKey() ed25519.PublicKey {
 	return ed25519.PublicKey(keyBytes)
 }
 
+func hashFileSHA256(filePath string) ([32]byte, error) {
+	var fileHash [32]byte
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fileHash, fmt.Errorf("error opening file for hashing: %w", err)
+	}
+	defer file.Close()
+
+	hasher := sha256.New()
+	buf := make([]byte, 32*1024)
+	if _, err := io.CopyBuffer(hasher, file, buf); err != nil {
+		return fileHash, fmt.Errorf("error hashing file: %w", err)
+	}
+
+	sum := hasher.Sum(nil)
+	copy(fileHash[:], sum)
+	return fileHash, nil
+}
+
 func verifyFileSignature(
 	unverifiedPath string,
 	sigPath string,
@@ -1726,12 +1749,10 @@ func verifyFileSignature(
 		return true, fmt.Errorf("signature present but no public key embedded in binary")
 	}
 
-	fileBytes, err := os.ReadFile(unverifiedPath)
+	fileHash, err := hashFileSHA256(unverifiedPath)
 	if err != nil {
-		return true, fmt.Errorf("error reading file for signature verification: %w", err)
+		return true, err
 	}
-
-	fileHash := sha256.Sum256(fileBytes)
 	if !ed25519.Verify(publicKey, fileHash[:], sigBytes) {
 		return true, fmt.Errorf("Ed25519 signature verification failed for %s", unverifiedPath)
 	}
@@ -1753,11 +1774,12 @@ func verifyLocalFileSignature(filePath string, sigPath string, publicKey ed25519
 	if len(sigBytes) != ed25519.SignatureSize {
 		return false
 	}
-	fileBytes, err := os.ReadFile(filePath)
+
+	fileHash, err := hashFileSHA256(filePath)
 	if err != nil {
 		return false
 	}
-	fileHash := sha256.Sum256(fileBytes)
+
 	return ed25519.Verify(publicKey, fileHash[:], sigBytes)
 }
 

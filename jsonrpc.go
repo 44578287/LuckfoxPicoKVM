@@ -1114,13 +1114,129 @@ func rpcGetSerialSettings() (SerialSettings, error) {
 
 var serialPortMode = defaultMode
 
+// loadSerialSettingsFromConfig loads serial port settings from config into serialPortMode.
+// Called during LoadConfig to restore persisted settings.
+func loadSerialSettingsFromConfig() {
+	if config == nil {
+		return
+	}
+
+	// Only apply if config has serial settings saved (non-zero baud rate)
+	if config.SerialBaudRate == 0 {
+		logger.Debug().Msg("no serial settings in config, using defaults")
+		return
+	}
+
+	baudRate := config.SerialBaudRate
+	dataBits := config.SerialDataBits
+	if dataBits == 0 {
+		dataBits = 8
+	}
+
+	var stopBits serial.StopBits
+	switch config.SerialStopBits {
+	case "1.5":
+		stopBits = serial.OnePointFiveStopBits
+	case "2":
+		stopBits = serial.TwoStopBits
+	default:
+		stopBits = serial.OneStopBit
+	}
+
+	var parity serial.Parity
+	switch config.SerialParity {
+	case "odd":
+		parity = serial.OddParity
+	case "even":
+		parity = serial.EvenParity
+	case "mark":
+		parity = serial.MarkParity
+	case "space":
+		parity = serial.SpaceParity
+	default:
+		parity = serial.NoParity
+	}
+
+	serialPortMode = &serial.Mode{
+		BaudRate: baudRate,
+		DataBits: dataBits,
+		StopBits: stopBits,
+		Parity:   parity,
+	}
+
+	logger.Info().
+		Int("baud_rate", baudRate).
+		Int("data_bits", dataBits).
+		Str("stop_bits", config.SerialStopBits).
+		Str("parity", config.SerialParity).
+		Msg("serial settings loaded from config")
+}
+
+// saveSerialSettingsToConfig saves current serial port settings to config and persists to disk.
+func saveSerialSettingsToConfig() error {
+	if config == nil {
+		return fmt.Errorf("config not loaded")
+	}
+
+	var stopBits string
+	switch serialPortMode.StopBits {
+	case serial.OnePointFiveStopBits:
+		stopBits = "1.5"
+	case serial.TwoStopBits:
+		stopBits = "2"
+	default:
+		stopBits = "1"
+	}
+
+	var parity string
+	switch serialPortMode.Parity {
+	case serial.OddParity:
+		parity = "odd"
+	case serial.EvenParity:
+		parity = "even"
+	case serial.MarkParity:
+		parity = "mark"
+	case serial.SpaceParity:
+		parity = "space"
+	default:
+		parity = "none"
+	}
+
+	config.SerialBaudRate = serialPortMode.BaudRate
+	config.SerialDataBits = serialPortMode.DataBits
+	config.SerialStopBits = stopBits
+	config.SerialParity = parity
+
+	if err := SaveConfig(); err != nil {
+		return fmt.Errorf("failed to save serial settings: %w", err)
+	}
+
+	logger.Info().
+		Int("baud_rate", serialPortMode.BaudRate).
+		Int("data_bits", serialPortMode.DataBits).
+		Str("stop_bits", stopBits).
+		Str("parity", parity).
+		Msg("serial settings saved to config")
+
+	return nil
+}
+
 func rpcSetSerialSettings(settings SerialSettings) error {
+	logger.Info().
+		Str("baud_rate", settings.BaudRate).
+		Str("data_bits", settings.DataBits).
+		Str("stop_bits", settings.StopBits).
+		Str("parity", settings.Parity).
+		Msg("rpcSetSerialSettings called")
+
 	baudRate, err := strconv.Atoi(settings.BaudRate)
 	if err != nil {
+		logger.Error().Err(err).Msg("invalid baud rate")
 		return fmt.Errorf("invalid baud rate: %v", err)
 	}
 	dataBits, err := strconv.Atoi(settings.DataBits)
 	if err != nil {
+		logger.Error().Err(err).Msg("invalid data bits")
 		return fmt.Errorf("invalid data bits: %v", err)
 	}
 
@@ -1133,6 +1249,7 @@ func rpcSetSerialSettings(settings SerialSettings) error {
 	case "2":
 		stopBits = serial.TwoStopBits
 	default:
+		logger.Error().Str("stop_bits", settings.StopBits).Msg("invalid stop bits")
 		return fmt.Errorf("invalid stop bits: %s", settings.StopBits)
 	}
 
@@ -1149,8 +1266,10 @@ func rpcSetSerialSettings(settings SerialSettings) error {
 	case "space":
 		parity = serial.SpaceParity
 	default:
+		logger.Error().Str("parity", settings.Parity).Msg("invalid parity")
 		return fmt.Errorf("invalid parity: %s", settings.Parity)
 	}
+
 	serialPortMode = &serial.Mode{
 		BaudRate: baudRate,
 		DataBits: dataBits,
@@ -1158,7 +1277,59 @@ func rpcSetSerialSettings(settings SerialSettings) error {
 		Parity:   parity,
 	}
 
-	_ = port.SetMode(serialPortMode)
+	logger.Info().
+		Int("baud_rate", baudRate).
+		Int("data_bits", dataBits).
+		Interface("stop_bits", stopBits).
+		Interface("parity", parity).
+		Msg("serialPortMode updated")
+
+	// Persist settings to config file
+	if err := saveSerialSettingsToConfig(); err != nil {
+		logger.Warn().Err(err).Msg("failed to persist serial settings")
+		// Continue anyway - settings are still applied in memory
+	}
+
+	if port != nil {
+		if err := port.SetMode(serialPortMode); err != nil {
+			logger.Error().Err(err).Msg("failed to set port mode")
+		} else {
+			logger.Info().Msg("port mode updated successfully")
+		}
+	} else {
+		logger.Warn().Msg("serial port is nil, mode will be applied on next open")
+	}
+
+	return nil
+}
+
+// rpcConnectSerial opens the serial port with current settings
+func rpcConnectSerial() error {
+	logger.Info().
+		Int("baud_rate", serialPortMode.BaudRate).
+		Int("data_bits", serialPortMode.DataBits).
+		Msg("rpcConnectSerial called")
+
+	if err := reopenSerialPort(); err != nil {
+		logger.Error().Err(err).Msg("failed to connect serial port")
+		return fmt.Errorf("failed to connect serial port: %w", err)
+	}
+
+	logger.Info().Msg("serial port connected successfully")
+	return nil
+}
+
+// rpcDisconnectSerial closes the serial port
+func rpcDisconnectSerial() error {
+	logger.Info().Msg("rpcDisconnectSerial called")
+
+	if port != nil {
+		port.Close()
+		port = nil
+		logger.Info().Msg("serial port disconnected")
+	} else {
+		logger.Warn().Msg("serial port was already disconnected")
+	}
 
 	return nil
 }
@@ -1734,6 +1905,8 @@ var rpcHandlers = map[string]RPCHandler{
 	"setActiveExtension":        {Func: rpcSetActiveExtension, Params: []string{"extensionId"}},
 	"getSerialSettings":         {Func: rpcGetSerialSettings},
 	"setSerialSettings":         {Func: rpcSetSerialSettings, Params: []string{"settings"}},
+	"connectSerial":             {Func: rpcConnectSerial},
+	"disconnectSerial":          {Func: rpcDisconnectSerial},
 	"getUsbDevices":             {Func: rpcGetUsbDevices},
 	"setUsbDevices":             {Func: rpcSetUsbDevices, Params: []string{"devices"}},
 	"setUsbDeviceState":         {Func: rpcSetUsbDeviceState, Params: []string{"device", "enabled"}},

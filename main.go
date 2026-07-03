@@ -177,27 +177,6 @@ func Main() {
 	// Initialize VPN
 	initVPN()
 
-	//Auto update
-	//go func() {
-	//	time.Sleep(15 * time.Minute)
-	//	for {
-	//		logger.Debug().Bool("auto_update_enabled", config.AutoUpdateEnabled).Msg("UPDATING")
-	//		if !config.AutoUpdateEnabled {
-	//			return
-	//		}
-	//		if currentSession != nil {
-	//			logger.Debug().Msg("skipping update since a session is active")
-	//			time.Sleep(1 * time.Minute)
-	//			continue
-	//		}
-	//		err = TryUpdate(context.Background(), GetDeviceID())
-	//		if err != nil {
-	//			logger.Warn().Err(err).Msg("failed to auto update")
-	//		}
-	//		time.Sleep(1 * time.Hour)
-	//	}
-	//}()
-	//go RunFuseServer()
 	go RunWebServer()
 
 	// API and MCP services temporarily disabled for debugging

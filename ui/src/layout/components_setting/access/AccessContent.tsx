@@ -176,6 +176,7 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
   const { setModalView } = useLocalAuthModalStore();
   const [send] = useJsonRpc();
 
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [deviceId, setDeviceId] = useState<string | null>(null);
 
   const [tlsMode, setTlsMode] = useState<string>("disabled");
@@ -274,6 +275,7 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
 	const [netbirdStarting, setNetbirdStarting] = useState(false);
 	const [netbirdActionLoading, setNetbirdActionLoading] = useState(false);
 	const [netbirdAutoStartPending, setNetbirdAutoStartPending] = useState(false);
+	const netbirdManagementUrlRef = useRef("");
 	const netbirdAutoStartDeadlineRef = useRef(0);
 	const netbirdAutoStartSuppressedRef = useRef(false);
 	const netbirdBusy = netbirdStatusLoading || netbirdPolling || netbirdStarting || netbirdActionLoading || netbirdAutoStartPending;
@@ -294,17 +296,6 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
 		netbird: false,
 	});
 
-
-  const getTLSState = useCallback(() => {
-    send("getTLSState", {}, resp => {
-      if ("error" in resp) return console.error(resp.error);
-      const tlsState = resp.result as TLSState;
-
-      setTlsMode(tlsState.mode);
-      if (tlsState.certificate) setTlsCert(tlsState.certificate);
-      if (tlsState.privateKey) setTlsKey(tlsState.privateKey);
-    });
-  }, [send]);
 
   // Function to update TLS state - accepts a mode parameter
   const updateTlsState = useCallback(
@@ -423,7 +414,7 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
 				});
 			}
 			setNetbirdStatus(result);
-			const savedManagementUrl = result.managementUrl || netbirdManagementUrl;
+			const savedManagementUrl = result.managementUrl || netbirdManagementUrlRef.current;
 			const netbirdStartupActive =
 				result.running ||
 				result.state === "starting" ||
@@ -436,6 +427,7 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
 				netbirdStartupActive;
 			const reachedStableAutoStartState =
 				result.connected ||
+				result.state === "down" ||
 				result.state === "needs_auth" ||
 				result.state === "connected" ||
 				result.state === "connected_no_port";
@@ -463,11 +455,15 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
 			}
 			setNetbirdActionLoading(false);
 			// Load saved management URL from config
-			if (result.managementUrl && !netbirdManagementUrl) {
+			if (result.managementUrl && !netbirdManagementUrlRef.current) {
 				setNetbirdManagementUrl(result.managementUrl);
 			}
 		});
-	}, [send, netbirdManagementUrl]);
+	}, [send, netbirdPolling, netbirdStarting]);
+
+	useEffect(() => {
+		netbirdManagementUrlRef.current = netbirdManagementUrl;
+	}, [netbirdManagementUrl]);
 
 	const handleStartNetbird = useCallback(() => {
 		netbirdAutoStartSuppressedRef.current = false;
@@ -810,13 +806,33 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
 
   // Fetch device ID and cloud state on component mount
   useEffect(() => {
-    getTLSState();
+    let pending = 2;
+    const checkDone = () => {
+      pending--;
+      if (pending <= 0) setDataLoaded(true);
+    };
 
-    send("getDeviceID", {}, async resp => {
-      if ("error" in resp) return console.error(resp.error);
-      setDeviceId(resp.result as string);
+    send("getTLSState", {}, resp => {
+      if ("error" in resp) {
+        console.error(resp.error);
+      } else {
+        const tlsState = resp.result as TLSState;
+        setTlsMode(tlsState.mode);
+        if (tlsState.certificate) setTlsCert(tlsState.certificate);
+        if (tlsState.privateKey) setTlsKey(tlsState.privateKey);
+      }
+      checkDone();
     });
-  }, [send, getTLSState]);
+
+    send("getDeviceID", {}, resp => {
+      if ("error" in resp) {
+        console.error(resp.error);
+      } else {
+        setDeviceId(resp.result as string);
+      }
+      checkDone();
+    });
+  }, [send]);
 
   const getVpnAutoStartStatus = useCallback(() => {
     send("getVpnAutoStartStatus", {}, resp => {
@@ -1597,6 +1613,20 @@ function AccessContent({ setOpenDialog }: { setOpenDialog: (open: boolean) => vo
     );
   };
 
+
+  if (!dataLoaded) {
+    return (
+      <div className="space-y-4">
+        <SettingsPageHeader
+          title={$at("Access")}
+          description={$at("Manage the Access Control of the device")}
+        />
+        <div className="flex items-center justify-center py-12">
+          <LoadingSpinner className="h-6 w-6" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

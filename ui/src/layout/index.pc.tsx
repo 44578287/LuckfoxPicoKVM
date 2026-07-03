@@ -235,7 +235,7 @@ export default function PCHome() {
     {
       heartbeat: true,
       retryOnError: true,
-      reconnectAttempts: 15,
+      reconnectAttempts: 30,
       reconnectInterval: 1000,
       onReconnectStop: () => {
         console.log("Reconnect stopped");
