@@ -115,6 +115,7 @@ func createViewerAnswer(encodedOffer string) (string, error) {
 			if _, _, readErr := sender.Read(buf); readErr != nil {
 				return
 			}
+		}
 	}()
 
 	session := &viewerSession{pc: pc, track: track}
@@ -130,6 +131,17 @@ func createViewerAnswer(encodedOffer string) (string, error) {
 			}
 		}
 	})
+
+	// Do not leave abandoned offers alive indefinitely if the browser never
+	// completes ICE/DTLS after receiving the answer.
+	go func() {
+		time.Sleep(30 * time.Second)
+		state := pc.ConnectionState()
+		if state != webrtc.PeerConnectionStateConnected && state != webrtc.PeerConnectionStateClosed {
+			logger.Debug().Str("state", state.String()).Msg("closing stale enhanced viewer session")
+			_ = pc.Close()
+		}
+	}()
 
 	if err := pc.SetRemoteDescription(offer); err != nil {
 		_ = pc.Close()
