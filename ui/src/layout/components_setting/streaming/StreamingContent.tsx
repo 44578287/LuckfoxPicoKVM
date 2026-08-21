@@ -45,6 +45,17 @@ type RTSPStatus = {
   last_error?: string;
 };
 
+type RecordingStatus = {
+  running: boolean;
+  filename?: string;
+  path?: string;
+  codec?: string;
+  started_at?: string;
+  frames: number;
+  bytes: number;
+  last_error?: string;
+};
+
 const formatBytes = (bytes: number) => {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
@@ -62,7 +73,10 @@ export default function StreamingContent() {
   const [send] = useJsonRpc();
   const [status, setStatus] = useState<StreamStatus | null>(null);
   const [rtspStatus, setRtspStatus] = useState<RTSPStatus | null>(null);
+  const [recordingStatus, setRecordingStatus] = useState<RecordingStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const [recordingLoading, setRecordingLoading] = useState(false);
+  const [recordingFilename, setRecordingFilename] = useState("");
   const [rtpAddress, setRtpAddress] = useState("239.255.42.42:5004");
   const [rtpTTL, setRtpTTL] = useState(1);
 
@@ -81,6 +95,10 @@ export default function StreamingContent() {
     send("getRTSPStatus", {}, resp => {
       if ("error" in resp) return;
       setRtspStatus(resp.result as RTSPStatus);
+    });
+    send("getEncodedRecordingStatus", {}, resp => {
+      if ("error" in resp) return;
+      setRecordingStatus(resp.result as RecordingStatus);
     });
   }, [send]);
 
@@ -116,6 +134,35 @@ export default function StreamingContent() {
     });
   }, [send, refresh]);
 
+  const startRecording = useCallback(() => {
+    setRecordingLoading(true);
+    send("startEncodedRecording", { filename: recordingFilename }, resp => {
+      setRecordingLoading(false);
+      if ("error" in resp) {
+        notifications.error(`Failed to start recording: ${resp.error.data || "Unknown error"}`);
+        return;
+      }
+      setRecordingStatus(resp.result as RecordingStatus);
+      setRecordingFilename("");
+      notifications.success("Zero-reencode recording started");
+      refresh();
+    });
+  }, [send, recordingFilename, refresh]);
+
+  const stopRecording = useCallback(() => {
+    setRecordingLoading(true);
+    send("stopEncodedRecording", {}, resp => {
+      setRecordingLoading(false);
+      if ("error" in resp) {
+        notifications.error(`Failed to stop recording: ${resp.error.data || "Unknown error"}`);
+        return;
+      }
+      setRecordingStatus(resp.result as RecordingStatus);
+      notifications.success("Recording flushed and stopped");
+      refresh();
+    });
+  }, [send, refresh]);
+
   const copyText = useCallback(async (value: string, label: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -133,7 +180,7 @@ export default function StreamingContent() {
     <div className="space-y-4">
       <SettingsPageHeader
         title={$at("Streaming")}
-        description={$at("Multi-viewer video distribution, RTSP and LAN multicast")}
+        description={$at("Multi-viewer video distribution, RTSP, recording and LAN multicast")}
       />
 
       <div className="space-y-4">
@@ -191,6 +238,46 @@ export default function StreamingContent() {
           </div>
           {rtspStatus?.last_error && (
             <div className="text-red-500">{rtspStatus.last_error}</div>
+          )}
+        </div>
+
+        <SettingsItem
+          title={$at("Zero-reencode recording")}
+          description={$at("Write the existing RV1106 H.264/H.265 bitstream directly to local storage")}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Tag color={recordingStatus?.running ? "red" : "default"}>
+              {recordingStatus?.running ? $at("Recording") : $at("Stopped")}
+            </Tag>
+            {recordingStatus?.filename && <Tag>{recordingStatus.filename}</Tag>}
+            {recordingStatus?.running && <Tag>{formatBytes(recordingStatus.bytes || 0)}</Tag>}
+          </div>
+        </SettingsItem>
+
+        <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+          {!recordingStatus?.running ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={recordingFilename}
+                onChange={e => setRecordingFilename(e.target.value)}
+                style={{ maxWidth: 280 }}
+                placeholder={$at("Optional recording filename")}
+              />
+              <Button type="primary" danger loading={recordingLoading} onClick={startRecording}>
+                {$at("Start Recording")}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button danger loading={recordingLoading} onClick={stopRecording}>{$at("Stop Recording")}</Button>
+              <span className="text-sm">{(recordingStatus.frames || 0).toLocaleString()} frames · {formatBytes(recordingStatus.bytes || 0)}</span>
+            </div>
+          )}
+          <div className="text-xs text-slate-500 dark:text-slate-400">
+            {$at("Recordings are elementary .h264/.h265 files in the PicoKVM shared storage. No video re-encoding is performed.")}
+          </div>
+          {recordingStatus?.last_error && (
+            <div className="text-sm text-red-500">{recordingStatus.last_error}</div>
           )}
         </div>
 
