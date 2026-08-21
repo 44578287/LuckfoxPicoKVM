@@ -3,6 +3,7 @@ import { Layout, Menu, MenuProps, theme as AntTheme, Button, Drawer } from "antd
 import {
   RightOutlined,
   ArrowLeftOutlined,
+  VideoCameraOutlined,
 } from "@ant-design/icons";
 import GeneralSvg from "@assets/second/general.svg?react";
 import NetworkSvg from "@assets/second/network.svg?react";
@@ -19,6 +20,7 @@ import SettingsAccessIndex from "@/layout/components_setting/access/AccessConten
 import SettingsNetwork from "@/layout/components_setting/network/NetworkContent";
 import SettingsHardware from "@/layout/components_setting/hardware/HardwareContent";
 import SettingsAdvanced from "@/layout/components_setting/advanced/AdvancedContent";
+import SettingsStreaming from "@/layout/components_setting/streaming/StreamingContent";
 import SettingsVersion from "@/layout/components_setting/version/VersionContent";
 import { dark_bg2_style, text_color, text_primary_color } from "@/layout/theme_color";
 
@@ -30,7 +32,7 @@ interface MenuItem {
   icon: React.ReactNode;
 }
 
-type PageType = "menu" | "general" | "network" | "access" | "hardware" | "advanced" | "version";
+type PageType = "menu" | "general" | "network" | "access" | "hardware" | "streaming" | "advanced" | "version";
 
 interface SettingsDialogProps {
   visible?: boolean;
@@ -62,6 +64,7 @@ const SettingsModalMobile: React.FC<SettingsDialogProps> = () => {
     { key: "network", label: "Network", icon: <NetworkSvg /> },
     { key: "access", label: "Access", icon: <AccessSvg /> },
     { key: "hardware", label: "Hardware", icon: <HardwareSvg /> },
+    { key: "streaming", label: "Streaming", icon: <VideoCameraOutlined /> },
     { key: "advanced", label: "Advanced", icon: <AdvancedSvg /> },
     { key: "version", label: "Version", icon: <VersionSvg /> },
   ];
@@ -89,6 +92,8 @@ const SettingsModalMobile: React.FC<SettingsDialogProps> = () => {
         return <SettingsAccessIndex />;
       case "hardware":
         return <SettingsHardware />;
+      case "streaming":
+        return <SettingsStreaming />;
       case "advanced":
         return <SettingsAdvanced />;
       case "version":
