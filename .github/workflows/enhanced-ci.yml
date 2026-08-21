@@ -63,21 +63,28 @@ jobs:
           npm ci
           npm run build:device
       - name: Build PicoKVM ARMv7 application
-        run: make build_dev VERSION_DEV="0.1.4-enhanced.${GITHUB_RUN_NUMBER}.${GITHUB_SHA::7}"
-      - name: Prepare test artifact
         run: |
-          mkdir -p dist
+          APP_VERSION="0.1.5-enhanced.${GITHUB_RUN_NUMBER}.${GITHUB_SHA::7}"
+          echo "APP_VERSION=${APP_VERSION}" >> "$GITHUB_ENV"
+          make build_dev VERSION_DEV="${APP_VERSION}"
+      - name: Prepare test and Web OTA artifacts
+        run: |
+          mkdir -p dist/web-ota
           cp bin/kvm_app dist/kvm_app
           cp ENHANCED.md dist/ENHANCED.md
           sha256sum dist/kvm_app > dist/SHA256SUMS
+
           cat > dist/INSTALL.txt <<'EOF'
           PicoKVM Enhanced test build
 
-          Target path on PicoKVM:
+          Manual target path on PicoKVM:
             /userdata/picokvm/bin/kvm_app
 
-          Before replacing the binary, keep a backup of the original kvm_app.
+          Before replacing the binary manually, keep a backup of the original kvm_app.
           The Enhanced branch does not modify System firmware, kernel, DTS or bootloader.
+
+          Preferred installation method:
+            Upload the PicoKVM-Enhanced-WebOTA-*.zip file through the PicoKVM local Web update UI.
 
           After installing/restarting:
             Normal PicoKVM Web: vendor port/UI
@@ -85,6 +92,20 @@ jobs:
             MCP + raw video:     http://PICOKVM_IP:8081
             Multi-client viewer: http://PICOKVM_IP:8082/
           EOF
+
+          cp bin/kvm_app dist/web-ota/kvm_app
+          printf 'AppVersion: %s\nSystemVersion: 0.1.8\n' "$APP_VERSION" > dist/web-ota/version.txt
+          (
+            cd dist/web-ota
+            zip -q -9 "../PicoKVM-Enhanced-WebOTA-${APP_VERSION}.zip" version.txt kvm_app
+          )
+          rm -rf dist/web-ota
+          sha256sum dist/PicoKVM-Enhanced-WebOTA-*.zip > dist/WEB-OTA-SHA256SUMS
+
+          # Fail the build if the OTA ZIP layout ever regresses. The PicoKVM
+          # local updater requires version.txt and kvm_app at the archive root.
+          unzip -Z1 dist/PicoKVM-Enhanced-WebOTA-*.zip | grep -qx 'version.txt'
+          unzip -Z1 dist/PicoKVM-Enhanced-WebOTA-*.zip | grep -qx 'kvm_app'
       - uses: actions/upload-artifact@v4
         with:
           name: picokvm-enhanced-${{ github.run_number }}-${{ github.sha }}
