@@ -7,6 +7,7 @@ import {
   DesktopOutlined,
   ToolOutlined,
   TagOutlined,
+  VideoCameraOutlined,
   RightOutlined,
 } from "@ant-design/icons";
 import { useReactAt } from "i18n-auto-extractor/react";
@@ -16,6 +17,7 @@ import SettingsGeneral from "@/layout/components_setting/general/GeneralContent"
 import SettingsNetwork from "@/layout/components_setting/network/NetworkContent";
 import SettingsHardware from "@/layout/components_setting/hardware/HardwareContent";
 import SettingsAdvanced from "@/layout/components_setting/advanced/AdvancedContent";
+import SettingsStreaming from "@/layout/components_setting/streaming/StreamingContent";
 import SettingsVersion from "@/layout/components_setting/version/VersionContent";
 import { dark_bd_style, dark_bg2_style } from "@/layout/theme_color";
 
@@ -38,6 +40,7 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
     { key: "network", label: "Network", icon: <WifiOutlined /> },
     { key: "access", label: "Access", icon: <SafetyCertificateOutlined /> },
     { key: "hardware", label: "Hardware", icon: <DesktopOutlined /> },
+    { key: "streaming", label: "Streaming", icon: <VideoCameraOutlined /> },
     { key: "advanced", label: "Advanced", icon: <ToolOutlined /> },
     { key: "version", label: "Version", icon: <TagOutlined /> },
   ];
@@ -56,6 +59,8 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
         return <SettingsAccessIndex />;
       case "hardware":
         return <SettingsHardware />;
+      case "streaming":
+        return <SettingsStreaming />;
       case "advanced":
         return <SettingsAdvanced />;
       case "version":
