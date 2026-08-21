@@ -20,6 +20,7 @@ import SettingsAdvanced from "@/layout/components_setting/advanced/AdvancedConte
 import SettingsStreaming from "@/layout/components_setting/streaming/StreamingContent";
 import SettingsVersion from "@/layout/components_setting/version/VersionContent";
 import { dark_bd_style, dark_bg2_style } from "@/layout/theme_color";
+import { useEnhancedAt } from "@/locales/enhanced";
 
 interface MenuItem {
   key: string;
@@ -35,6 +36,7 @@ interface SettingsDialogProps {
 const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
   const [selectedMenu, setSelectedMenu] = useState<string>("general");
   const { $at } = useReactAt();
+  const { $eat } = useEnhancedAt();
   const menuItems: MenuItem[] = [
     { key: "general", label: "General", icon: <SettingOutlined /> },
     { key: "network", label: "Network", icon: <WifiOutlined /> },
@@ -44,6 +46,8 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
     { key: "advanced", label: "Advanced", icon: <ToolOutlined /> },
     { key: "version", label: "Version", icon: <TagOutlined /> },
   ];
+
+  const menuLabel = (item: MenuItem) => item.key === "streaming" ? $eat(item.label) : $at(item.label);
 
   const handleMenuSelect: MenuProps["onClick"] = ({ key }) => {
     setSelectedMenu(key as string);
@@ -100,7 +104,7 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
                 width: "100%",
                 padding: "4px 0",
               }}>
-                <span>{$at(item.label)}</span>
+                <span>{menuLabel(item)}</span>
                 <RightOutlined style={{
                   fontSize: "12px",
                   marginLeft: "8px",
