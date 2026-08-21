@@ -300,6 +300,8 @@ func handleViewerPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
 	_, _ = w.Write([]byte(viewerHTML))
 }
 
@@ -310,38 +312,83 @@ const viewerHTML = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PicoKVM Enhanced Viewer</title>
 <style>
-html,body{margin:0;width:100%;height:100%;background:#080b10;color:#e6edf3;font-family:system-ui,sans-serif}body{display:flex;flex-direction:column}.bar{display:flex;gap:8px;align-items:center;padding:10px 12px;background:#11161e;border-bottom:1px solid #263041}.bar strong{margin-right:auto}.bar input{min-width:260px;background:#080b10;color:#e6edf3;border:1px solid #344258;border-radius:6px;padding:7px 9px}.bar button{border:0;border-radius:6px;padding:8px 13px;background:#2f81f7;color:white;cursor:pointer}.status{font-size:12px;color:#8b949e}.stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}.stage video{width:100%;height:100%;object-fit:contain;background:#000}
+html,body{margin:0;width:100%;height:100%;background:#080b10;color:#e6edf3;font-family:system-ui,sans-serif}body{display:flex;flex-direction:column}.bar{display:flex;gap:8px;align-items:center;padding:10px 12px;background:#11161e;border-bottom:1px solid #263041}.bar strong{margin-right:auto}.bar input{min-width:260px;background:#080b10;color:#e6edf3;border:1px solid #344258;border-radius:6px;padding:7px 9px}.bar button{border:0;border-radius:6px;padding:8px 13px;background:#2f81f7;color:white;cursor:pointer}.bar button:disabled{opacity:.55;cursor:not-allowed}.status{font-size:12px;color:#8b949e}.stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}.stage video{width:100%;height:100%;object-fit:contain;background:#000}
 </style>
 </head>
 <body>
-<div class="bar"><strong>PicoKVM Enhanced · Viewer</strong><span id="status" class="status">Disconnected</span><input id="token" type="password" placeholder="API key"><button id="connect">Connect</button></div>
+<div class="bar"><strong>PicoKVM Enhanced · Viewer</strong><span id="status" class="status"></span><input id="token" type="password" placeholder="API Key"><button id="connect"></button></div>
 <div class="stage"><video id="video" autoplay playsinline muted></video></div>
 <script>
 const statusEl=document.getElementById('status');
 const video=document.getElementById('video');
-let pc;
-function waitForIceGathering(p){if(p.iceGatheringState==='complete')return Promise.resolve();return new Promise(resolve=>{const f=()=>{if(p.iceGatheringState==='complete'){p.removeEventListener('icegatheringstatechange',f);resolve();}};p.addEventListener('icegatheringstatechange',f);setTimeout(resolve,5000);});}
+const connectButton=document.getElementById('connect');
+const tokenInput=document.getElementById('token');
+const isZh=(navigator.language||'').toLowerCase().startsWith('zh');
+const strings=isZh?{
+  disconnected:'未连接',connecting:'连接中…',connected:'已连接',failed:'连接失败',closed:'已关闭',disconnectedState:'连接中断',connect:'连接',reconnect:'重新连接',error:'错误',viewers:'观看者'
+}:{
+  disconnected:'Disconnected',connecting:'Connecting…',connected:'Connected',failed:'Failed',closed:'Closed',disconnectedState:'Disconnected',connect:'Connect',reconnect:'Reconnect',error:'Error',viewers:'viewers'
+};
+let activePc=null;
+let connectionGeneration=0;
+let connecting=false;
+statusEl.textContent=strings.disconnected;
+connectButton.textContent=strings.connect;
+function waitForIceGathering(p){if(p.iceGatheringState==='complete')return Promise.resolve();return new Promise(resolve=>{let done=false;const finish=()=>{if(done)return;done=true;p.removeEventListener('icegatheringstatechange',f);resolve();};const f=()=>{if(p.iceGatheringState==='complete')finish();};p.addEventListener('icegatheringstatechange',f);setTimeout(finish,5000);});}
 function encodeSD(d){return btoa(JSON.stringify(d));}
 function decodeSD(s){return JSON.parse(atob(s));}
-document.getElementById('connect').onclick=async()=>{
+function isCurrent(candidate,generation){return activePc===candidate&&connectionGeneration===generation;}
+function stateLabel(state){if(state==='connected')return strings.connected;if(state==='failed')return strings.failed;if(state==='closed')return strings.closed;if(state==='disconnected')return strings.disconnectedState;if(state==='connecting'||state==='new')return strings.connecting;return state;}
+function closeActive(){if(activePc){const old=activePc;activePc=null;old.onconnectionstatechange=null;old.close();}}
+async function connectViewer(){
+  if(connecting)return;
+  const generation=++connectionGeneration;
+  connecting=true;
+  connectButton.disabled=true;
+  connectButton.textContent=strings.connecting;
+  closeActive();
+  video.srcObject=null;
+  const candidate=new RTCPeerConnection();
+  activePc=candidate;
   try{
-    if(pc)pc.close();
-    statusEl.textContent='Connecting…';
-    pc=new RTCPeerConnection();
-    pc.addTransceiver('video',{direction:'recvonly'});
-    pc.ontrack=e=>{video.srcObject=e.streams[0]||new MediaStream([e.track]);};
-    pc.onconnectionstatechange=()=>{statusEl.textContent=pc.connectionState;};
-    const offer=await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await waitForIceGathering(pc);
-    const token=document.getElementById('token').value;
-    const res=await fetch('/offer',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({sd:encodeSD(pc.localDescription)})});
+    statusEl.textContent=strings.connecting;
+    candidate.addTransceiver('video',{direction:'recvonly'});
+    candidate.ontrack=e=>{if(!isCurrent(candidate,generation))return;video.srcObject=e.streams[0]||new MediaStream([e.track]);};
+    candidate.onconnectionstatechange=()=>{if(!isCurrent(candidate,generation))return;statusEl.textContent=stateLabel(candidate.connectionState);};
+    const offer=await candidate.createOffer();
+    if(!isCurrent(candidate,generation))return;
+    await candidate.setLocalDescription(offer);
+    if(!isCurrent(candidate,generation))return;
+    await waitForIceGathering(candidate);
+    if(!isCurrent(candidate,generation))return;
+    if(!candidate.localDescription)throw new Error('local description unavailable');
+    const token=tokenInput.value;
+    const res=await fetch('/offer',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({sd:encodeSD(candidate.localDescription)})});
+    if(!isCurrent(candidate,generation))return;
     if(!res.ok)throw new Error(await res.text());
     const data=await res.json();
-    await pc.setRemoteDescription(decodeSD(data.sd));
-    statusEl.textContent=pc.connectionState+' · viewers '+data.viewers+'/'+8;
-  }catch(e){statusEl.textContent='Error: '+e.message;if(pc)pc.close();}
-};
+    if(!isCurrent(candidate,generation))return;
+    if(candidate.signalingState!=='have-local-offer')throw new Error('unexpected signaling state: '+candidate.signalingState);
+    await candidate.setRemoteDescription(decodeSD(data.sd));
+    if(!isCurrent(candidate,generation))return;
+    statusEl.textContent=stateLabel(candidate.connectionState)+' · '+strings.viewers+' '+data.viewers+'/8';
+  }catch(e){
+    if(isCurrent(candidate,generation)){
+      statusEl.textContent=strings.error+': '+e.message;
+      activePc=null;
+      candidate.onconnectionstatechange=null;
+      candidate.close();
+    }
+  }finally{
+    if(connectionGeneration===generation){
+      connecting=false;
+      connectButton.disabled=false;
+      connectButton.textContent=activePc?strings.reconnect:strings.connect;
+    }
+  }
+}
+connectButton.onclick=connectViewer;
+window.addEventListener('beforeunload',()=>{connectionGeneration++;closeActive();});
 </script>
 </body>
 </html>`
