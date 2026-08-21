@@ -17,8 +17,15 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Resolve Go module lock
-        run: go mod tidy
+      - name: Download Go modules
+        run: go mod download
+      - name: Verify Go module lock
+        run: |
+          cp go.mod /tmp/go.mod.before
+          cp go.sum /tmp/go.sum.before
+          go mod tidy
+          cmp -s go.mod /tmp/go.mod.before
+          cmp -s go.sum /tmp/go.sum.before
       - name: Prepare embedded static placeholder
         run: |
           mkdir -p static
@@ -59,8 +66,8 @@ jobs:
           node-version: 22.15.0
           cache: npm
           cache-dependency-path: ui/package-lock.json
-      - name: Resolve Go module lock
-        run: go mod tidy
+      - name: Download Go modules
+        run: go mod download
       - name: Build embedded device UI
         working-directory: ui
         run: |
@@ -73,10 +80,9 @@ jobs:
           make build_dev VERSION_DEV="${APP_VERSION}"
       - name: Prepare test and Web OTA artifacts
         run: |
-          mkdir -p dist/web-ota dist/module-lock
+          mkdir -p dist/web-ota
           cp bin/kvm_app dist/kvm_app
           cp ENHANCED.md dist/ENHANCED.md
-          cp go.mod go.sum dist/module-lock/
           sha256sum dist/kvm_app > dist/SHA256SUMS
 
           cat > dist/INSTALL.txt <<'EOF'
