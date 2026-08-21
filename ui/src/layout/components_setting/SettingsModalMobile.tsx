@@ -23,6 +23,7 @@ import SettingsAdvanced from "@/layout/components_setting/advanced/AdvancedConte
 import SettingsStreaming from "@/layout/components_setting/streaming/StreamingContent";
 import SettingsVersion from "@/layout/components_setting/version/VersionContent";
 import { dark_bg2_style, text_color, text_primary_color } from "@/layout/theme_color";
+import { useEnhancedAt } from "@/locales/enhanced";
 
 const { Header, Content } = Layout;
 
@@ -57,6 +58,7 @@ const SettingsModalMobile: React.FC<SettingsDialogProps> = () => {
   const { styles } = useStyles();
   const [currentPage, setCurrentPage] = useState<PageType>("menu");
   const { $at } = useReactAt();
+  const { $eat } = useEnhancedAt();
   const token = AntTheme.useToken();
 
   const menuItems: MenuItem[] = [
@@ -69,6 +71,8 @@ const SettingsModalMobile: React.FC<SettingsDialogProps> = () => {
     { key: "version", label: "Version", icon: <VersionSvg /> },
   ];
 
+  const menuLabel = (item: MenuItem) => item.key === "streaming" ? $eat(item.label) : $at(item.label);
+
   const handleMenuSelect: MenuProps["onClick"] = ({ key }) => {
     setCurrentPage(key as PageType);
   };
@@ -79,7 +83,7 @@ const SettingsModalMobile: React.FC<SettingsDialogProps> = () => {
 
   const getPageTitle = () => {
     const item = menuItems.find(item => item.key === currentPage);
-    return item ? $at(item.label) : "Settings";
+    return item ? menuLabel(item) : $at("Settings");
   };
 
   const renderContent = () => {
@@ -130,7 +134,7 @@ const SettingsModalMobile: React.FC<SettingsDialogProps> = () => {
                 width: "100%",
                 padding: "0px 0",
               }}>
-                <span style={{ fontSize: "16px" }}>{$at(item.label)}</span>
+                <span style={{ fontSize: "16px" }}>{menuLabel(item)}</span>
                 <RightOutlined style={{
                   fontSize: "12px",
                   color: token.token.colorTextSecondary,
@@ -192,7 +196,7 @@ const SettingsModalMobile: React.FC<SettingsDialogProps> = () => {
                     position: "absolute",
                     left: "4px",
                   }}
-                >Back</Button>
+                >{$at("Back")}</Button>
                 <span
                   style={{
                     fontSize: "16px",
