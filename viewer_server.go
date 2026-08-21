@@ -52,6 +52,7 @@ func StartViewerServer(port int) {
 	}
 	mux.Handle("/offer", offerHandler)
 	mux.Handle("/status", statusHandler)
+	registerRTPRoutes(mux)
 
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info().Str("addr", addr).Int32("max_viewers", maxEnhancedWebRTCViewers).Msg("Starting enhanced read-only WebRTC viewer server")
