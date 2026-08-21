@@ -35,8 +35,9 @@ func getEnhancedStreamStatus() EnhancedStreamStatus {
 }
 
 func StartMCP(port int, stdio bool) {
-	s := server.NewMCPServer("picokvm-mcp", "1.3.0-enhanced")
+	s := server.NewMCPServer("picokvm-mcp", "1.4.0-enhanced")
 	registerMCPTools(s)
+	registerEnhancedExtraMCPTools(s)
 
 	if stdio {
 		logger.Info().Msg("Starting MCP stdio server")
