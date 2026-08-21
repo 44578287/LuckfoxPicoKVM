@@ -194,14 +194,19 @@ func handleRTSPConnection(conn net.Conn) {
 				client.respond(cseq, 455, "Method Not Valid in This State", nil, "")
 				continue
 			}
-			if err := client.startPlaying(); err != nil {
+			start, err := client.preparePlaying()
+			if err != nil {
 				client.respond(cseq, 453, "Not Enough Bandwidth", nil, "")
 				continue
 			}
+			// RTSP control response must be serialized before the first interleaved
+			// RTP packet; otherwise strict TCP clients can see binary RTP where
+			// they are still waiting for the PLAY response.
 			client.respond(cseq, 200, "OK", map[string]string{
 				"Session": client.sessionID,
 				"Range":   "npt=0.000-",
 			}, "")
+			start()
 
 		case "PAUSE":
 			client.stopPlaying()
@@ -360,16 +365,17 @@ func transportParam(transport, name string) string {
 	return ""
 }
 
-func (c *rtspClient) startPlaying() error {
+func (c *rtspClient) preparePlaying() (func(), error) {
 	c.playMu.Lock()
-	defer c.playMu.Unlock()
 	if c.playing {
-		return nil
+		c.playMu.Unlock()
+		return func() {}, nil
 	}
 	for {
 		current := rtspClients.Load()
 		if current >= maxRTSPClients {
-			return fmt.Errorf("RTSP client limit reached")
+			c.playMu.Unlock()
+			return nil, fmt.Errorf("RTSP client limit reached")
 		}
 		if rtspClients.CompareAndSwap(current, current+1) {
 			break
@@ -381,13 +387,18 @@ func (c *rtspClient) startPlaying() error {
 		codec = "avc"
 	}
 	id, frames := videoBroadcaster.SubscribeBuffered(defaultVideoSubscriberBuffer)
+	stop := make(chan struct{})
 	c.playing = true
-	c.stopPlay = make(chan struct{})
+	c.stopPlay = stop
 	c.subID = id
 	c.codec = codec
-	go c.streamRTP(frames, codec, c.stopPlay)
-	logger.Info().Str("subscriber_id", id).Str("codec", codec).Int32("clients", rtspClients.Load()).Msg("RTSP client started playing")
-	return nil
+	c.playMu.Unlock()
+
+	start := func() {
+		logger.Info().Str("subscriber_id", id).Str("codec", codec).Int32("clients", rtspClients.Load()).Msg("RTSP client started playing")
+		go c.streamRTP(frames, codec, stop)
+	}
+	return start, nil
 }
 
 func (c *rtspClient) stopPlaying() {
