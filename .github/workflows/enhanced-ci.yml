@@ -17,6 +17,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Prepare embedded static placeholder
+        run: |
+          mkdir -p static
+          printf '<!doctype html><title>CI placeholder</title>\n' > static/index.html
       - name: Test backend
         run: go test ./...
 
