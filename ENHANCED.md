@@ -8,6 +8,8 @@ This branch is an application-layer enhancement of Luckfox PicoKVM. The initial 
 
 The existing `VideoBroadcaster` now exposes a lock-free subscriber count for status/automation.
 
+The fan-out path is deliberately low-latency: each consumer has a small bounded queue (8 encoded frames by default). Slow consumers drop frames instead of blocking the native capture/encoder path, and queued frame references are explicitly released when a consumer disconnects.
+
 The MCP listener on TCP 8081 also exposes the existing hardware-encoded elementary video stream:
 
 - `GET /video/stream`
@@ -50,14 +52,65 @@ Open the page, enter the same API key used by MCP/LAN API, then press **Connect*
 
 This viewer is deliberately separate from the normal PicoKVM Web UI:
 
-- many viewer PeerConnections may coexist
+- up to 8 viewer PeerConnections may coexist in the current device-local design
+- pending/abandoned viewer offers are also counted against that bound and automatically reclaimed
 - viewers receive video only
 - no HID/RPC/disk/serial control DataChannels are created
 - the normal PicoKVM Web page remains the single controller
 - viewers and raw HTTP clients share the same `VideoBroadcaster`
 - the RV1106 hardware encoder still runs only once
 
+Authenticated viewer status is available at:
+
+```text
+GET http://PICOKVM_IP:8082/status
+```
+
 This is the first safe step toward a full viewer/operator ownership model without removing the vendor session lock and accidentally allowing multiple browsers to fight over keyboard/mouse input.
+
+### RTP multicast for large LAN viewer counts
+
+The same TCP 8082 service can start one RTP/UDP multicast stream sourced from the hardware encoded fan-out. This is intended for many viewers on the same LAN: PicoKVM sends one network stream and the switch/network replicates it instead of PicoKVM sending one WebRTC copy per viewer.
+
+Default multicast destination:
+
+```text
+239.255.42.42:5004, TTL 1
+```
+
+Authenticated control endpoints:
+
+- `POST /rtp/start`
+- `POST /rtp/stop`
+- `GET /rtp/status`
+
+The generated SDP is available while multicast is running:
+
+- `GET /rtp.sdp`
+
+Start with defaults:
+
+```bash
+curl -X POST -H "Authorization: Bearer YOUR_API_KEY" http://PICOKVM_IP:8082/rtp/start
+```
+
+Or select another IPv4 multicast group/port and TTL:
+
+```bash
+curl -X POST -H "Authorization: Bearer YOUR_API_KEY" -H "Content-Type: application/json" \
+  -d '{"address":"239.255.42.42:5004","ttl":1}' \
+  http://PICOKVM_IP:8082/rtp/start
+```
+
+Then a LAN client can open the SDP, for example:
+
+```bash
+ffplay -fflags nobuffer -flags low_delay http://PICOKVM_IP:8082/rtp.sdp
+```
+
+RTP uses the existing H.264/H.265 hardware bitstream and Pion packetizers; it does not re-encode. The sender uses a 1200-byte RTP MTU, dynamic payload type 96 and a 90 kHz video clock. If the PicoKVM encoder changes between AVC and HEVC while multicast is active, the RTP sender stops automatically and reports an error so incompatible codec data is never mixed into one RTP session.
+
+Multicast is intentionally opt-in. TTL defaults to 1 so it stays on the local routed segment unless explicitly changed.
 
 ### Service layout
 
@@ -66,7 +119,7 @@ This is the first safe step toward a full viewer/operator ownership model withou
 | vendor | Normal PicoKVM Web | KVM control/UI |
 | 8080 | Enhanced LAN API | automation API |
 | 8081 | Enhanced MCP + raw video | MCP SSE, raw H.264/H.265, media status |
-| 8082 | Enhanced Viewer | read-only multi-client WebRTC |
+| 8082 | Enhanced Viewer + RTP control | read-only multi-client WebRTC and optional LAN multicast |
 
 ## MCP 1.1 enhanced tools
 
@@ -80,6 +133,8 @@ In addition to the upstream HID/screenshot/video-state tools:
 - `probe_mcu`
 
 Power/reset and host LED state reuse the existing PicoKVM extension-board RPC/GPIO implementation; no duplicate GPIO mapping is introduced.
+
+RTP multicast currently has authenticated HTTP control on port 8082. MCP start/stop/status wrappers are the next small integration step after device validation of the multicast packet stream.
 
 ## RV1106 MCU work
 
@@ -105,8 +160,9 @@ The new port-8082 viewer bypasses that control-session limitation safely. The ne
 - exactly one active HID/control owner
 - explicit take/release-control action
 - one hardware encode shared by all viewers
-- RTSP/RTP sinks fed from the same encoded-frame fan-out
-- optional external relay/SFU when viewer count would saturate the 100 Mbps NIC
+- optional RTP multicast for efficient large LAN audiences
+- RTSP unicast gateway if needed for legacy players/NVRs
+- optional external relay/SFU for large remote viewer counts where multicast is unavailable
 
 ## Validation
 
@@ -115,5 +171,6 @@ The new port-8082 viewer bypasses that control-session limitation safely. The ne
 - `go test ./...`
 - `npm ci`
 - `npm run build:device`
+- ARMv7 PicoKVM application build and artifact packaging
 
-Do not merge `enhanced/dev` into `luckfox` until CI and device tests pass.
+Do not merge `enhanced/dev` into `luckfox` until CI and real-device tests pass.
