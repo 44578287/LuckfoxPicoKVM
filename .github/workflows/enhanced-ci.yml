@@ -17,8 +17,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Download Go modules
-        run: go mod download
+      - name: Resolve Go module lock
+        run: go mod tidy
       - name: Prepare embedded static placeholder
         run: |
           mkdir -p static
@@ -59,8 +59,8 @@ jobs:
           node-version: 22.15.0
           cache: npm
           cache-dependency-path: ui/package-lock.json
-      - name: Download Go modules
-        run: go mod download
+      - name: Resolve Go module lock
+        run: go mod tidy
       - name: Build embedded device UI
         working-directory: ui
         run: |
@@ -73,9 +73,10 @@ jobs:
           make build_dev VERSION_DEV="${APP_VERSION}"
       - name: Prepare test and Web OTA artifacts
         run: |
-          mkdir -p dist/web-ota
+          mkdir -p dist/web-ota dist/module-lock
           cp bin/kvm_app dist/kvm_app
           cp ENHANCED.md dist/ENHANCED.md
+          cp go.mod go.sum dist/module-lock/
           sha256sum dist/kvm_app > dist/SHA256SUMS
 
           cat > dist/INSTALL.txt <<'EOF'
@@ -108,8 +109,6 @@ jobs:
           rm -rf dist/web-ota
           sha256sum dist/PicoKVM-Enhanced-WebOTA-*.zip > dist/WEB-OTA-SHA256SUMS
 
-          # Fail the build if the OTA ZIP layout ever regresses. The PicoKVM
-          # local updater requires version.txt and kvm_app at the archive root.
           unzip -Z1 dist/PicoKVM-Enhanced-WebOTA-*.zip | grep -qx 'version.txt'
           unzip -Z1 dist/PicoKVM-Enhanced-WebOTA-*.zip | grep -qx 'kvm_app'
       - uses: actions/upload-artifact@v4
