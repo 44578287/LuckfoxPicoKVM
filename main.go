@@ -100,18 +100,21 @@ func Main() {
 	// Initialize native video socket server
 	StartVideoDataSocketServer()
 
-	// Set up callbacks for HTTP video stream subscribers
-	// When first HTTP subscriber connects and there's no WebRTC session, start video
+	// Set up callbacks for all encoded-video fan-out subscribers (raw HTTP,
+	// read-only WebRTC viewers and future RTSP/RTP sinks). The native encoder is
+	// started once for the first fan-out consumer when the normal KVM WebRTC
+	// control session is not already keeping it alive.
 	videoBroadcaster.onFirstSubscribe = func() {
 		if actionSessions == 0 {
-			logger.Info().Msg("First HTTP video subscriber connected, starting video stream")
+			logger.Info().Msg("First video fan-out subscriber connected, starting video stream")
 			_ = writeCtrlAction("start_video")
 		}
 	}
-	// When last HTTP subscriber disconnects and there's no WebRTC session, stop video
+	// Symmetrically stop native video only when neither a normal KVM WebRTC
+	// control session nor a fan-out consumer still needs it.
 	videoBroadcaster.onLastUnsubscribe = func() {
 		if actionSessions == 0 {
-			logger.Info().Msg("Last HTTP video subscriber disconnected, stopping video stream")
+			logger.Info().Msg("Last video fan-out subscriber disconnected, stopping video stream")
 			_ = writeCtrlAction("stop_video")
 		}
 	}
@@ -179,13 +182,19 @@ func Main() {
 
 	go RunWebServer()
 
-	// API and MCP services temporarily disabled for debugging
+	// Enhanced LAN automation/media services. These are independent from the
+	// normal KVM web server so experiments can be reverted without touching the
+	// vendor UI/control path.
 	go func() {
 		StartAPIServer(8080)
 	}()
 
 	go func() {
 		StartMCP(8081, false)
+	}()
+
+	go func() {
+		StartViewerServer(8082)
 	}()
 
 	go RunWebSecureServer()
