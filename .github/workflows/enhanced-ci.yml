@@ -36,3 +36,54 @@ jobs:
         run: npm ci
       - name: Build device UI
         run: npm run build:device
+
+  package:
+    runs-on: ubuntu-latest
+    needs:
+      - backend
+      - ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.15.0
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Build embedded device UI
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build:device
+      - name: Build PicoKVM ARMv7 application
+        run: make build_dev VERSION_DEV="0.1.4-enhanced.${GITHUB_RUN_NUMBER}.${GITHUB_SHA::7}"
+      - name: Prepare test artifact
+        run: |
+          mkdir -p dist
+          cp bin/kvm_app dist/kvm_app
+          cp ENHANCED.md dist/ENHANCED.md
+          sha256sum dist/kvm_app > dist/SHA256SUMS
+          cat > dist/INSTALL.txt <<'EOF'
+          PicoKVM Enhanced test build
+
+          Target path on PicoKVM:
+            /userdata/picokvm/bin/kvm_app
+
+          Before replacing the binary, keep a backup of the original kvm_app.
+          The Enhanced branch does not modify System firmware, kernel, DTS or bootloader.
+
+          After installing/restarting:
+            Normal PicoKVM Web: vendor port/UI
+            LAN API:             http://PICOKVM_IP:8080
+            MCP + raw video:     http://PICOKVM_IP:8081
+            Multi-client viewer: http://PICOKVM_IP:8082/
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: picokvm-enhanced-${{ github.run_number }}-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
