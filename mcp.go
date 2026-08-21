@@ -35,7 +35,7 @@ func getEnhancedStreamStatus() EnhancedStreamStatus {
 }
 
 func StartMCP(port int, stdio bool) {
-	s := server.NewMCPServer("picokvm-mcp", "1.2.0-enhanced")
+	s := server.NewMCPServer("picokvm-mcp", "1.3.0-enhanced")
 	registerMCPTools(s)
 
 	if stdio {
@@ -256,6 +256,41 @@ func registerMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("stop_rtp_multicast",
 		mcp.WithDescription("Stop the optional LAN RTP multicast stream"),
 	), handleStopRTPMulticast)
+
+	// Virtual-media and USB recovery tools make the MCP endpoint useful for
+	// unattended provisioning/recovery without duplicating the vendor logic.
+	s.AddTool(mcp.NewTool("get_usb_state",
+		mcp.WithDescription("Get the USB gadget connection state"),
+	), handleGetUSBState)
+
+	s.AddTool(mcp.NewTool("usb_wakeup",
+		mcp.WithDescription("Send a USB remote-wakeup signal to the attached host"),
+	), handleUSBWakeup)
+
+	s.AddTool(mcp.NewTool("get_virtual_media_state",
+		mcp.WithDescription("Get the currently mounted virtual CD-ROM/disk state"),
+	), handleGetVirtualMediaState)
+
+	s.AddTool(mcp.NewTool("list_virtual_media",
+		mcp.WithDescription("List internal and SD-card virtual-media images and current mount state"),
+	), handleListVirtualMedia)
+
+	s.AddTool(mcp.NewTool("mount_virtual_media",
+		mcp.WithDescription("Mount an existing internal or SD-card image as USB virtual media"),
+		mcp.WithString("filename", mcp.Required(), mcp.Description("Image filename")),
+		mcp.WithString("source", mcp.Enum("storage", "sd"), mcp.Description("Image source; defaults to storage")),
+		mcp.WithString("mode", mcp.Enum("auto", "cdrom", "disk"), mcp.Description("USB media mode; defaults to auto")),
+	), handleMountVirtualMedia)
+
+	s.AddTool(mcp.NewTool("mount_virtual_media_url",
+		mcp.WithDescription("Mount a remote HTTP image directly as USB virtual media"),
+		mcp.WithString("url", mcp.Required(), mcp.Description("HTTP/HTTPS image URL")),
+		mcp.WithString("mode", mcp.Enum("auto", "cdrom", "disk"), mcp.Description("USB media mode; defaults to auto")),
+	), handleMountVirtualMediaURL)
+
+	s.AddTool(mcp.NewTool("unmount_virtual_media",
+		mcp.WithDescription("Unmount the current USB virtual media image"),
+	), handleUnmountVirtualMedia)
 }
 
 // === MCP Handlers ===
