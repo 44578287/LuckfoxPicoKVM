@@ -17,6 +17,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Download Go modules
+        run: go mod download
       - name: Prepare embedded static placeholder
         run: |
           mkdir -p static
@@ -57,6 +59,8 @@ jobs:
           node-version: 22.15.0
           cache: npm
           cache-dependency-path: ui/package-lock.json
+      - name: Download Go modules
+        run: go mod download
       - name: Build embedded device UI
         working-directory: ui
         run: |
@@ -91,6 +95,8 @@ jobs:
             LAN API:             http://PICOKVM_IP:8080
             MCP + raw video:     http://PICOKVM_IP:8081
             Multi-client viewer: http://PICOKVM_IP:8082/
+            RTSP:                 rtsp://PICOKVM_IP:8554/live
+            Home Assistant:       Settings -> Home Assistant
           EOF
 
           cp bin/kvm_app dist/web-ota/kvm_app
