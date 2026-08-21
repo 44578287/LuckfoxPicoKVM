@@ -6,11 +6,16 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/webrtc/v4"
 	"github.com/pion/webrtc/v4/pkg/media"
 )
+
+const maxEnhancedWebRTCViewers int32 = 8
+
+var enhancedViewerCount atomic.Int32
 
 // viewerSession is intentionally video-only. It never creates HID/RPC/disk
 // data channels and therefore cannot contend with the normal PicoKVM control
@@ -22,6 +27,8 @@ type viewerSession struct {
 	mu      sync.Mutex
 	subID   string
 	started bool
+	closed  bool
+	cleanup sync.Once
 }
 
 type viewerOfferRequest struct {
@@ -29,7 +36,8 @@ type viewerOfferRequest struct {
 }
 
 type viewerOfferResponse struct {
-	SD string `json:"sd"`
+	SD      string `json:"sd"`
+	Viewers int32  `json:"viewers"`
 }
 
 func StartViewerServer(port int) {
@@ -37,21 +45,45 @@ func StartViewerServer(port int) {
 	mux.HandleFunc("/", handleViewerPage)
 
 	var offerHandler http.Handler = http.HandlerFunc(handleViewerOffer)
+	var statusHandler http.Handler = http.HandlerFunc(handleViewerStatus)
 	if config.APIKey != "" {
 		offerHandler = withAPIKeyAuth(offerHandler, config.APIKey)
+		statusHandler = withAPIKeyAuth(statusHandler, config.APIKey)
 	}
 	mux.Handle("/offer", offerHandler)
+	mux.Handle("/status", statusHandler)
 
 	addr := fmt.Sprintf(":%d", port)
-	logger.Info().Str("addr", addr).Msg("Starting enhanced read-only WebRTC viewer server")
+	logger.Info().Str("addr", addr).Int32("max_viewers", maxEnhancedWebRTCViewers).Msg("Starting enhanced read-only WebRTC viewer server")
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		logger.Error().Err(err).Msg("Enhanced viewer server failed")
 	}
 }
 
+func handleViewerStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"viewers":     enhancedViewerCount.Load(),
+		"max_viewers": maxEnhancedWebRTCViewers,
+		"subscribers": videoBroadcaster.SubscriberCount(),
+		"codec":       streamEncodecType,
+		"video":       lastVideoState,
+	})
+}
+
 func handleViewerOffer(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	if enhancedViewerCount.Load() >= maxEnhancedWebRTCViewers {
+		http.Error(w, fmt.Sprintf("viewer limit reached (%d)", maxEnhancedWebRTCViewers), http.StatusTooManyRequests)
 		return
 	}
 
@@ -64,12 +96,30 @@ func handleViewerOffer(w http.ResponseWriter, r *http.Request) {
 	answer, err := createViewerAnswer(req.SD)
 	if err != nil {
 		logger.Warn().Err(err).Msg("failed to create viewer WebRTC answer")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		status := http.StatusInternalServerError
+		if err == errViewerLimitReached {
+			status = http.StatusTooManyRequests
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(viewerOfferResponse{SD: answer})
+	_ = json.NewEncoder(w).Encode(viewerOfferResponse{SD: answer, Viewers: enhancedViewerCount.Load()})
+}
+
+var errViewerLimitReached = fmt.Errorf("viewer limit reached")
+
+func reserveViewerSlot() bool {
+	for {
+		current := enhancedViewerCount.Load()
+		if current >= maxEnhancedWebRTCViewers {
+			return false
+		}
+		if enhancedViewerCount.CompareAndSwap(current, current+1) {
+			return true
+		}
+	}
 }
 
 func createViewerAnswer(encodedOffer string) (string, error) {
@@ -118,44 +168,55 @@ func createViewerAnswer(encodedOffer string) (string, error) {
 		}
 	}()
 
+	if !reserveViewerSlot() {
+		_ = pc.Close()
+		return "", errViewerLimitReached
+	}
+
 	session := &viewerSession{pc: pc, track: track}
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		logger.Info().Str("state", state.String()).Msg("enhanced viewer WebRTC state changed")
+		logger.Info().Str("state", state.String()).Int32("viewers", enhancedViewerCount.Load()).Msg("enhanced viewer WebRTC state changed")
 		switch state {
 		case webrtc.PeerConnectionStateConnected:
 			session.start()
-		case webrtc.PeerConnectionStateFailed, webrtc.PeerConnectionStateClosed:
-			session.stop()
-			if state == webrtc.PeerConnectionStateFailed {
-				_ = pc.Close()
-			}
+		case webrtc.PeerConnectionStateFailed:
+			session.close()
+			_ = pc.Close()
+		case webrtc.PeerConnectionStateClosed:
+			session.close()
 		}
 	})
 
 	// Do not leave abandoned offers alive indefinitely if the browser never
 	// completes ICE/DTLS after receiving the answer.
 	go func() {
-		time.Sleep(30 * time.Second)
+		timer := time.NewTimer(30 * time.Second)
+		defer timer.Stop()
+		<-timer.C
 		state := pc.ConnectionState()
 		if state != webrtc.PeerConnectionStateConnected && state != webrtc.PeerConnectionStateClosed {
 			logger.Debug().Str("state", state.String()).Msg("closing stale enhanced viewer session")
+			session.close()
 			_ = pc.Close()
 		}
 	}()
 
 	if err := pc.SetRemoteDescription(offer); err != nil {
+		session.close()
 		_ = pc.Close()
 		return "", fmt.Errorf("set viewer remote description: %w", err)
 	}
 
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
+		session.close()
 		_ = pc.Close()
 		return "", fmt.Errorf("create viewer answer: %w", err)
 	}
 
 	gatherComplete := webrtc.GatheringCompletePromise(pc)
 	if err := pc.SetLocalDescription(answer); err != nil {
+		session.close()
 		_ = pc.Close()
 		return "", fmt.Errorf("set viewer local description: %w", err)
 	}
@@ -168,11 +229,13 @@ func createViewerAnswer(encodedOffer string) (string, error) {
 
 	local := pc.LocalDescription()
 	if local == nil {
+		session.close()
 		_ = pc.Close()
 		return "", fmt.Errorf("viewer local description unavailable")
 	}
 	answerJSON, err := json.Marshal(local)
 	if err != nil {
+		session.close()
 		_ = pc.Close()
 		return "", fmt.Errorf("marshal viewer answer: %w", err)
 	}
@@ -181,11 +244,11 @@ func createViewerAnswer(encodedOffer string) (string, error) {
 
 func (s *viewerSession) start() {
 	s.mu.Lock()
-	if s.started {
+	if s.started || s.closed {
 		s.mu.Unlock()
 		return
 	}
-	id, ch := videoBroadcaster.Subscribe()
+	id, ch := videoBroadcaster.SubscribeBuffered(defaultVideoSubscriberBuffer)
 	s.subID = id
 	s.started = true
 	s.mu.Unlock()
@@ -205,24 +268,29 @@ func (s *viewerSession) start() {
 			frame.Release()
 			if err != nil {
 				logger.Debug().Err(err).Str("subscriber_id", id).Msg("viewer video write failed")
+				s.close()
+				_ = s.pc.Close()
+				return
 			}
 		}
 	}()
 }
 
-func (s *viewerSession) stop() {
-	s.mu.Lock()
-	if !s.started {
+func (s *viewerSession) close() {
+	s.cleanup.Do(func() {
+		s.mu.Lock()
+		s.closed = true
+		id := s.subID
+		s.subID = ""
+		s.started = false
 		s.mu.Unlock()
-		return
-	}
-	id := s.subID
-	s.subID = ""
-	s.started = false
-	s.mu.Unlock()
 
-	videoBroadcaster.Unsubscribe(id)
-	logger.Info().Str("subscriber_id", id).Msg("enhanced WebRTC viewer unsubscribed")
+		if id != "" {
+			videoBroadcaster.Unsubscribe(id)
+			logger.Info().Str("subscriber_id", id).Msg("enhanced WebRTC viewer unsubscribed")
+		}
+		enhancedViewerCount.Add(-1)
+	})
 }
 
 func handleViewerPage(w http.ResponseWriter, r *http.Request) {
@@ -270,6 +338,7 @@ document.getElementById('connect').onclick=async()=>{
     if(!res.ok)throw new Error(await res.text());
     const data=await res.json();
     await pc.setRemoteDescription(decodeSD(data.sd));
+    statusEl.textContent=pc.connectionState+' · viewers '+data.viewers+'/'+8;
   }catch(e){statusEl.textContent='Error: '+e.message;if(pc)pc.close();}
 };
 </script>
