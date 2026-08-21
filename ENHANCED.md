@@ -1,6 +1,6 @@
 # PicoKVM Enhanced
 
-This branch is an application-layer enhancement of Luckfox PicoKVM. The initial goal is to keep the vendor System firmware, kernel, DTS and bootloader untouched while extending media distribution, automation/MCP and RV1106 MCU experimentation.
+This branch is an application-layer enhancement of Luckfox PicoKVM. The current goal is to keep the vendor System firmware, kernel, DTS and bootloader untouched while extending media distribution, automation/MCP, remote provisioning/recovery and RV1106 MCU experimentation.
 
 ## Current additions
 
@@ -38,7 +38,7 @@ Status example:
 curl -H "Authorization: Bearer YOUR_API_KEY" http://PICOKVM_IP:8081/video/status
 ```
 
-The status contains codec, normal WebRTC session count, encoded fan-out subscriber count, control-session presence and HDMI input state.
+The status contains codec, normal WebRTC session count, read-only viewer count, encoded fan-out subscriber count, control-session presence, RTP multicast state and HDMI input state.
 
 ### Independent multi-client WebRTC viewer
 
@@ -121,22 +121,55 @@ Multicast is intentionally opt-in. TTL defaults to 1 so it stays on the local ro
 | 8081 | Enhanced MCP + raw video | MCP SSE, raw H.264/H.265, media status |
 | 8082 | Enhanced Viewer + RTP control | read-only multi-client WebRTC and optional LAN multicast |
 
-## MCP 1.1 enhanced tools
+## MCP 1.3 enhanced tools
 
-In addition to the upstream HID/screenshot/video-state tools:
+In addition to the upstream HID/screenshot/video-state tools, MCP now exposes:
+
+### Media distribution / status
 
 - `get_stream_status`
+- `get_rtp_multicast_status`
+- `start_rtp_multicast`
+- `stop_rtp_multicast`
+
+### Host power / extension board
+
 - `get_host_power_state`
 - `trigger_power`
 - `trigger_reset`
 - `send_wol`
-- `probe_mcu`
 
 Power/reset and host LED state reuse the existing PicoKVM extension-board RPC/GPIO implementation; no duplicate GPIO mapping is introduced.
 
-RTP multicast currently has authenticated HTTP control on port 8082. MCP start/stop/status wrappers are the next small integration step after device validation of the multicast packet stream.
+### USB and virtual-media recovery
 
-## RV1106 MCU work
+- `get_usb_state`
+- `usb_wakeup`
+- `get_virtual_media_state`
+- `list_virtual_media`
+- `mount_virtual_media`
+- `mount_virtual_media_url`
+- `unmount_virtual_media`
+
+These tools wrap the existing PicoKVM USB gadget and virtual-media implementation. They do not introduce a second mass-storage stack.
+
+`mount_virtual_media` can mount an existing image from internal PicoKVM storage or the SD card. `mode=auto` treats `.iso` as a CD-ROM and other images as disks.
+
+`mount_virtual_media_url` uses the existing HTTP range-reader/NBD path, so an ISO or disk image can be attached to the target host without first copying the full image onto PicoKVM storage. This is useful for unattended OS installation and rescue media workflows.
+
+A typical remote recovery sequence is:
+
+1. inspect `get_usb_state` and `get_virtual_media_state`
+2. list existing media with `list_virtual_media`, or mount a remote image URL
+3. reboot/power the attached host using the existing KVM controls
+4. interact with BIOS/boot menu through screenshot + HID tools
+5. unmount virtual media when finished
+
+Destructive media deletion/formatting is intentionally not exposed through MCP in this phase.
+
+### MCU capability probe
+
+- `probe_mcu`
 
 `mcu_probe.go` is intentionally non-invasive. `probe_mcu` only checks whether the running System exposes:
 
@@ -172,5 +205,7 @@ The new port-8082 viewer bypasses that control-session limitation safely. The ne
 - `npm ci`
 - `npm run build:device`
 - ARMv7 PicoKVM application build and artifact packaging
+
+Real-device validation should cover the normal vendor control UI first, then two or more read-only viewers, raw HTTP video, RTP multicast, USB state, virtual-media mount/unmount and finally the read-only MCU probe.
 
 Do not merge `enhanced/dev` into `luckfox` until CI and real-device tests pass.
