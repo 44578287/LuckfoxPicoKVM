@@ -35,6 +35,16 @@ type StreamStatus = {
   rtp_multicast: RTPStatus;
 };
 
+type RTSPStatus = {
+  running: boolean;
+  address: string;
+  path: string;
+  codec: string;
+  clients: number;
+  max_clients: number;
+  last_error?: string;
+};
+
 const formatBytes = (bytes: number) => {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
@@ -51,12 +61,14 @@ export default function StreamingContent() {
   const { $at } = useReactAt();
   const [send] = useJsonRpc();
   const [status, setStatus] = useState<StreamStatus | null>(null);
+  const [rtspStatus, setRtspStatus] = useState<RTSPStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [rtpAddress, setRtpAddress] = useState("239.255.42.42:5004");
   const [rtpTTL, setRtpTTL] = useState(1);
 
   const viewerURL = useMemo(() => `http://${window.location.hostname}:8082/`, []);
   const sdpURL = useMemo(() => `http://${window.location.hostname}:8082/rtp.sdp`, []);
+  const rtspURL = useMemo(() => `rtsp://${window.location.hostname}:8554/live`, []);
 
   const refresh = useCallback(() => {
     send("getEnhancedStreamStatus", {}, resp => {
@@ -65,6 +77,10 @@ export default function StreamingContent() {
       setStatus(next);
       if (next?.rtp_multicast?.address) setRtpAddress(next.rtp_multicast.address);
       if (next?.rtp_multicast?.ttl) setRtpTTL(next.rtp_multicast.ttl);
+    });
+    send("getRTSPStatus", {}, resp => {
+      if ("error" in resp) return;
+      setRtspStatus(resp.result as RTSPStatus);
     });
   }, [send]);
 
@@ -117,7 +133,7 @@ export default function StreamingContent() {
     <div className="space-y-4">
       <SettingsPageHeader
         title={$at("Streaming")}
-        description={$at("Multi-viewer video distribution and LAN multicast")}
+        description={$at("Multi-viewer video distribution, RTSP and LAN multicast")}
       />
 
       <div className="space-y-4">
@@ -144,7 +160,7 @@ export default function StreamingContent() {
           title={$at("Read-only viewers")}
           description={$at("Independent WebRTC viewers sharing the same hardware encoder")}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Tag color={(status?.read_only_viewers || 0) > 0 ? "blue" : "default"}>
               {status?.read_only_viewers || 0} / 8
             </Tag>
@@ -156,10 +172,33 @@ export default function StreamingContent() {
         </SettingsItem>
 
         <SettingsItem
+          title={$at("RTSP")}
+          description={$at("Read-only H.264/H.265 stream for VLC, ffplay, OBS and NVR software")}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Tag color={rtspStatus?.running ? "green" : "default"}>
+              {rtspStatus?.running ? $at("Running") : $at("Stopped")}
+            </Tag>
+            <Tag>{rtspStatus?.clients || 0} / {rtspStatus?.max_clients || 8} {$at("clients")}</Tag>
+            <Button onClick={() => copyText(rtspURL, "RTSP URL")}>{$at("Copy RTSP URL")}</Button>
+          </div>
+        </SettingsItem>
+
+        <div className="space-y-2 rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-700">
+          <div className="break-all font-mono">{rtspURL}</div>
+          <div className="text-slate-500 dark:text-slate-400">
+            {$at("When an API key is configured, use any RTSP username and the PicoKVM API key as the password.")}
+          </div>
+          {rtspStatus?.last_error && (
+            <div className="text-red-500">{rtspStatus.last_error}</div>
+          )}
+        </div>
+
+        <SettingsItem
           title={$at("Video fan-out")}
           description={$at("Subscribers consuming the single RV1106 hardware-encoded stream")}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Tag>{status?.raw_stream_subscribers || 0} {$at("subscribers")}</Tag>
             <Tag>{status?.webrtc_sessions || 0} {$at("control WebRTC")}</Tag>
           </div>
