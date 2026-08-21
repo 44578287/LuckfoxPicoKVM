@@ -8,6 +8,7 @@ import {
   ToolOutlined,
   TagOutlined,
   VideoCameraOutlined,
+  HomeOutlined,
   RightOutlined,
 } from "@ant-design/icons";
 import { useReactAt } from "i18n-auto-extractor/react";
@@ -18,6 +19,7 @@ import SettingsNetwork from "@/layout/components_setting/network/NetworkContent"
 import SettingsHardware from "@/layout/components_setting/hardware/HardwareContent";
 import SettingsAdvanced from "@/layout/components_setting/advanced/AdvancedContent";
 import SettingsStreaming from "@/layout/components_setting/streaming/StreamingContent";
+import SettingsHomeAssistant from "@/layout/components_setting/home_assistant/HomeAssistantContent";
 import SettingsVersion from "@/layout/components_setting/version/VersionContent";
 import { dark_bd_style, dark_bg2_style } from "@/layout/theme_color";
 import { useEnhancedAt } from "@/locales/enhanced";
@@ -43,11 +45,12 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
     { key: "access", label: "Access", icon: <SafetyCertificateOutlined /> },
     { key: "hardware", label: "Hardware", icon: <DesktopOutlined /> },
     { key: "streaming", label: "Streaming", icon: <VideoCameraOutlined /> },
+    { key: "home_assistant", label: "Home Assistant", icon: <HomeOutlined /> },
     { key: "advanced", label: "Advanced", icon: <ToolOutlined /> },
     { key: "version", label: "Version", icon: <TagOutlined /> },
   ];
 
-  const menuLabel = (item: MenuItem) => item.key === "streaming" ? $eat(item.label) : $at(item.label);
+  const menuLabel = (item: MenuItem) => ["streaming", "home_assistant"].includes(item.key) ? $eat(item.label) : $at(item.label);
 
   const handleMenuSelect: MenuProps["onClick"] = ({ key }) => {
     setSelectedMenu(key as string);
@@ -65,6 +68,8 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
         return <SettingsHardware />;
       case "streaming":
         return <SettingsStreaming />;
+      case "home_assistant":
+        return <SettingsHomeAssistant />;
       case "advanced":
         return <SettingsAdvanced />;
       case "version":
