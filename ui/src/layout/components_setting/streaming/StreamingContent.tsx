@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Input, InputNumber, Tag } from "antd";
-import { useReactAt } from "i18n-auto-extractor/react";
 
 import { SettingsPageHeader } from "@components/Settings/SettingsPageheader";
 import { SettingsItem } from "@components/Settings/SettingsView";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
 import notifications from "@/notifications";
+import { useEnhancedAt } from "@/locales/enhanced";
 
 type VideoState = {
   ready: boolean;
@@ -69,7 +69,7 @@ const formatBytes = (bytes: number) => {
 };
 
 export default function StreamingContent() {
-  const { $at } = useReactAt();
+  const { $eat } = useEnhancedAt();
   const [send] = useJsonRpc();
   const [status, setStatus] = useState<StreamStatus | null>(null);
   const [rtspStatus, setRtspStatus] = useState<RTSPStatus | null>(null);
@@ -113,80 +113,80 @@ export default function StreamingContent() {
     send("startRTPMulticast", { address: rtpAddress, ttl: rtpTTL }, resp => {
       setLoading(false);
       if ("error" in resp) {
-        notifications.error(`Failed to start RTP multicast: ${resp.error.data || "Unknown error"}`);
+        notifications.error(`${$eat("Failed to start RTP multicast")}: ${resp.error.data || $eat("Unknown error")}`);
         return;
       }
-      notifications.success("RTP multicast started");
+      notifications.success($eat("RTP multicast started"));
       refresh();
     });
-  }, [send, rtpAddress, rtpTTL, refresh]);
+  }, [send, rtpAddress, rtpTTL, refresh, $eat]);
 
   const stopRTP = useCallback(() => {
     setLoading(true);
     send("stopRTPMulticast", {}, resp => {
       setLoading(false);
       if ("error" in resp) {
-        notifications.error(`Failed to stop RTP multicast: ${resp.error.data || "Unknown error"}`);
+        notifications.error(`${$eat("Failed to stop RTP multicast")}: ${resp.error.data || $eat("Unknown error")}`);
         return;
       }
-      notifications.success("RTP multicast stopped");
+      notifications.success($eat("RTP multicast stopped"));
       refresh();
     });
-  }, [send, refresh]);
+  }, [send, refresh, $eat]);
 
   const startRecording = useCallback(() => {
     setRecordingLoading(true);
     send("startEncodedRecording", { filename: recordingFilename }, resp => {
       setRecordingLoading(false);
       if ("error" in resp) {
-        notifications.error(`Failed to start recording: ${resp.error.data || "Unknown error"}`);
+        notifications.error(`${$eat("Failed to start recording")}: ${resp.error.data || $eat("Unknown error")}`);
         return;
       }
       setRecordingStatus(resp.result as RecordingStatus);
       setRecordingFilename("");
-      notifications.success("Zero-reencode recording started");
+      notifications.success($eat("Zero-reencode recording started"));
       refresh();
     });
-  }, [send, recordingFilename, refresh]);
+  }, [send, recordingFilename, refresh, $eat]);
 
   const stopRecording = useCallback(() => {
     setRecordingLoading(true);
     send("stopEncodedRecording", {}, resp => {
       setRecordingLoading(false);
       if ("error" in resp) {
-        notifications.error(`Failed to stop recording: ${resp.error.data || "Unknown error"}`);
+        notifications.error(`${$eat("Failed to stop recording")}: ${resp.error.data || $eat("Unknown error")}`);
         return;
       }
       setRecordingStatus(resp.result as RecordingStatus);
-      notifications.success("Recording flushed and stopped");
+      notifications.success($eat("Recording flushed and stopped"));
       refresh();
     });
-  }, [send, refresh]);
+  }, [send, refresh, $eat]);
 
   const copyText = useCallback(async (value: string, label: string) => {
     try {
       await navigator.clipboard.writeText(value);
-      notifications.success(`${label} copied`);
+      notifications.success(`${$eat("Copied")}: ${$eat(label)}`);
     } catch {
-      notifications.error(`Failed to copy ${label.toLowerCase()}`);
+      notifications.error(`${$eat("Copy failed")}: ${$eat(label)}`);
     }
-  }, []);
+  }, [$eat]);
 
   const videoLabel = status?.video?.ready
     ? `${status.video.width}×${status.video.height} @ ${status.video.frame_per_second} FPS`
-    : "No HDMI signal";
+    : $eat("No HDMI signal");
 
   return (
     <div className="space-y-4">
       <SettingsPageHeader
-        title={$at("Streaming")}
-        description={$at("Multi-viewer video distribution, RTSP, recording and LAN multicast")}
+        title={$eat("Streaming")}
+        description={$eat("Multi-viewer video distribution, RTSP, recording and LAN multicast")}
       />
 
       <div className="space-y-4">
         <SettingsItem
-          title={$at("Video input")}
-          description={$at("Current HDMI capture state")}
+          title={$eat("Video input")}
+          description={$eat("Current HDMI capture state")}
         >
           <div className="flex items-center gap-2">
             <Tag color={status?.video?.ready ? "green" : "default"}>{videoLabel}</Tag>
@@ -195,46 +195,46 @@ export default function StreamingContent() {
         </SettingsItem>
 
         <SettingsItem
-          title={$at("Controller")}
-          description={$at("Normal PicoKVM WebRTC control session")}
+          title={$eat("Controller")}
+          description={$eat("Normal PicoKVM WebRTC control session")}
         >
           <Tag color={status?.controller_active ? "green" : "default"}>
-            {status?.controller_active ? $at("Active") : $at("Inactive")}
+            {status?.controller_active ? $eat("Active") : $eat("Inactive")}
           </Tag>
         </SettingsItem>
 
         <SettingsItem
-          title={$at("Read-only viewers")}
-          description={$at("Independent WebRTC viewers sharing the same hardware encoder")}
+          title={$eat("Read-only viewers")}
+          description={$eat("Independent WebRTC viewers sharing the same hardware encoder")}
         >
           <div className="flex flex-wrap items-center gap-2">
             <Tag color={(status?.read_only_viewers || 0) > 0 ? "blue" : "default"}>
               {status?.read_only_viewers || 0} / 8
             </Tag>
             <Button type="primary" onClick={() => window.open(viewerURL, "_blank", "noopener,noreferrer")}>
-              {$at("Open Viewer")}
+              {$eat("Open Viewer")}
             </Button>
-            <Button onClick={() => copyText(viewerURL, "Viewer URL")}>{$at("Copy URL")}</Button>
+            <Button onClick={() => copyText(viewerURL, "Viewer URL")}>{$eat("Copy URL")}</Button>
           </div>
         </SettingsItem>
 
         <SettingsItem
-          title={$at("RTSP")}
-          description={$at("Read-only H.264/H.265 stream for VLC, ffplay, OBS and NVR software")}
+          title={$eat("RTSP")}
+          description={$eat("Read-only H.264/H.265 stream for VLC, ffplay, OBS and NVR software")}
         >
           <div className="flex flex-wrap items-center gap-2">
             <Tag color={rtspStatus?.running ? "green" : "default"}>
-              {rtspStatus?.running ? $at("Running") : $at("Stopped")}
+              {rtspStatus?.running ? $eat("Running") : $eat("Stopped")}
             </Tag>
-            <Tag>{rtspStatus?.clients || 0} / {rtspStatus?.max_clients || 8} {$at("clients")}</Tag>
-            <Button onClick={() => copyText(rtspURL, "RTSP URL")}>{$at("Copy RTSP URL")}</Button>
+            <Tag>{rtspStatus?.clients || 0} / {rtspStatus?.max_clients || 8} {$eat("clients")}</Tag>
+            <Button onClick={() => copyText(rtspURL, "RTSP URL")}>{$eat("Copy RTSP URL")}</Button>
           </div>
         </SettingsItem>
 
         <div className="space-y-2 rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-700">
           <div className="break-all font-mono">{rtspURL}</div>
           <div className="text-slate-500 dark:text-slate-400">
-            {$at("When an API key is configured, use any RTSP username and the PicoKVM API key as the password.")}
+            {$eat("When an API key is configured, use any RTSP username and the PicoKVM API key as the password.")}
           </div>
           {rtspStatus?.last_error && (
             <div className="text-red-500">{rtspStatus.last_error}</div>
@@ -242,12 +242,12 @@ export default function StreamingContent() {
         </div>
 
         <SettingsItem
-          title={$at("Zero-reencode recording")}
-          description={$at("Write the existing RV1106 H.264/H.265 bitstream directly to local storage")}
+          title={$eat("Zero-reencode recording")}
+          description={$eat("Write the existing RV1106 H.264/H.265 bitstream directly to local storage")}
         >
           <div className="flex flex-wrap items-center gap-2">
             <Tag color={recordingStatus?.running ? "red" : "default"}>
-              {recordingStatus?.running ? $at("Recording") : $at("Stopped")}
+              {recordingStatus?.running ? $eat("Recording") : $eat("Stopped")}
             </Tag>
             {recordingStatus?.filename && <Tag>{recordingStatus.filename}</Tag>}
             {recordingStatus?.running && <Tag>{formatBytes(recordingStatus.bytes || 0)}</Tag>}
@@ -261,20 +261,20 @@ export default function StreamingContent() {
                 value={recordingFilename}
                 onChange={e => setRecordingFilename(e.target.value)}
                 style={{ maxWidth: 280 }}
-                placeholder={$at("Optional recording filename")}
+                placeholder={$eat("Optional recording filename")}
               />
               <Button type="primary" danger loading={recordingLoading} onClick={startRecording}>
-                {$at("Start Recording")}
+                {$eat("Start Recording")}
               </Button>
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <Button danger loading={recordingLoading} onClick={stopRecording}>{$at("Stop Recording")}</Button>
-              <span className="text-sm">{(recordingStatus.frames || 0).toLocaleString()} frames · {formatBytes(recordingStatus.bytes || 0)}</span>
+              <Button danger loading={recordingLoading} onClick={stopRecording}>{$eat("Stop Recording")}</Button>
+              <span className="text-sm">{(recordingStatus.frames || 0).toLocaleString()} {$eat("frames")} · {formatBytes(recordingStatus.bytes || 0)}</span>
             </div>
           )}
           <div className="text-xs text-slate-500 dark:text-slate-400">
-            {$at("Recordings are elementary .h264/.h265 files in the PicoKVM shared storage. No video re-encoding is performed.")}
+            {$eat("Recordings are elementary .h264/.h265 files in the PicoKVM shared storage. No video re-encoding is performed.")}
           </div>
           {recordingStatus?.last_error && (
             <div className="text-sm text-red-500">{recordingStatus.last_error}</div>
@@ -282,21 +282,21 @@ export default function StreamingContent() {
         </div>
 
         <SettingsItem
-          title={$at("Video fan-out")}
-          description={$at("Subscribers consuming the single RV1106 hardware-encoded stream")}
+          title={$eat("Video fan-out")}
+          description={$eat("Subscribers consuming the single RV1106 hardware-encoded stream")}
         >
           <div className="flex flex-wrap items-center gap-2">
-            <Tag>{status?.raw_stream_subscribers || 0} {$at("subscribers")}</Tag>
-            <Tag>{status?.webrtc_sessions || 0} {$at("control WebRTC")}</Tag>
+            <Tag>{status?.raw_stream_subscribers || 0} {$eat("subscribers")}</Tag>
+            <Tag>{status?.webrtc_sessions || 0} {$eat("control WebRTC")}</Tag>
           </div>
         </SettingsItem>
 
         <SettingsItem
-          title={$at("RTP multicast")}
-          description={$at("Send one H.264/H.265 RTP stream for many viewers on the same LAN")}
+          title={$eat("RTP multicast")}
+          description={$eat("Send one H.264/H.265 RTP stream for many viewers on the same LAN")}
         >
           <Tag color={status?.rtp_multicast?.running ? "green" : "default"}>
-            {status?.rtp_multicast?.running ? $at("Running") : $at("Stopped")}
+            {status?.rtp_multicast?.running ? $eat("Running") : $eat("Stopped")}
           </Tag>
         </SettingsItem>
 
@@ -318,18 +318,18 @@ export default function StreamingContent() {
               addonBefore="TTL"
             />
             {status?.rtp_multicast?.running ? (
-              <Button danger loading={loading} onClick={stopRTP}>{$at("Stop Multicast")}</Button>
+              <Button danger loading={loading} onClick={stopRTP}>{$eat("Stop Multicast")}</Button>
             ) : (
-              <Button type="primary" loading={loading} onClick={startRTP}>{$at("Start Multicast")}</Button>
+              <Button type="primary" loading={loading} onClick={startRTP}>{$eat("Start Multicast")}</Button>
             )}
           </div>
 
           {status?.rtp_multicast?.running && (
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span>{status.rtp_multicast.packets.toLocaleString()} packets</span>
+              <span>{status.rtp_multicast.packets.toLocaleString()} {$eat("packets")}</span>
               <span>·</span>
               <span>{formatBytes(status.rtp_multicast.bytes)}</span>
-              <Button size="small" onClick={() => copyText(sdpURL, "SDP URL")}>{$at("Copy SDP URL")}</Button>
+              <Button size="small" onClick={() => copyText(sdpURL, "SDP URL")}>{$eat("Copy SDP URL")}</Button>
             </div>
           )}
 
@@ -339,13 +339,13 @@ export default function StreamingContent() {
         </div>
 
         <SettingsItem
-          title={$at("Diagnostics")}
-          description={$at("Collect a read-only device snapshot for troubleshooting")}
+          title={$eat("Diagnostics")}
+          description={$eat("Collect a read-only device snapshot for troubleshooting")}
         >
           <Button onClick={() => {
             send("getEnhancedDiagnostics", {}, resp => {
               if ("error" in resp) {
-                notifications.error(`Diagnostics failed: ${resp.error.data || "Unknown error"}`);
+                notifications.error(`${$eat("Diagnostics failed")}: ${resp.error.data || $eat("Unknown error")}`);
                 return;
               }
               const blob = new Blob([JSON.stringify(resp.result, null, 2)], { type: "application/json" });
@@ -355,10 +355,10 @@ export default function StreamingContent() {
               link.download = `picokvm-diagnostics-${Date.now()}.json`;
               link.click();
               URL.revokeObjectURL(url);
-              notifications.success("Diagnostics downloaded");
+              notifications.success($eat("Diagnostics downloaded"));
             });
           }}>
-            {$at("Download Diagnostics")}
+            {$eat("Download Diagnostics")}
           </Button>
         </SettingsItem>
       </div>
