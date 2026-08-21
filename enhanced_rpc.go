@@ -25,6 +25,7 @@ type EnhancedDiagnostics struct {
 	HostIO        map[string]bool            `json:"host_io,omitempty"`
 	VirtualMedia  *VirtualMediaState         `json:"virtual_media,omitempty"`
 	Stream        EnhancedStreamStatus       `json:"stream"`
+	RTSP          RTSPServerStatus           `json:"rtsp"`
 	MCU           MCUProbeStatus             `json:"mcu"`
 	Warnings      []string                   `json:"warnings,omitempty"`
 }
@@ -58,6 +59,7 @@ func init() {
 	rpcHandlers["getRTPMulticastStatus"] = RPCHandler{Func: rpcGetEnhancedRTPMulticastStatus}
 	rpcHandlers["startRTPMulticast"] = RPCHandler{Func: rpcStartEnhancedRTPMulticast, Params: []string{"address", "ttl"}}
 	rpcHandlers["stopRTPMulticast"] = RPCHandler{Func: rpcStopEnhancedRTPMulticast}
+	rpcHandlers["getRTSPStatus"] = RPCHandler{Func: rpcGetEnhancedRTSPStatus}
 }
 
 func rpcGetEnhancedStreamStatus() (EnhancedStreamStatus, error) {
@@ -66,6 +68,10 @@ func rpcGetEnhancedStreamStatus() (EnhancedStreamStatus, error) {
 
 func rpcGetEnhancedRTPMulticastStatus() (RTPMulticastStatus, error) {
 	return getRTPMulticastStatus(), nil
+}
+
+func rpcGetEnhancedRTSPStatus() (RTSPServerStatus, error) {
+	return getRTSPServerStatus(), nil
 }
 
 func rpcStartEnhancedRTPMulticast(address string, ttl int) (RTPMulticastStatus, error) {
@@ -87,6 +93,7 @@ func rpcGetEnhancedDiagnostics() (EnhancedDiagnostics, error) {
 		AppVersion: builtAppVersion,
 		USBState:   rpcGetUSBState(),
 		Stream:     getEnhancedStreamStatus(),
+		RTSP:       getRTSPServerStatus(),
 		MCU:        probeMCUStatus(),
 	}
 
