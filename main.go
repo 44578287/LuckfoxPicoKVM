@@ -201,6 +201,11 @@ func Main() {
 		StartRTSPServer(defaultRTSPAddress)
 	}()
 
+	// MQTT/Home Assistant is optional and keeps its own enhanced config file.
+	// Start only after network/GPIO/video state is initialized so the first HA
+	// discovery/state publication describes a usable device.
+	initEnhancedMQTT()
+
 	go RunWebSecureServer()
 	// Web secure server is started only if TLS mode is enabled
 	if config.TLSMode != "" {
@@ -211,6 +216,7 @@ func Main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs
+	closeEnhancedMQTT()
 	logger.Info().Msg("KVM Shutting Down")
 	//if fuseServer != nil {
 	//	err := setMassStorageImage(" ")
@@ -219,8 +225,9 @@ func Main() {
 	//	}
 	//	err = fuseServer.Unmount()
 	//	if err != nil {
-	//		logger.Infof("Failed to unmount fuse: %v", err)
+	//		logger.Infof("Failed to unmount fuse server: %v", err)
 	//	}
+	//}
 
 	// os.Exit(0)
 }
