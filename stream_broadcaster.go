@@ -80,6 +80,13 @@ func (b *VideoBroadcaster) Unsubscribe(id string) {
 	}
 }
 
+// SubscriberCount returns the number of consumers currently attached to the
+// encoded video broadcaster. It is intentionally lock-free so status/metrics
+// callers do not interfere with the hot video path.
+func (b *VideoBroadcaster) SubscriberCount() int {
+	return int(b.count.Load())
+}
+
 func (b *VideoBroadcaster) Broadcast(data []byte) {
 	// atomic check avoids acquiring RLock on every video frame when no HTTP clients are connected
 	if b.count.Load() == 0 {
