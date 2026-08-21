@@ -197,6 +197,10 @@ func Main() {
 		StartViewerServer(8082)
 	}()
 
+	go func() {
+		StartRTSPServer(defaultRTSPAddress)
+	}()
+
 	go RunWebSecureServer()
 	// Web secure server is started only if TLS mode is enabled
 	if config.TLSMode != "" {
