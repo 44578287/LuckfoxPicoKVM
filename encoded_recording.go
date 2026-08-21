@@ -34,6 +34,7 @@ type encodedRecordingManager struct {
 	file         *os.File
 	subscriberID string
 	stop         chan struct{}
+	done         chan struct{}
 	frames       atomic.Uint64
 	bytes        atomic.Uint64
 	lastError    string
@@ -88,6 +89,7 @@ func startEncodedRecording(filename string) (EncodedRecordingStatus, error) {
 
 	subscriberID, frames := videoBroadcaster.SubscribeBuffered(defaultVideoSubscriberBuffer)
 	stop := make(chan struct{})
+	done := make(chan struct{})
 
 	enhancedRecording.mu.Lock()
 	if enhancedRecording.running {
@@ -105,6 +107,7 @@ func startEncodedRecording(filename string) (EncodedRecordingStatus, error) {
 	enhancedRecording.file = file
 	enhancedRecording.subscriberID = subscriberID
 	enhancedRecording.stop = stop
+	enhancedRecording.done = done
 	enhancedRecording.lastError = ""
 	enhancedRecording.frames.Store(0)
 	enhancedRecording.bytes.Store(0)
@@ -112,7 +115,7 @@ func startEncodedRecording(filename string) (EncodedRecordingStatus, error) {
 	enhancedRecording.mu.Unlock()
 
 	logger.Info().Str("filename", filename).Str("codec", codec).Msg("encoded recording started")
-	go runEncodedRecording(file, subscriberID, frames, stop, codec)
+	go runEncodedRecording(file, subscriberID, frames, stop, done, codec)
 	return status, nil
 }
 
@@ -124,25 +127,20 @@ func stopEncodedRecording() EncodedRecordingStatus {
 		return status
 	}
 	stop := enhancedRecording.stop
-	file := enhancedRecording.file
-	subscriberID := enhancedRecording.subscriberID
-	enhancedRecording.running = false
+	done := enhancedRecording.done
+	// Clearing stop while holding the lock makes concurrent stop requests wait
+	// on the same done channel instead of closing stop twice.
 	enhancedRecording.stop = nil
-	enhancedRecording.file = nil
-	enhancedRecording.subscriberID = ""
-	status := enhancedRecording.statusLocked()
 	enhancedRecording.mu.Unlock()
 
 	if stop != nil {
 		close(stop)
 	}
-	if subscriberID != "" {
-		videoBroadcaster.Unsubscribe(subscriberID)
+	if done != nil {
+		<-done
 	}
-	if file != nil {
-		_ = file.Sync()
-		_ = file.Close()
-	}
+
+	status := getEncodedRecordingStatus()
 	logger.Info().Str("filename", status.Filename).Uint64("bytes", status.Bytes).Msg("encoded recording stopped")
 	return status
 }
@@ -167,9 +165,16 @@ func (m *encodedRecordingManager) statusLocked() EncodedRecordingStatus {
 	}
 }
 
-func runEncodedRecording(file *os.File, subscriberID string, frames <-chan *VideoFrame, stop <-chan struct{}, codec string) {
-	defer finalizeEncodedRecording(subscriberID, file)
+func runEncodedRecording(file *os.File, subscriberID string, frames <-chan *VideoFrame, stop <-chan struct{}, done chan struct{}, codec string) {
+	defer finalizeEncodedRecording(subscriberID, file, done)
 	for {
+		// Give a requested stop priority over consuming another queued frame.
+		select {
+		case <-stop:
+			return
+		default:
+		}
+
 		select {
 		case <-stop:
 			return
@@ -208,7 +213,7 @@ func runEncodedRecording(file *os.File, subscriberID string, frames <-chan *Vide
 	}
 }
 
-func finalizeEncodedRecording(subscriberID string, file *os.File) {
+func finalizeEncodedRecording(subscriberID string, file *os.File, done chan struct{}) {
 	videoBroadcaster.Unsubscribe(subscriberID)
 	_ = file.Sync()
 	_ = file.Close()
@@ -218,9 +223,11 @@ func finalizeEncodedRecording(subscriberID string, file *os.File) {
 		enhancedRecording.running = false
 		enhancedRecording.subscriberID = ""
 		enhancedRecording.stop = nil
+		enhancedRecording.done = nil
 		enhancedRecording.file = nil
 	}
 	enhancedRecording.mu.Unlock()
+	close(done)
 }
 
 func setEncodedRecordingError(message string) {
