@@ -3,6 +3,7 @@ package kvm
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,8 +12,26 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+type EnhancedStreamStatus struct {
+	Codec             string          `json:"codec"`
+	WebRTCSessions    int             `json:"webrtc_sessions"`
+	RawSubscribers    int             `json:"raw_stream_subscribers"`
+	ControllerActive  bool            `json:"controller_active"`
+	Video             VideoInputState `json:"video"`
+}
+
+func getEnhancedStreamStatus() EnhancedStreamStatus {
+	return EnhancedStreamStatus{
+		Codec:            streamEncodecType,
+		WebRTCSessions:   actionSessions,
+		RawSubscribers:   videoBroadcaster.SubscriberCount(),
+		ControllerActive: currentSession != nil,
+		Video:            lastVideoState,
+	}
+}
+
 func StartMCP(port int, stdio bool) {
-	s := server.NewMCPServer("picokvm-mcp", "1.0.0")
+	s := server.NewMCPServer("picokvm-mcp", "1.1.0-enhanced")
 	registerMCPTools(s)
 
 	if stdio {
@@ -23,13 +42,17 @@ func StartMCP(port int, stdio bool) {
 		return
 	}
 
-	// SSE mode
+	// SSE mode. The same authenticated listener also exposes a raw encoded
+	// video feed so automation, VLC/ffplay/OBS gateways and future relays can
+	// consume the already hardware-encoded stream without opening the Web UI.
 	addr := fmt.Sprintf(":%d", port)
 	sseServer := server.NewSSEServer(s)
 
 	mux := http.NewServeMux()
 	mux.Handle("/sse", sseServer.SSEHandler())
 	mux.Handle("/message", sseServer.MessageHandler())
+	mux.HandleFunc("/video/stream", handleEnhancedRawVideoStream)
+	mux.HandleFunc("/video/status", handleEnhancedVideoStatus)
 
 	var handler http.Handler = mux
 	if config.APIKey != "" {
@@ -37,7 +60,7 @@ func StartMCP(port int, stdio bool) {
 	}
 	handler = withCORS(handler)
 
-	logger.Info().Str("addr", addr).Msg("Starting MCP SSE server")
+	logger.Info().Str("addr", addr).Msg("Starting MCP SSE + enhanced media server")
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		logger.Error().Err(err).Msg("MCP SSE server failed")
 	}
@@ -51,7 +74,7 @@ func withCORS(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
 		if r.Method == "OPTIONS" {
-			w.WriteHeader(204)
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -60,13 +83,13 @@ func withCORS(next http.Handler) http.Handler {
 
 func withAPIKeyAuth(next http.Handler, expectedKey string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Skip auth for localhost
-		if strings.HasPrefix(r.RemoteAddr, "127.0.0.1:") || 
-		   strings.HasPrefix(r.RemoteAddr, "[::1]:") {
+		// Skip auth for localhost.
+		if strings.HasPrefix(r.RemoteAddr, "127.0.0.1:") ||
+			strings.HasPrefix(r.RemoteAddr, "[::1]:") {
 			next.ServeHTTP(w, r)
 			return
 		}
-		
+
 		auth := r.Header.Get("Authorization")
 		var key string
 		if _, err := fmt.Sscanf(auth, "Bearer %s", &key); err != nil {
@@ -79,6 +102,65 @@ func withAPIKeyAuth(next http.Handler, expectedKey string) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func handleEnhancedVideoStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(getEnhancedStreamStatus())
+}
+
+func handleEnhancedRawVideoStream(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	codec := streamEncodecType
+	contentType := "video/x-h264"
+	if codec == "hevc" {
+		contentType = "video/x-h265"
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("X-PicoKVM-Codec", codec)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "no-cache, no-store")
+	w.Header().Set("Connection", "keep-alive")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	flusher.Flush()
+
+	id, ch := videoBroadcaster.Subscribe()
+	logger.Info().Str("subscriber_id", id).Str("codec", codec).Msg("enhanced raw video subscriber connected")
+	defer func() {
+		videoBroadcaster.Unsubscribe(id)
+		logger.Info().Str("subscriber_id", id).Msg("enhanced raw video subscriber disconnected")
+	}()
+
+	ctx := r.Context()
+	for {
+		select {
+		case frame, open := <-ch:
+			if !open {
+				return
+			}
+			_, err := w.Write(frame.Data())
+			frame.Release()
+			if err != nil {
+				return
+			}
+			flusher.Flush()
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // === MCP Tool Registration ===
@@ -128,6 +210,34 @@ func registerMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("get_video_state",
 		mcp.WithDescription("Get screen resolution and video status"),
 	), handleGetVideoState)
+
+	// Enhanced observability/media tools.
+	s.AddTool(mcp.NewTool("get_stream_status",
+		mcp.WithDescription("Get codec, video state, WebRTC session count and raw video subscriber count"),
+	), handleGetStreamStatus)
+
+	s.AddTool(mcp.NewTool("get_host_power_state",
+		mcp.WithDescription("Read host power/HDD LED state through the PicoKVM extension-board inputs"),
+	), handleGetHostPowerState)
+
+	// Enhanced extension-board actions. These intentionally reuse the existing
+	// PicoKVM RPC implementation so timing and GPIO mapping stay in one place.
+	s.AddTool(mcp.NewTool("trigger_power",
+		mcp.WithDescription("Trigger the configured host power-button pulse"),
+	), handleTriggerPower)
+
+	s.AddTool(mcp.NewTool("trigger_reset",
+		mcp.WithDescription("Trigger the configured host reset-button pulse"),
+	), handleTriggerReset)
+
+	s.AddTool(mcp.NewTool("send_wol",
+		mcp.WithDescription("Send a Wake-on-LAN magic packet"),
+		mcp.WithString("mac", mcp.Required(), mcp.Description("Target MAC address")),
+	), handleSendWOL)
+
+	s.AddTool(mcp.NewTool("probe_mcu",
+		mcp.WithDescription("Read-only probe for RV1106 MCU loader, remoteproc/rpmsg and device-tree facilities"),
+	), handleProbeMCU)
 }
 
 // === MCP Handlers ===
@@ -310,4 +420,59 @@ func handleGetVideoState(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 		text += fmt.Sprintf(" [Error: %s]", state.Error)
 	}
 	return mcp.NewToolResultText(text), nil
+}
+
+func handleGetStreamStatus(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	data, err := json.MarshalIndent(getEnhancedStreamStatus(), "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+func handleGetHostPowerState(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	state, err := rpcGetIOInputStatus()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+func handleTriggerPower(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := rpcTriggerPower(); err != nil {
+		return nil, err
+	}
+	return mcp.NewToolResultText("Power-button pulse triggered"), nil
+}
+
+func handleTriggerReset(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := rpcTriggerReset(); err != nil {
+		return nil, err
+	}
+	return mcp.NewToolResultText("Reset-button pulse triggered"), nil
+}
+
+func handleSendWOL(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	mac, _ := args["mac"].(string)
+	if mac == "" {
+		return nil, fmt.Errorf("mac is required")
+	}
+	if err := rpcSendWOLMagicPacket(mac); err != nil {
+		return nil, err
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("Wake-on-LAN packet sent to %s", mac)), nil
+}
+
+func handleProbeMCU(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	status := probeMCUStatus()
+	data, err := json.MarshalIndent(status, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return mcp.NewToolResultText(string(data)), nil
 }
