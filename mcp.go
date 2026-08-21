@@ -13,25 +13,29 @@ import (
 )
 
 type EnhancedStreamStatus struct {
-	Codec             string          `json:"codec"`
-	WebRTCSessions    int             `json:"webrtc_sessions"`
-	RawSubscribers    int             `json:"raw_stream_subscribers"`
-	ControllerActive  bool            `json:"controller_active"`
-	Video             VideoInputState `json:"video"`
+	Codec            string             `json:"codec"`
+	WebRTCSessions   int                `json:"webrtc_sessions"`
+	ReadOnlyViewers  int32              `json:"read_only_viewers"`
+	RawSubscribers   int                `json:"raw_stream_subscribers"`
+	ControllerActive bool               `json:"controller_active"`
+	Video            VideoInputState    `json:"video"`
+	RTPMulticast     RTPMulticastStatus `json:"rtp_multicast"`
 }
 
 func getEnhancedStreamStatus() EnhancedStreamStatus {
 	return EnhancedStreamStatus{
 		Codec:            streamEncodecType,
 		WebRTCSessions:   actionSessions,
+		ReadOnlyViewers:  enhancedViewerCount.Load(),
 		RawSubscribers:   videoBroadcaster.SubscriberCount(),
 		ControllerActive: currentSession != nil,
 		Video:            lastVideoState,
+		RTPMulticast:     getRTPMulticastStatus(),
 	}
 }
 
 func StartMCP(port int, stdio bool) {
-	s := server.NewMCPServer("picokvm-mcp", "1.1.0-enhanced")
+	s := server.NewMCPServer("picokvm-mcp", "1.2.0-enhanced")
 	registerMCPTools(s)
 
 	if stdio {
@@ -213,7 +217,7 @@ func registerMCPTools(s *server.MCPServer) {
 
 	// Enhanced observability/media tools.
 	s.AddTool(mcp.NewTool("get_stream_status",
-		mcp.WithDescription("Get codec, video state, WebRTC session count and raw video subscriber count"),
+		mcp.WithDescription("Get codec, video state, controller/viewer counts and RTP multicast state"),
 	), handleGetStreamStatus)
 
 	s.AddTool(mcp.NewTool("get_host_power_state",
@@ -238,6 +242,20 @@ func registerMCPTools(s *server.MCPServer) {
 	s.AddTool(mcp.NewTool("probe_mcu",
 		mcp.WithDescription("Read-only probe for RV1106 MCU loader, remoteproc/rpmsg and device-tree facilities"),
 	), handleProbeMCU)
+
+	s.AddTool(mcp.NewTool("get_rtp_multicast_status",
+		mcp.WithDescription("Get the optional LAN RTP multicast sender status"),
+	), handleGetRTPMulticastStatus)
+
+	s.AddTool(mcp.NewTool("start_rtp_multicast",
+		mcp.WithDescription("Start one hardware-encoded RTP multicast stream for efficient LAN fan-out"),
+		mcp.WithString("address", mcp.Description("IPv4 multicast group and UDP port, default 239.255.42.42:5004")),
+		mcp.WithNumber("ttl", mcp.Description("Multicast TTL 1-255, default 1")),
+	), handleStartRTPMulticast)
+
+	s.AddTool(mcp.NewTool("stop_rtp_multicast",
+		mcp.WithDescription("Stop the optional LAN RTP multicast stream"),
+	), handleStopRTPMulticast)
 }
 
 // === MCP Handlers ===
@@ -470,6 +488,45 @@ func handleSendWOL(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolR
 
 func handleProbeMCU(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	status := probeMCUStatus()
+	data, err := json.MarshalIndent(status, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+func handleGetRTPMulticastStatus(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	data, err := json.MarshalIndent(getRTPMulticastStatus(), "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+func handleStartRTPMulticast(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	address, _ := args["address"].(string)
+	if strings.TrimSpace(address) == "" {
+		address = defaultRTPMulticastAddress
+	}
+	ttl := defaultRTPMulticastTTL
+	if value, ok := args["ttl"].(float64); ok && value != 0 {
+		ttl = int(value)
+	}
+
+	status, err := startRTPMulticast(address, ttl)
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.MarshalIndent(status, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+func handleStopRTPMulticast(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	status := stopRTPMulticast()
 	data, err := json.MarshalIndent(status, "", "  ")
 	if err != nil {
 		return nil, err
