@@ -26,6 +26,7 @@ type EnhancedDiagnostics struct {
 	VirtualMedia  *VirtualMediaState         `json:"virtual_media,omitempty"`
 	Stream        EnhancedStreamStatus       `json:"stream"`
 	RTSP          RTSPServerStatus           `json:"rtsp"`
+	Supervisor    EnhancedSupervisorStatus   `json:"supervisor"`
 	MCU           MCUProbeStatus             `json:"mcu"`
 	Warnings      []string                   `json:"warnings,omitempty"`
 }
@@ -94,6 +95,7 @@ func rpcGetEnhancedDiagnostics() (EnhancedDiagnostics, error) {
 		USBState:   rpcGetUSBState(),
 		Stream:     getEnhancedStreamStatus(),
 		RTSP:       getRTSPServerStatus(),
+		Supervisor: getEnhancedSupervisorStatus(),
 		MCU:        probeMCUStatus(),
 	}
 
