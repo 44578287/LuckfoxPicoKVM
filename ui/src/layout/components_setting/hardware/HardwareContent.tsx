@@ -9,6 +9,7 @@ import { BacklightSettings, useSettingsStore } from "@/hooks/stores";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
 import { InputField } from "@components/InputField";
 import notifications from "@/notifications";
+import EnhancedHostControlSettings from "@/layout/components_setting/hardware/HostControlSettings";
 
 
 export default function SettingsHardware() {
@@ -162,6 +163,8 @@ export default function SettingsHardware() {
         description={$at("Configure display settings and hardware options for your KVM device")}
       />
       <div className="space-y-4">
+        <EnhancedHostControlSettings />
+
         <SettingsItem
           title={$at("Display Orientation")}
           description={$at("Set the orientation of the display")}
