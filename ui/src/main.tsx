@@ -11,6 +11,7 @@ import { ExclamationTriangleIcon } from "@heroicons/react/16/solid";
 
 import EmptyCard from "@components/EmptyCard";
 import NotFoundPage from "@components/NotFoundPage";
+import WebRTCCodecCompatibilityGuard from "@components/WebRTCCodecCompatibilityGuard";
 import { LocalDevice } from "@/layout/index.pc";
 import Card from "@components/Card";
 import LocalAuthPage, { DeviceStatus } from "@routes/login_page/index";
@@ -84,6 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
     <>
 
       <ThemeProvider>
+        <WebRTCCodecCompatibilityGuard />
         <RouterProvider router={router} />
         <Notifications
           toastOptions={{
