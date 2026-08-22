@@ -91,7 +91,7 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
       overflow: "hidden",
       boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
     }}
-    className={`${dark_bg2_style} dark:border-[0.5px] dark:border-[rgba(80,80,80,1)]`}>
+    className={`${dark_bg2_style} text-black dark:text-white dark:border-[0.5px] dark:border-[rgba(80,80,80,1)]`}>
       <div className={`border-r ${dark_bg2_style} ${dark_bd_style}`}>
         <Menu
           mode="inline"
@@ -120,13 +120,11 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
           }))}
         />
       </div>
-      <Layout className={`${dark_bg2_style} hide-scrollbar`} style={{ flex: 1, padding: 24, overflow: "auto", maxHeight: "92vh", scrollbarWidth: "none", msOverflowStyle: "none" }}>
+      <Layout className={`${dark_bg2_style} hide-scrollbar text-black dark:text-white`} style={{ flex: 1, padding: 24, overflow: "auto", maxHeight: "92vh", scrollbarWidth: "none", msOverflowStyle: "none" }}>
         {renderContent()}
-
       </Layout>
     </div>
   );
 };
-
 
 export default SettingsModalPC;
