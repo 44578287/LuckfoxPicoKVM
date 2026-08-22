@@ -17,7 +17,8 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
-    return (localStorage.getItem('theme') as ThemeMode) || 'light';
+    const saved = localStorage.getItem('theme');
+    return saved === 'dark' ? 'dark' : 'light';
   });
 
   const isDark = themeMode === 'dark';
@@ -40,6 +41,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         colorPrimaryBorderHover: isDark ? primary_dark_color : primary_color,
       },
       Input: {
+        colorText: isDark ? '#fff' : '#000',
+        colorBgContainer: isDark ? 'rgba(26,26,26,1)' : '#ffffff',
+        algorithm: true,
+      },
+      InputNumber: {
         colorText: isDark ? '#fff' : '#000',
         colorBgContainer: isDark ? 'rgba(26,26,26,1)' : '#ffffff',
         algorithm: true,
@@ -105,6 +111,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           colorBgContainer: isDark ? 'rgba(26,26,26,1)' : '#ffffff',
           algorithm: true,
         },
+        InputNumber: {
+          colorText: isDark ? '#fff' : '#000',
+          colorBgContainer: isDark ? 'rgba(26,26,26,1)' : '#ffffff',
+          algorithm: true,
+        },
         Button: {
           colorPrimary: isDark ? primary_dark_color : primary_color,
           colorFillContentHover: isDark ? primary_dark_color : primary_color,
@@ -146,7 +157,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     localStorage.setItem('theme', themeMode);
-    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    const root = document.documentElement;
+    root.setAttribute('data-theme', themeMode);
+    // Tailwind's dark: variants in the vendor UI use the .dark class. Keep it
+    // in sync here so every caller (including device-side preference restore)
+    // gets correct colors without having to manipulate DOM classes itself.
+    root.classList.toggle('dark', isDark);
+    root.classList.toggle('light', !isDark);
+    root.style.colorScheme = themeMode;
   }, [themeMode, isDark]);
 
   return (
