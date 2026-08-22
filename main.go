@@ -197,6 +197,13 @@ func Main() {
 		StartViewerServer(8082)
 	}()
 
+	// Standards-based direct WebRTC source for go2rtc/Frigate/HA relays. It
+	// reuses the same read-only viewer PeerConnection/fan-out path and therefore
+	// does not add a second video encoder or an RTSP buffering hop.
+	go func() {
+		StartWHEPServer(defaultWHEPPort)
+	}()
+
 	go func() {
 		StartRTSPServer(defaultRTSPAddress)
 	}()
