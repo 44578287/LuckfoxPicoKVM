@@ -9,6 +9,7 @@ import {
   TagOutlined,
   VideoCameraOutlined,
   HomeOutlined,
+  DashboardOutlined,
   RightOutlined,
 } from "@ant-design/icons";
 import { useReactAt } from "i18n-auto-extractor/react";
@@ -20,9 +21,11 @@ import SettingsHardware from "@/layout/components_setting/hardware/HardwareConte
 import SettingsAdvanced from "@/layout/components_setting/advanced/AdvancedContent";
 import SettingsStreaming from "@/layout/components_setting/streaming/StreamingContent";
 import SettingsHomeAssistant from "@/layout/components_setting/home_assistant/HomeAssistantContent";
+import SettingsSupervisor from "@/layout/components_setting/supervisor/SupervisorContent";
 import SettingsVersion from "@/layout/components_setting/version/VersionContent";
 import { dark_bd_style, dark_bg2_style } from "@/layout/theme_color";
 import { useEnhancedAt } from "@/locales/enhanced";
+import { useSettingsStore } from "@/hooks/stores";
 
 interface MenuItem {
   key: string;
@@ -39,6 +42,7 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
   const [selectedMenu, setSelectedMenu] = useState<string>("general");
   const { $at } = useReactAt();
   const { $eat } = useEnhancedAt();
+  const language = useSettingsStore(state => state.language);
   const menuItems: MenuItem[] = [
     { key: "general", label: "General", icon: <SettingOutlined /> },
     { key: "network", label: "Network", icon: <WifiOutlined /> },
@@ -46,11 +50,15 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
     { key: "hardware", label: "Hardware", icon: <DesktopOutlined /> },
     { key: "streaming", label: "Streaming", icon: <VideoCameraOutlined /> },
     { key: "home_assistant", label: "Home Assistant", icon: <HomeOutlined /> },
+    { key: "supervisor", label: "Supervisor", icon: <DashboardOutlined /> },
     { key: "advanced", label: "Advanced", icon: <ToolOutlined /> },
     { key: "version", label: "Version", icon: <TagOutlined /> },
   ];
 
-  const menuLabel = (item: MenuItem) => ["streaming", "home_assistant"].includes(item.key) ? $eat(item.label) : $at(item.label);
+  const menuLabel = (item: MenuItem) => {
+    if (item.key === "supervisor") return language === "zh" ? "监控与自愈" : "Supervisor";
+    return ["streaming", "home_assistant"].includes(item.key) ? $eat(item.label) : $at(item.label);
+  };
 
   const handleMenuSelect: MenuProps["onClick"] = ({ key }) => {
     setSelectedMenu(key as string);
@@ -58,24 +66,16 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
 
   const renderContent = () => {
     switch (selectedMenu) {
-      case "general":
-        return <SettingsGeneral />;
-      case "network":
-        return <SettingsNetwork />;
-      case "access":
-        return <SettingsAccessIndex />;
-      case "hardware":
-        return <SettingsHardware />;
-      case "streaming":
-        return <SettingsStreaming />;
-      case "home_assistant":
-        return <SettingsHomeAssistant />;
-      case "advanced":
-        return <SettingsAdvanced />;
-      case "version":
-        return <SettingsVersion />;
-      default:
-        return <SettingsGeneral />;
+      case "general": return <SettingsGeneral />;
+      case "network": return <SettingsNetwork />;
+      case "access": return <SettingsAccessIndex />;
+      case "hardware": return <SettingsHardware />;
+      case "streaming": return <SettingsStreaming />;
+      case "home_assistant": return <SettingsHomeAssistant />;
+      case "supervisor": return <SettingsSupervisor />;
+      case "advanced": return <SettingsAdvanced />;
+      case "version": return <SettingsVersion />;
+      default: return <SettingsGeneral />;
     }
   };
 
@@ -110,10 +110,7 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
                 padding: "4px 0",
               }}>
                 <span>{menuLabel(item)}</span>
-                <RightOutlined style={{
-                  fontSize: "12px",
-                  marginLeft: "8px",
-                }} />
+                <RightOutlined style={{ fontSize: "12px", marginLeft: "8px" }} />
               </div>
             ),
             icon: item.icon,
