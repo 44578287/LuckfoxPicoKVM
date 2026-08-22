@@ -6,6 +6,7 @@ import { SettingsItem } from "@components/Settings/SettingsView";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
 import notifications from "@/notifications";
 import { useEnhancedAt } from "@/locales/enhanced";
+import WHEPSourceCard from "@/layout/components_setting/streaming/WHEPSourceCard";
 
 type VideoState = {
   ready: boolean;
@@ -217,6 +218,8 @@ export default function StreamingContent() {
             <Button onClick={() => copyText(viewerURL, "Viewer URL")}>{$eat("Copy URL")}</Button>
           </div>
         </SettingsItem>
+
+        <WHEPSourceCard />
 
         <SettingsItem
           title={$eat("RTSP")}
