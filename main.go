@@ -213,6 +213,12 @@ func Main() {
 	// discovery/state publication describes a usable device.
 	initEnhancedMQTT()
 
+	// The enhanced supervisor is deliberately started after the native video,
+	// GPIO, network and media services are initialized. Phase 1 only performs a
+	// bounded stop/start recovery of a genuinely stalled encoded-video pipeline;
+	// it never reboots the device automatically.
+	startEnhancedSupervisor()
+
 	go RunWebSecureServer()
 	// Web secure server is started only if TLS mode is enabled
 	if config.TLSMode != "" {
