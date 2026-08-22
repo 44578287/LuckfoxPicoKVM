@@ -3,6 +3,7 @@ package kvm
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -36,6 +37,8 @@ type VideoBroadcaster struct {
 	subscribers       map[string]chan *VideoFrame
 	subscriberList    []chan *VideoFrame // cached flat slice, rebuilt on Subscribe/Unsubscribe
 	count             atomic.Int32       // len(subscribers) as atomic for fast Broadcast check
+	lastFrameUnixNano atomic.Int64       // passive heartbeat for supervisor/diagnostics
+	totalFrames       atomic.Uint64
 	lock              sync.RWMutex
 	onFirstSubscribe  func()
 	onLastUnsubscribe func()
@@ -118,7 +121,24 @@ func (b *VideoBroadcaster) SubscriberCount() int {
 	return int(b.count.Load())
 }
 
+func (b *VideoBroadcaster) LastFrameAt() time.Time {
+	ns := b.lastFrameUnixNano.Load()
+	if ns <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, ns)
+}
+
+func (b *VideoBroadcaster) TotalFrames() uint64 {
+	return b.totalFrames.Load()
+}
+
 func (b *VideoBroadcaster) Broadcast(data []byte) {
+	// Record the native encoded-stream heartbeat before the no-subscriber fast
+	// path. This makes diagnostics useful without changing the frame fan-out.
+	b.lastFrameUnixNano.Store(time.Now().UnixNano())
+	b.totalFrames.Add(1)
+
 	// Atomic check avoids acquiring RLock on every video frame when nobody is watching.
 	if b.count.Load() == 0 {
 		return
