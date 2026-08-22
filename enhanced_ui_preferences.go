@@ -14,8 +14,9 @@ const enhancedUIPreferencesPath = "/userdata/picokvm/enhanced_ui_preferences.jso
 // They let the normal Web UI keep the same language and theme after an IP change,
 // when opened from another browser/computer, or after the local browser cache is cleared.
 type EnhancedUIPreferences struct {
-	Language string `json:"language"`
-	Theme    string `json:"theme"`
+	Language   string `json:"language"`
+	Theme      string `json:"theme"`
+	Configured bool   `json:"configured"`
 }
 
 var enhancedUIPreferencesState = struct {
@@ -25,7 +26,7 @@ var enhancedUIPreferencesState = struct {
 }{preferences: defaultEnhancedUIPreferences()}
 
 func defaultEnhancedUIPreferences() EnhancedUIPreferences {
-	return EnhancedUIPreferences{Language: "en", Theme: "light"}
+	return EnhancedUIPreferences{Language: "en", Theme: "light", Configured: false}
 }
 
 func validateEnhancedUIPreferences(p EnhancedUIPreferences) error {
@@ -62,6 +63,9 @@ func loadEnhancedUIPreferencesLocked() {
 		logger.Warn().Err(err).Str("path", enhancedUIPreferencesPath).Msg("invalid enhanced UI preferences values; using defaults")
 		return
 	}
+	// Presence of a valid file means the device already owns these preferences,
+	// including files written by an early build before Configured was introduced.
+	p.Configured = true
 	enhancedUIPreferencesState.preferences = p
 }
 
@@ -77,6 +81,7 @@ func setEnhancedUIPreferences(p EnhancedUIPreferences) error {
 	if err := validateEnhancedUIPreferences(p); err != nil {
 		return err
 	}
+	p.Configured = true
 	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal UI preferences: %w", err)
