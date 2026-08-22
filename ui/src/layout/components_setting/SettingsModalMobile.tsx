@@ -5,6 +5,7 @@ import {
   ArrowLeftOutlined,
   VideoCameraOutlined,
   HomeOutlined,
+  DashboardOutlined,
 } from "@ant-design/icons";
 import GeneralSvg from "@assets/second/general.svg?react";
 import NetworkSvg from "@assets/second/network.svg?react";
@@ -23,9 +24,11 @@ import SettingsHardware from "@/layout/components_setting/hardware/HardwareConte
 import SettingsAdvanced from "@/layout/components_setting/advanced/AdvancedContent";
 import SettingsStreaming from "@/layout/components_setting/streaming/StreamingContent";
 import SettingsHomeAssistant from "@/layout/components_setting/home_assistant/HomeAssistantContent";
+import SettingsSupervisor from "@/layout/components_setting/supervisor/SupervisorContent";
 import SettingsVersion from "@/layout/components_setting/version/VersionContent";
 import { dark_bg2_style, text_color, text_primary_color } from "@/layout/theme_color";
 import { useEnhancedAt } from "@/locales/enhanced";
+import { useSettingsStore } from "@/hooks/stores";
 
 const { Header, Content } = Layout;
 
@@ -35,7 +38,7 @@ interface MenuItem {
   icon: React.ReactNode;
 }
 
-type PageType = "menu" | "general" | "network" | "access" | "hardware" | "streaming" | "home_assistant" | "advanced" | "version";
+type PageType = "menu" | "general" | "network" | "access" | "hardware" | "streaming" | "home_assistant" | "supervisor" | "advanced" | "version";
 
 interface SettingsDialogProps {
   visible?: boolean;
@@ -61,6 +64,7 @@ const SettingsModalMobile: React.FC<SettingsDialogProps> = () => {
   const [currentPage, setCurrentPage] = useState<PageType>("menu");
   const { $at } = useReactAt();
   const { $eat } = useEnhancedAt();
+  const language = useSettingsStore(state => state.language);
   const token = AntTheme.useToken();
 
   const menuItems: MenuItem[] = [
@@ -70,11 +74,15 @@ const SettingsModalMobile: React.FC<SettingsDialogProps> = () => {
     { key: "hardware", label: "Hardware", icon: <HardwareSvg /> },
     { key: "streaming", label: "Streaming", icon: <VideoCameraOutlined /> },
     { key: "home_assistant", label: "Home Assistant", icon: <HomeOutlined /> },
+    { key: "supervisor", label: "Supervisor", icon: <DashboardOutlined /> },
     { key: "advanced", label: "Advanced", icon: <AdvancedSvg /> },
     { key: "version", label: "Version", icon: <VersionSvg /> },
   ];
 
-  const menuLabel = (item: MenuItem) => ["streaming", "home_assistant"].includes(item.key) ? $eat(item.label) : $at(item.label);
+  const menuLabel = (item: MenuItem) => {
+    if (item.key === "supervisor") return language === "zh" ? "监控与自愈" : "Supervisor";
+    return ["streaming", "home_assistant"].includes(item.key) ? $eat(item.label) : $at(item.label);
+  };
 
   const handleMenuSelect: MenuProps["onClick"] = ({ key }) => {
     setCurrentPage(key as PageType);
@@ -97,6 +105,7 @@ const SettingsModalMobile: React.FC<SettingsDialogProps> = () => {
       case "hardware": return <SettingsHardware />;
       case "streaming": return <SettingsStreaming />;
       case "home_assistant": return <SettingsHomeAssistant />;
+      case "supervisor": return <SettingsSupervisor />;
       case "advanced": return <SettingsAdvanced />;
       case "version": return <SettingsVersion />;
       default: return null;
