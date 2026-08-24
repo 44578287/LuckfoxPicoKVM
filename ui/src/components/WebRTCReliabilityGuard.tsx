@@ -1,106 +1,191 @@
-import { useEffect } from "react";
-import { flushSync } from "react-dom";
+import React, { useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 
-import { useRTCStore, useUiStore } from "@/hooks/stores";
+import VirtualKeyboard from "@components/VirtualKeyboard";
+import {
+  HDMIErrorOverlay,
+  LoadingVideoOverlay,
+  NoAutoplayPermissionsOverlay,
+  PointerLockBar,
+} from "@components/VideoOverlay";
+import IndexPc from "@/layout/components_bottom/terminal/index.pc";
+import { cx } from "@/cva.config";
+import { useVideoEffects } from "@/layout/core/desktop/hooks/useVideoEffects";
+import { useVideoStream } from "@/layout/core/desktop/hooks/useVideoStream";
+import { usePointerLock } from "@/layout/core/desktop/hooks/usePointerLock";
+import { useFullscreen } from "@/layout/core/desktop/hooks/useFullscreen";
+import { useKeyboardEvents } from "@/layout/core/desktop/hooks/useKeyboardEvents";
+import { useMouseEvents } from "@/layout/core/desktop/hooks/useMouseEvents";
+import { useVideoOverlays } from "@/layout/core/desktop/hooks/useVideoOverlays";
+import { VideoContainer } from "@components/Video/VideoContainer";
+import { VideoElement } from "@components/Video/VideoElement";
+import StatsTobbar from "@components/Sidebar/StatsTopbar";
+import Clipboard from "@/layout/components_side/Clipboard/Clipboard";
+import SettingsModal from "@/layout/components_setting";
+import { MacroMoreList } from "@/layout/components_side/Macros/MacroTopBar";
+import { useUiStore, useHidStore, useSettingsStore } from "@/hooks/stores";
+import { useTouchZoom } from "@/layout/core/desktop/hooks/useTouchZoom";
+import { usePasteHandler } from "@/layout/core/desktop/hooks/usePasteHandler";
+import OcrOverlay from "@components/OcrOverlay";
+import MCPControlOverlay from "@components/MCPControlOverlay";
 
-let installed = false;
-let nativeRTCPeerConnection: typeof RTCPeerConnection | null = null;
+export default function PCDesktop({
+  isFullscreen,
+  connectionOverlay,
+}: {
+  isFullscreen?: number;
+  connectionOverlay?: ReactNode;
+}) {
+  const videoElm = useRef<HTMLVideoElement>(null);
+  const audioElm = useRef<HTMLAudioElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const zoomContainerRef = useRef<HTMLDivElement>(null);
+  const pasteCaptureRef = useRef<HTMLTextAreaElement>(null);
 
-/**
- * Publish a newly-created RTCPeerConnection to the RTC store at construction
- * time, rather than waiting until the end of the vendor setupPeerConnection()
- * routine. The vendor websocket message handler captures peerConnection from a
- * React render closure and otherwise can see null when a very fast LAN answer
- * arrives during a cold first connection.
- *
- * We still wrap setPeerConnection as a second line of defence. The object we
- * return is the real browser RTCPeerConnection; this is not a proxy and does
- * not change WebRTC behaviour.
- */
-export function installWebRTCFirstConnectGuard() {
-  if (installed) return;
-  installed = true;
+  const isVirtualKeyboardEnabled = useHidStore(state => state.isVirtualKeyboardEnabled);
+  const isReinitializingGadget = useHidStore(state => state.isReinitializingGadget);
+  const setTerminalType = useUiStore(state => state.setTerminalType);
+  const terminalType = useUiStore(state => state.terminalType);
+  const setVirtualKeyboardEnabled = useHidStore(state => state.setVirtualKeyboardEnabled);
+  const isOcrMode = useUiStore(state => state.isOcrMode);
 
-  const originalSetPeerConnection = useRTCStore.getState().setPeerConnection;
-
-  useRTCStore.setState({
-    setPeerConnection: pc => {
-      if (useRTCStore.getState().peerConnection === pc) return;
-      if (pc === null) {
-        originalSetPeerConnection(pc);
-        return;
-      }
-      flushSync(() => {
-        originalSetPeerConnection(pc);
-      });
-    },
-  });
-
-  // Publish the real PC synchronously at the exact point it is constructed.
-  // This happens before transceivers/data channels can emit negotiationneeded
-  // and therefore before an SDP answer can return from the device.
-  nativeRTCPeerConnection = window.RTCPeerConnection;
-  const NativePC = nativeRTCPeerConnection;
-  if (!NativePC) return;
-
-  const WrappedPC = function (configuration?: RTCConfiguration) {
-    const pc = new NativePC(configuration);
-    if (useRTCStore.getState().peerConnection !== pc) {
-      flushSync(() => {
-        originalSetPeerConnection(pc);
-      });
-    }
-    return pc;
-  } as unknown as typeof RTCPeerConnection;
-
-  // Preserve instanceof/prototype/static behaviour expected by browser code.
-  Object.setPrototypeOf(WrappedPC, NativePC);
-  (WrappedPC as unknown as { prototype: RTCPeerConnection }).prototype = NativePC.prototype;
-  Object.defineProperty(window, "RTCPeerConnection", {
-    configurable: true,
-    writable: true,
-    value: WrappedPC,
-  });
-}
-
-/**
- * Connection/loading overlays belong to the KVM canvas. They may explain a
- * failed video connection, but they must never sit above Settings, MCP, OTA or
- * recovery controls. The vendor PC layout gives the overlay z-20 while the
- * Settings popover is only z-10; lower the overlay into the video layer and
- * additionally hide it while a side panel is open.
- */
-export default function WebRTCReliabilityGuard() {
-  const sidebarView = useUiStore(state => state.sidebarView);
+  const forceHttp = useSettingsStore(state => state.forceHttp);
 
   useEffect(() => {
-    const styleId = "picokvm-webrtc-access-guard";
-    let style = document.getElementById(styleId) as HTMLStyleElement | null;
-    if (!style) {
-      style = document.createElement("style");
-      style.id = styleId;
-      style.textContent = `
-        .animate-slideUpFade.pointer-events-none.absolute.inset-0.z-20 {
-          z-index: 5 !important;
-        }
-
-        body[data-picokvm-side-panel-open="true"]
-        .animate-slideUpFade.pointer-events-none.absolute.inset-0.z-20 {
-          opacity: 0 !important;
-          visibility: hidden !important;
-          pointer-events: none !important;
-        }
-      `;
-      document.head.appendChild(style);
+    if (isVirtualKeyboardEnabled) {
+      setTerminalType("none");
     }
-  }, []);
+  }, [isVirtualKeyboardEnabled, setTerminalType]);
 
   useEffect(() => {
-    document.body.dataset.picokvmSidePanelOpen = sidebarView ? "true" : "false";
+    if (terminalType !== "none") {
+      setVirtualKeyboardEnabled(false);
+    }
+  }, [terminalType, setVirtualKeyboardEnabled]);
+
+  const videoEffects = useVideoEffects();
+  const videoStream = useVideoStream(videoElm as React.RefObject<HTMLVideoElement>, audioElm as React.RefObject<HTMLAudioElement>);
+  const pointerLock = usePointerLock(videoElm as React.RefObject<HTMLVideoElement>);
+  useFullscreen(videoElm as React.RefObject<HTMLVideoElement>, pointerLock, isFullscreen);
+  const touchZoom = useTouchZoom(zoomContainerRef as React.RefObject<HTMLDivElement>);
+  const { handleGlobalPaste } = usePasteHandler(pasteCaptureRef as React.RefObject<HTMLTextAreaElement>);
+
+  const keyboardEvents = useKeyboardEvents(pasteCaptureRef as React.RefObject<HTMLTextAreaElement>, isReinitializingGadget);
+  const mouseEvents = useMouseEvents(videoElm as React.RefObject<HTMLVideoElement>, pointerLock, touchZoom);
+  const overlays = useVideoOverlays(videoStream, pointerLock, videoEffects);
+
+  useEffect(() => {
+    const keyboardCleanup = keyboardEvents.setupKeyboardEvents();
+    const videoCleanup = videoStream.setupVideoEventListeners();
+    const mouseCleanup = mouseEvents.setupMouseEvents();
+
     return () => {
-      delete document.body.dataset.picokvmSidePanelOpen;
+      keyboardCleanup?.();
+      videoCleanup?.();
+      mouseCleanup?.();
     };
-  }, [sidebarView]);
+  }, [keyboardEvents, videoStream, mouseEvents]);
 
-  return null;
+  return (
+    <div className=" h-full w-full flex flex-col justify-evenly overflow-hidden  bg-[#d3d3d3] dark:bg-[#1a1a1a]">
+
+      <StatsTobbar title={""} targetView={"SettingsModal"}> <SettingsModal /></StatsTobbar>
+      <StatsTobbar title={"Clipboard"} targetView={"ClipboardMobile"}> <Clipboard /></StatsTobbar>
+      <StatsTobbar title={""} targetView={"MacroMoreList"}> <MacroMoreList /></StatsTobbar>
+      <audio
+        id="global-audio"
+        ref={audioElm}
+        autoPlay
+        muted={true}
+        controls={false}
+      />
+
+      <VideoContainer containerRef={containerRef as React.RefObject<HTMLDivElement>} >
+        <div className="flex  h-full flex-col">
+          <div className="relative grow h-full w-full overflow-hidden">
+            <div className="flex h-full flex-col">
+              <div className="grid grow grid-rows-(--grid-bodyFooter) overflow-hidden h-full w-full">
+                <PointerLockBar show={overlays.showPointerLockBar} />
+
+                <div
+                  className={`relative  mx-4  my-2 flex items-center justify-center overflow-hidden`}>
+                  <div
+                    ref={zoomContainerRef}
+                    className="relative flex h-full w-full items-center justify-center "
+                    style={{
+                        transform: `translate(${touchZoom.mobileTx}px, ${touchZoom.mobileTy}px) scale(${touchZoom.mobileScale})`,
+                        transformOrigin: "center center",
+                        touchAction: "none",
+                    }}
+                  >
+                    <VideoElement
+                      ref={videoElm}
+                      onPlaying={videoStream.onVideoPlaying}
+                      style={videoEffects.videoStyle}
+                      className={cx(
+                         `max-h-full min-h-[384px] max-w-full min-w-[512px]  object-contain transition-all duration-1000`,
+                        {
+                           "cursor-none": videoEffects.settings.isCursorHidden,
+                           "pointer-events-none": isOcrMode,
+                           "opacity-0": overlays.shouldHideVideo,
+                           "opacity-60!": overlays.showPointerLockBar,
+                           "animate-slideUpFade  shadow-xs ":
+                           videoStream.isPlaying,
+                        },
+                      )}
+                    />
+                    <OcrOverlay
+                      videoRef={videoElm as React.RefObject<HTMLVideoElement>}
+                      containerRef={zoomContainerRef as React.RefObject<HTMLDivElement>}
+                    />
+                    <MCPControlOverlay
+                      videoRef={videoElm as React.RefObject<HTMLVideoElement>}
+                      containerRef={zoomContainerRef as React.RefObject<HTMLDivElement>}
+                    />
+
+                    {connectionOverlay && (
+                      <div
+                        style={{ animationDuration: "500ms" }}
+                        className="animate-slideUpFade absolute inset-0 z-10 flex items-center justify-center"
+                      >
+                        <div className="relative h-full-w-full rounded-md">
+                          {connectionOverlay}
+                        </div>
+                      </div>
+                    )}
+
+                    {(videoStream.peerConnectionState === "connected" || forceHttp) && (
+                      <div
+                        style={{ animationDuration: "500ms" }}
+                        className="animate-slideUpFade pointer-events-none absolute inset-0 flex items-center justify-center"
+                      >
+                        <div className="relative h-full w-full rounded-md">
+                          <LoadingVideoOverlay show={overlays.showLoadingOverlay} />
+                          <HDMIErrorOverlay show={overlays.showHDMIError} hdmiState={overlays.hdmiState} />
+                          <NoAutoplayPermissionsOverlay
+                             show={overlays.showNoAutoplayOverlay}
+                            onPlayClick={videoStream.handlePlayClick}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <VirtualKeyboard />
+                <IndexPc />
+              </div>
+            </div>
+          </div>
+        </div>
+      </VideoContainer>
+
+      <textarea
+        ref={pasteCaptureRef}
+        aria-hidden="true"
+        style={{ position: "fixed", left: -9999, top: -9999, width: 1, height: 1, opacity: 0 }}
+        onPaste={handleGlobalPaste}
+      />
+    </div>
+  );
 }

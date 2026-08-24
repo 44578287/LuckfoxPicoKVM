@@ -5,7 +5,7 @@ import { isMobile } from "react-device-detect";
 import { GridCard } from "@components/Card";
 import { Button } from "@components/Button";
 import LogoLuckfox from "@/assets/logo-luckfox.png";
-import { useSettingsStore, useUiStore } from "@/hooks/stores";
+import { useRTCStore, useSettingsStore, useUiStore } from "@/hooks/stores";
 import { resumeHttpSessionAfterTakeover, useJsonRpc } from "@/hooks/useJsonRpc";
 
 interface ContextType {
@@ -18,6 +18,8 @@ export default function OtherSessionRoute() {
   const navigate = useNavigate();
   const setOtherSession = useUiStore(state => state.setOtherSession);
   const forceHttp = useSettingsStore(state => state.forceHttp);
+  const peerConnection = useRTCStore(state => state.peerConnection);
+  const rpcDataChannel = useRTCStore(state => state.rpcDataChannel);
   const [send] = useJsonRpc();
   const [takingOver, setTakingOver] = useState(false);
 
@@ -48,8 +50,21 @@ export default function OtherSessionRoute() {
       return;
     }
 
-    // setupPeerConnection itself creates the new exclusive WebRTC session. Do
-    // not issue a separate HTTP ownership request in normal WebRTC mode.
+    const hasHealthyWebRTC =
+      peerConnection?.connectionState === "connected" ||
+      rpcDataChannel?.readyState === "open";
+
+    if (hasHealthyWebRTC) {
+      // The new tab can already own a healthy media/data path by the time the
+      // delayed takeover notice is rendered. Rebuilding WebRTC here would kick
+      // our own working session and can make the dialog recur.
+      navigate("..");
+      return;
+    }
+
+    // Only create a replacement session when this tab genuinely has no healthy
+    // WebRTC path. setupPeerConnection closes a stale local PC before creating
+    // exactly one replacement session.
     outletContext?.setupPeerConnection()
       .then(() => navigate(".."))
       .catch(() => setTakingOver(false));
