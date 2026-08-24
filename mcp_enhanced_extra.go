@@ -69,6 +69,9 @@ func registerEnhancedExtraMCPTools(s *server.MCPServer) {
 	// implementations with wrappers that preserve the same lease/takeover log.
 	registerEnhancedMCPControlPolicyTools(s)
 	registerEnhancedReliabilityOverrides(s)
+	// Annotation metadata must be the very last pass because mcp-go stores the
+	// complete Tool object by name when a later handler overrides an earlier one.
+	registerEnhancedMCPAnnotationOverrides(s)
 }
 
 func handleGetEnhancedDiagnostics(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
