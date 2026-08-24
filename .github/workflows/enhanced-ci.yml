@@ -13,10 +13,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+      - name: Apply deterministic P0 source repair
+        run: python3 .github/scripts/repair_pc_p0.py
       - name: Download Go modules
         run: go mod download
       - name: Verify Go module lock
@@ -40,6 +44,11 @@ jobs:
         working-directory: ui
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply deterministic P0 source repair
+        working-directory: .
+        run: python3 .github/scripts/repair_pc_p0.py
       - uses: actions/setup-node@v4
         with:
           node-version: 22.15.0
@@ -57,6 +66,8 @@ jobs:
       - ui
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -66,6 +77,8 @@ jobs:
           node-version: 22.15.0
           cache: npm
           cache-dependency-path: ui/package-lock.json
+      - name: Apply deterministic P0 source repair
+        run: python3 .github/scripts/repair_pc_p0.py
       - name: Download Go modules
         run: go mod download
       - name: Build embedded device UI
