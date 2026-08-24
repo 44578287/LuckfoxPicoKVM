@@ -10,6 +10,7 @@ import {
   VideoCameraOutlined,
   HomeOutlined,
   DashboardOutlined,
+  RobotOutlined,
   RightOutlined,
 } from "@ant-design/icons";
 import { useReactAt } from "i18n-auto-extractor/react";
@@ -22,6 +23,7 @@ import SettingsAdvanced from "@/layout/components_setting/advanced/AdvancedConte
 import SettingsStreaming from "@/layout/components_setting/streaming/StreamingContent";
 import SettingsHomeAssistant from "@/layout/components_setting/home_assistant/HomeAssistantContent";
 import SettingsSupervisor from "@/layout/components_setting/supervisor/SupervisorContent";
+import SettingsMCPControl from "@/layout/components_setting/mcp_control/MCPControlContent";
 import SettingsVersion from "@/layout/components_setting/version/VersionContent";
 import { dark_bd_style, dark_bg2_style } from "@/layout/theme_color";
 import { useEnhancedAt } from "@/locales/enhanced";
@@ -50,6 +52,7 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
     { key: "hardware", label: "Hardware", icon: <DesktopOutlined /> },
     { key: "streaming", label: "Streaming", icon: <VideoCameraOutlined /> },
     { key: "home_assistant", label: "Home Assistant", icon: <HomeOutlined /> },
+    { key: "mcp_control", label: "MCP / AI Control", icon: <RobotOutlined /> },
     { key: "supervisor", label: "Supervisor", icon: <DashboardOutlined /> },
     { key: "advanced", label: "Advanced", icon: <ToolOutlined /> },
     { key: "version", label: "Version", icon: <TagOutlined /> },
@@ -57,6 +60,7 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
 
   const menuLabel = (item: MenuItem) => {
     if (item.key === "supervisor") return language === "zh" ? "监控与自愈" : "Supervisor";
+    if (item.key === "mcp_control") return language === "zh" ? "MCP / AI 控制" : "MCP / AI Control";
     return ["streaming", "home_assistant"].includes(item.key) ? $eat(item.label) : $at(item.label);
   };
 
@@ -72,6 +76,7 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
       case "hardware": return <SettingsHardware />;
       case "streaming": return <SettingsStreaming />;
       case "home_assistant": return <SettingsHomeAssistant />;
+      case "mcp_control": return <SettingsMCPControl />;
       case "supervisor": return <SettingsSupervisor />;
       case "advanced": return <SettingsAdvanced />;
       case "version": return <SettingsVersion />;
