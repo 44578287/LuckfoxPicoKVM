@@ -26,6 +26,7 @@ import { useUiStore, useHidStore, useSettingsStore } from "@/hooks/stores";
 import { useTouchZoom } from "@/layout/core/desktop/hooks/useTouchZoom";
 import { usePasteHandler } from "@/layout/core/desktop/hooks/usePasteHandler";
 import OcrOverlay from "@components/OcrOverlay";
+import MCPControlOverlay from "@components/MCPControlOverlay";
 
 export default function PCDesktop({ isFullscreen }: { isFullscreen?: number }) {
   const videoElm = useRef<HTMLVideoElement>(null);
@@ -127,6 +128,10 @@ export default function PCDesktop({ isFullscreen }: { isFullscreen?: number }) {
                       )}
                     />
                     <OcrOverlay
+                      videoRef={videoElm as React.RefObject<HTMLVideoElement>}
+                      containerRef={zoomContainerRef as React.RefObject<HTMLDivElement>}
+                    />
+                    <MCPControlOverlay
                       videoRef={videoElm as React.RefObject<HTMLVideoElement>}
                       containerRef={zoomContainerRef as React.RefObject<HTMLDivElement>}
                     />
