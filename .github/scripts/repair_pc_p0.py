@@ -149,6 +149,8 @@ web = require_replace(
 WEB_PATH.write_text(web, encoding="utf-8")
 subprocess.run(["gofmt", "-w", WEB_PATH.as_posix()], check=True)
 
+# Touch marker: the workflow already exists on enhanced/dev; this commit exists
+# only to emit a fresh push event for the deterministic repair job.
 print("P0 repair complete")
 print(f"PC bytes: {PC_PATH.stat().st_size}")
 print(f"Web bytes: {WEB_PATH.stat().st_size}")
