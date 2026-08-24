@@ -76,6 +76,11 @@ export const usePasteHandler = (pasteCaptureRef?: React.RefObject<HTMLTextAreaEl
   }, [safeKeyboardLayout]);
 
   const sendTextViaHID = useCallback(async (t: string) => {
+    // Translate the whole string to HID strokes in the browser so we retain the
+    // vendor keyboard-layout/dead-key mappings, then submit ONE RPC transaction.
+    // PicoKVM paces the actual key-down/key-up reports locally; browser/network
+    // jitter no longer determines the inter-character timing.
+    const strokes: { key: number; modifier: number }[] = [];
     for (const ch of t) {
       const mapping = chars[safeKeyboardLayout][ch];
       if (!mapping || !mapping.key) continue;
@@ -91,17 +96,21 @@ export const usePasteHandler = (pasteCaptureRef?: React.RefObject<HTMLTextAreaEl
         modz.unshift(((accentKey.shift ? modifiers["ShiftLeft"] : 0) | (accentKey.altRight ? modifiers["AltRight"] : 0)));
       }
       for (const [index, kei] of keyz.entries()) {
-        await new Promise<void>((resolve, reject) => {
-          send("keyboardReport", { keys: [kei], modifier: modz[index] }, params => {
-            if ("error" in params) return reject(params.error as unknown as Error);
-            send("keyboardReport", { keys: [], modifier: 0 }, params => {
-              if ("error" in params) return reject(params.error as unknown as Error);
-              resolve();
-            });
-          });
-        });
+        strokes.push({ key: kei, modifier: modz[index] });
       }
     }
+
+    await new Promise<void>((resolve, reject) => {
+      send("reliableKeyboardSequence", {
+        params: {
+          strokes,
+          profile: "normal",
+        },
+      }, resp => {
+        if ("error" in resp) return reject(resp.error as unknown as Error);
+        resolve();
+      });
+    });
   }, [send, safeKeyboardLayout]);
 
   const sendTextToRemote = useCallback(async (txt: string) => {
