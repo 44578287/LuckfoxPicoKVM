@@ -7,6 +7,7 @@ import { SettingsItem } from "@components/Settings/SettingsView";
 import { useJsonRpc } from "@/hooks/useJsonRpc";
 import { useSettingsStore } from "@/hooks/stores";
 import notifications from "@/notifications";
+import MCPAuditPanel from "./MCPAuditPanel";
 
 type MCPSettings = {
   lock_local_input_during_action: boolean;
@@ -199,6 +200,8 @@ export default function MCPControlContent() {
         {logs.length === 0 ? <div className="text-sm text-slate-500">{t("No MCP actions recorded yet")}</div> :
           <div className="max-h-64 space-y-1 overflow-auto font-mono text-xs">{logs.map(log => <div key={log.seq} className="flex gap-2 rounded px-2 py-1 odd:bg-slate-100 dark:odd:bg-white/[0.04]"><span className="shrink-0 text-slate-400">{new Date(log.timestamp).toLocaleTimeString()}</span><span className="shrink-0 uppercase text-slate-500">{log.kind}</span><span className="break-all">{log.summary}</span>{log.success === false && <span className="text-red-500">FAIL</span>}</div>)}</div>}
       </div>
+
+      <MCPAuditPanel />
     </div>
   );
 }
