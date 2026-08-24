@@ -13,7 +13,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// mcpPointerState tracks the last absolute position issued through MCP.  HID
+// mcpPointerState tracks the last absolute position issued through MCP. HID
 // absolute mouse reports contain position and button state in the same packet,
 // so a click must reuse the current position instead of sending (0,0).
 var mcpPointerState = struct {
@@ -24,6 +24,36 @@ var mcpPointerState = struct {
 }{x: 16384, y: 16384}
 
 func registerEnhancedAIControlMCPTools(s *server.MCPServer) {
+	// Re-register the legacy input tool names last. mcp-go stores tools by name,
+	// so these definitions replace the old upstream-derived handlers without
+	// modifying mcp.go. In particular, mouse_click no longer jumps to (0,0).
+	s.AddTool(mcp.NewTool("mouse_move_absolute",
+		mcp.WithDescription("Move mouse to HID absolute coordinates 0-32767 while preserving current button state"),
+		mcp.WithNumber("x", mcp.Required()),
+		mcp.WithNumber("y", mcp.Required()),
+	), handleEnhancedMouseMoveAbsolute)
+
+	s.AddTool(mcp.NewTool("mouse_move_relative",
+		mcp.WithDescription("Move mouse by one relative HID report (-127..127 per axis)"),
+		mcp.WithNumber("dx", mcp.Required()),
+		mcp.WithNumber("dy", mcp.Required()),
+	), handleEnhancedMouseMoveRelative)
+
+	s.AddTool(mcp.NewTool("mouse_click",
+		mcp.WithDescription("Click a mouse button at the current MCP pointer position without moving the pointer"),
+		mcp.WithString("button", mcp.Required(), mcp.Enum("left", "right", "middle")),
+	), handleEnhancedMouseClick)
+
+	s.AddTool(mcp.NewTool("mouse_scroll",
+		mcp.WithDescription("Scroll the mouse wheel (-127..127)"),
+		mcp.WithNumber("delta", mcp.Required()),
+	), handleEnhancedMouseScroll)
+
+	s.AddTool(mcp.NewTool("type_text",
+		mcp.WithDescription("Type ASCII text through USB HID. Arbitrary Unicode requires a host IME/clipboard path and is intentionally rejected here"),
+		mcp.WithString("text", mcp.Required()),
+	), handleEnhancedTypeText)
+
 	s.AddTool(mcp.NewTool("get_ai_control_capabilities",
 		mcp.WithDescription("Describe the PicoKVM Enhanced AI-control coordinate spaces, input primitives and available recovery controls"),
 	), handleGetAIControlCapabilities)
@@ -65,7 +95,7 @@ func registerEnhancedAIControlMCPTools(s *server.MCPServer) {
 	), handleMouseDragScreen)
 
 	s.AddTool(mcp.NewTool("keyboard_event",
-		mcp.WithDescription("Press, hold, or release one keyboard key. action=press performs down+up; use down/up for held-key workflows"),
+		mcp.WithDescription("Press, hold, or release one non-modifier keyboard key. action=press performs down+up; use keyboard_combo for Ctrl/Shift/Alt/Meta combinations"),
 		mcp.WithString("key", mcp.Required()),
 		mcp.WithString("action", mcp.Required(), mcp.Enum("press", "down", "up")),
 	), handleKeyboardEvent)
@@ -249,6 +279,78 @@ func mcpLookupKey(name string) (uint8, error) {
 	return 0, fmt.Errorf("unknown key: %s", name)
 }
 
+func handleEnhancedMouseMoveAbsolute(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	x, okX := args["x"].(float64)
+	y, okY := args["y"].(float64)
+	if !okX || !okY {
+		return nil, fmt.Errorf("x and y are required")
+	}
+	if x < 0 || x > 32767 || y < 0 || y > 32767 {
+		return nil, fmt.Errorf("absolute mouse coordinates must be within 0..32767")
+	}
+	if err := mcpMoveAbsolute(int(x), int(y)); err != nil {
+		return nil, err
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("Mouse moved to HID (%d, %d)", int(x), int(y))), nil
+}
+
+func handleEnhancedMouseMoveRelative(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := req.GetArguments()
+	dx, okDX := args["dx"].(float64)
+	dy, okDY := args["dy"].(float64)
+	if !okDX || !okDY {
+		return nil, fmt.Errorf("dx and dy are required")
+	}
+	if err := mcpMoveRelative(int(dx), int(dy)); err != nil {
+		return nil, err
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("Mouse moved relatively by (%d, %d)", int(dx), int(dy))), nil
+}
+
+func handleEnhancedMouseClick(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	button, _ := req.GetArguments()["button"].(string)
+	if err := mcpClick(button); err != nil {
+		return nil, err
+	}
+	x, y, _ := mcpCurrentPointer()
+	return mcp.NewToolResultText(fmt.Sprintf("Clicked %s at current HID pointer (%d, %d)", button, x, y)), nil
+}
+
+func handleEnhancedMouseScroll(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	delta, ok := req.GetArguments()["delta"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("delta is required")
+	}
+	if delta < -127 || delta > 127 {
+		return nil, fmt.Errorf("scroll delta must be between -127 and 127")
+	}
+	if err := rpcWheelReport(int8(delta), "absolute"); err != nil {
+		return nil, err
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("Scrolled by %d", int(delta))), nil
+}
+
+func handleEnhancedTypeText(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	text, _ := req.GetArguments()["text"].(string)
+	for _, char := range text {
+		if char > 0x7f {
+			return nil, fmt.Errorf("type_text currently supports ASCII only; unsupported character %q", char)
+		}
+		keyCode, modifier, ok := charToKeyCode(uint8(char))
+		if !ok {
+			return nil, fmt.Errorf("unsupported character %q for current HID text mapper", char)
+		}
+		if err := rpcKeyboardReport(modifier, []uint8{keyCode}); err != nil {
+			return nil, err
+		}
+		if err := rpcKeyboardReport(0, []uint8{}); err != nil {
+			return nil, err
+		}
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("Typed ASCII text: %s", text)), nil
+}
+
 func handleGetAIControlCapabilities(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	state := lastVideoState
 	caps := map[string]interface{}{
@@ -261,7 +363,7 @@ func handleGetAIControlCapabilities(ctx context.Context, req mcp.CallToolRequest
 			"screen_pixel_mouse": true,
 			"hid_coordinate_range": "0..32767",
 		},
-		"mouse": []string{"absolute", "relative", "screen_pixel", "click", "button_down_up", "double_click", "drag", "vertical_scroll"},
+		"mouse": []string{"absolute", "relative", "screen_pixel", "click_current_position", "button_down_up", "double_click", "drag", "vertical_scroll"},
 		"keyboard": map[string]interface{}{
 			"single_key": true,
 			"combination": true,
