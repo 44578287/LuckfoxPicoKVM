@@ -64,6 +64,10 @@ func registerEnhancedExtraMCPTools(s *server.MCPServer) {
 		mcp.WithDescription("Pulse the host reset button for an explicit duration"),
 		mcp.WithNumber("duration_ms", mcp.Required(), mcp.Description("100-2500 ms")),
 	), handleTriggerResetFor)
+
+	// Apply the human/MCP collaboration wrappers last so no later registration
+	// can accidentally bypass local-input leasing, observability or takeover.
+	registerEnhancedMCPControlPolicyTools(s)
 }
 
 func handleGetEnhancedDiagnostics(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
