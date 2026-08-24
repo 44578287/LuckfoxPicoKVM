@@ -13,6 +13,11 @@ import (
 // upstream-derived mcp.go. This makes future Luckfox merges substantially
 // smaller while still exposing one unified MCP server to clients.
 func registerEnhancedExtraMCPTools(s *server.MCPServer) {
+	// Keep newer extension groups modular so upstream-derived mcp.go remains
+	// small and future Luckfox merges do not require rewriting the core file.
+	registerEnhancedSupervisorMCPTools(s)
+	registerEnhancedAIControlMCPTools(s)
+
 	s.AddTool(mcp.NewTool("get_diagnostics",
 		mcp.WithDescription("Get a read-only PicoKVM diagnostics snapshot including video, USB, storage, network, host IO, RTSP and MCU visibility"),
 	), handleGetEnhancedDiagnostics)
