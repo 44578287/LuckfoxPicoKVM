@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 var relativeMouseConfig = gadgetConfigItem{
@@ -20,69 +21,54 @@ var relativeMouseConfig = gadgetConfigItem{
 	reportDesc: relativeMouseCombinedReportDesc,
 }
 
-// from: https://github.com/NicoHood/HID/blob/b16be57caef4295c6cd382a7e4c64db5073647f7/src/SingleReport/BootMouse.cpp#L26
 var relativeMouseCombinedReportDesc = []byte{
-	0x05, 0x01, // USAGE_PAGE (Generic Desktop)	  54
-	0x09, 0x02, // USAGE (Mouse)
-	0xa1, 0x01, // COLLECTION (Application)
-
-	// Pointer and Physical are required by Apple Recovery
-	0x09, 0x01, // USAGE (Pointer)
-	0xa1, 0x00, // COLLECTION (Physical)
-
-	// 8 Buttons
-	0x05, 0x09, // USAGE_PAGE (Button)
-	0x19, 0x01, // USAGE_MINIMUM (Button 1)
-	0x29, 0x08, // USAGE_MAXIMUM (Button 8)
-	0x15, 0x00, // LOGICAL_MINIMUM (0)
-	0x25, 0x01, // LOGICAL_MAXIMUM (1)
-	0x95, 0x08, // REPORT_COUNT (8)
-	0x75, 0x01, // REPORT_SIZE (1)
-	0x81, 0x02, // INPUT (Data,Var,Abs)
-
-	// X, Y, Wheel
-	0x05, 0x01, // USAGE_PAGE (Generic Desktop)
-	0x09, 0x30, // USAGE (X)
-	0x09, 0x31, // USAGE (Y)
-	0x09, 0x38, // USAGE (Wheel)
-	0x15, 0x81, // LOGICAL_MINIMUM (-127)
-	0x25, 0x7f, // LOGICAL_MAXIMUM (127)
-	0x75, 0x08, // REPORT_SIZE (8)
-	0x95, 0x03, // REPORT_COUNT (3)
-	0x81, 0x06, // INPUT (Data,Var,Rel)
-
-	// End
-	0xc0, //       End Collection (Physical)
-	0xc0, //       End Collection
+	0x05, 0x01,
+	0x09, 0x02,
+	0xa1, 0x01,
+	0x09, 0x01,
+	0xa1, 0x00,
+	0x05, 0x09,
+	0x19, 0x01,
+	0x29, 0x08,
+	0x15, 0x00,
+	0x25, 0x01,
+	0x95, 0x08,
+	0x75, 0x01,
+	0x81, 0x02,
+	0x05, 0x01,
+	0x09, 0x30,
+	0x09, 0x31,
+	0x09, 0x38,
+	0x15, 0x81,
+	0x25, 0x7f,
+	0x75, 0x08,
+	0x95, 0x03,
+	0x81, 0x06,
+	0xc0,
+	0xc0,
 }
 
 func (u *UsbGadget) relMouseWriteHidFile(data []byte) error {
 	if u.relMouseHidFile == nil {
-		var err error
-		u.relMouseHidFile, err = os.OpenFile("/dev/hidg2", os.O_RDWR, 0666)
+		file, err := openWithTimeout("/dev/hidg2", os.O_RDWR, 0666, 750*time.Millisecond)
 		if err != nil {
-
 			if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "no such device") {
-				u.log.Error().
-					Str("device", "hidg2").
-					Str("device_name", "relative_mouse").
-					Err(err).
-					Msg("HID device file missing, gadget may need reinitialization")
-
+				u.log.Error().Str("device", "hidg2").Str("device_name", "relative_mouse").Err(err).Msg("HID device file missing, gadget may need reinitialization")
 				if u.onHidDeviceMissing != nil {
 					(*u.onHidDeviceMissing)("relative_mouse", err)
 				}
 			}
 			return fmt.Errorf("failed to open hidg2: %w", err)
 		}
+		u.relMouseHidFile = file
 	}
 
-	_, err := u.relMouseHidFile.Write(data)
+	_, err := u.writeWithTimeout(u.relMouseHidFile, data)
 	if err != nil {
 		u.logWithSupression("relMouseWriteHidFile", 100, u.log, err, "failed to write to hidg2")
-		u.relMouseHidFile.Close()
+		_ = u.relMouseHidFile.Close()
 		u.relMouseHidFile = nil
-		return err
+		return fmt.Errorf("relative mouse HID write failed: %w", err)
 	}
 	u.resetLogSuppressionCounter("relMouseWriteHidFile")
 	return nil
@@ -92,16 +78,10 @@ func (u *UsbGadget) RelMouseReport(mx, my int8, buttons uint8, wheel int8) error
 	u.relMouseLock.Lock()
 	defer u.relMouseLock.Unlock()
 
-	err := u.relMouseWriteHidFile([]byte{
-		buttons,     // Buttons
-		uint8(mx),   // X
-		uint8(my),   // Y
-		uint8(wheel), // Wheel
-	})
+	err := u.relMouseWriteHidFile([]byte{buttons, uint8(mx), uint8(my), uint8(wheel)})
 	if err != nil {
 		return err
 	}
-
 	u.resetUserInputTime()
 	return nil
 }
