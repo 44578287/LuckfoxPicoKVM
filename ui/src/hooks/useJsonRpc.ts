@@ -55,6 +55,13 @@ function getHttpSessionId() {
   }
 }
 
+/**
+ * A page that has been displaced by a newer WebRTC control session must stop
+ * all automatic HTTP fallback traffic. Otherwise DeviceStateReconciler keeps
+ * polling after the old DataChannel is closed and the backend's HTTP-session
+ * arbitration can make that dead page claim ownership again, causing an
+ * endless /other-session takeover loop between two tabs.
+ */
 export function resetHttpSessionId() {
   try {
     window.sessionStorage.removeItem("httpSessionId");
@@ -65,12 +72,29 @@ export function resetHttpSessionId() {
   httpSessionInvalidated = true;
 }
 
+/** Start a fresh HTTP fallback identity only after the human explicitly elects
+ * to take control again from the Other Session dialog. */
+export function resumeHttpSessionAfterTakeover() {
+  try {
+    window.sessionStorage.removeItem("httpSessionId");
+  } catch {
+    void 0;
+  }
+  httpSessionId = null;
+  httpSessionInvalidated = false;
+}
+
 function dispatchHttpEvent(event: JsonRpcRequest, onRequest?: (payload: JsonRpcRequest) => void) {
   if (event.method === "refreshPage") {
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.set("networkChanged", "true");
     window.location.href = currentUrl.toString();
     return;
+  }
+  if (event.method === "otherSessionConnected") {
+    // This tab has lost control. Freeze its HTTP fallback immediately so it
+    // cannot re-enter session arbitration after its WebRTC DataChannel closes.
+    resetHttpSessionId();
   }
   if (onRequest) onRequest(event);
 }
@@ -128,10 +152,9 @@ export function useJsonRpc(onRequest?: (payload: JsonRpcRequest) => void) {
       const useHttpTransport = forceHttp || !dataChannelReady;
 
       // Settings and recovery controls must remain usable even when WebRTC
-      // negotiation/video is broken (for example an unsupported H.265 browser).
-      // Previously these requests were silently dropped until the RPC data
-      // channel opened, which could lock the user out of the very setting needed
-      // to recover the connection.
+      // negotiation/video is broken. A tab explicitly kicked by another
+      // control session is the sole exception: it must not keep reclaiming the
+      // device through background HTTP reconciliation.
       if (useHttpTransport) {
         if (httpSessionInvalidated) {
           if (callback) {
@@ -174,16 +197,21 @@ export function useJsonRpc(onRequest?: (payload: JsonRpcRequest) => void) {
     const messageHandler = (e: MessageEvent) => {
       const payload = JSON.parse(e.data) as JsonRpcResponse | JsonRpcRequest;
 
-      // The "API" can also "request" data from the client
-      // If the payload has a method, it's a request
+      // The API can also request data from the client. In particular,
+      // otherSessionConnected means this tab has already lost ownership: block
+      // HTTP fallback before the backend closes its DataChannel one second later.
       if ("method" in payload) {
-        if ((payload as JsonRpcRequest).method === "refreshPage") {
+        const request = payload as JsonRpcRequest;
+        if (request.method === "refreshPage") {
           const currentUrl = new URL(window.location.href);
           currentUrl.searchParams.set("networkChanged", "true");
           window.location.href = currentUrl.toString();
           return;
         }
-        if (onRequest) onRequest(payload as JsonRpcRequest);
+        if (request.method === "otherSessionConnected") {
+          resetHttpSessionId();
+        }
+        if (onRequest) onRequest(request);
         return;
       }
 
