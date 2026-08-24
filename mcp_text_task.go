@@ -74,6 +74,16 @@ func startMCPTextInjection(text string, opts reliableTextOptions, profile string
 		mcpTextTask.Unlock()
 		return MCPTextInjectionStatus{}, fmt.Errorf("text injection task %s is already running", st.ID)
 	}
+
+	// Keep the normal human/MCP collaboration lease active for the entire
+	// background task, not merely for the request that queued it. This ensures
+	// local HID input stays blocked while AI text is actually being emitted.
+	finishLease, leaseErr := mcpControlBegin("keyboard", fmt.Sprintf("Inject text (%d chars)", count))
+	if leaseErr != nil {
+		mcpTextTask.Unlock()
+		return MCPTextInjectionStatus{}, leaseErr
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	now := time.Now()
 	st := MCPTextInjectionStatus{
@@ -85,7 +95,32 @@ func startMCPTextInjection(text string, opts reliableTextOptions, profile string
 	mcpTextTask.Unlock()
 
 	go func(initial MCPTextInjectionStatus) {
+		// Manual Takeover must be an actual emergency brake. If the local user
+		// takes control while a long task is running, cancel HID injection rather
+		// than continuing to type behind the takeover overlay.
+		monitorDone := make(chan struct{})
+		go func() {
+			ticker := time.NewTicker(75 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-monitorDone:
+					return
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					if getEnhancedMCPControlStatus().ManualTakeover {
+						cancel()
+						return
+					}
+				}
+			}
+		}()
+
 		sent, elapsed, runErr := runReliableTextInjectionV2(ctx, normalized, opts)
+		close(monitorDone)
+		finishLease(runErr)
+
 		mcpTextTask.Lock()
 		defer mcpTextTask.Unlock()
 		if mcpTextTask.status.ID != initial.ID {
