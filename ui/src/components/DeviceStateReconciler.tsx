@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import { useVideoStore, VideoState } from "@/hooks/stores";
+import { HidState, useHidStore, useVideoStore, VideoState } from "@/hooks/stores";
 
 function getHttpSessionId() {
   try {
@@ -36,14 +36,15 @@ async function rpc(method: string, params: object) {
 }
 
 /**
- * Reconcile the UI HDMI state independently from WebRTC signaling.
+ * Reconcile the UI's device state independently from WebRTC notifications.
  *
- * The normal UI historically fetched getVideoState only once when the RPC
- * DataChannel opened, then relied on videoInputState notifications. If that
- * first request landed during startup and returned ready=false, the browser
- * could remain stuck on "no signal / not connected" until a full reload even
- * though video was already flowing. This lightweight HTTP-RPC reconciler makes
- * the displayed state eventually consistent without restarting WebRTC.
+ * Historically the normal WebRTC path fetched HDMI state only once when the
+ * RPC DataChannel opened and did not fetch the current USB state at all. It
+ * then relied on videoInputState/usbState change notifications. If the first
+ * HDMI read landed during startup, or USB was already configured before the
+ * browser connected, the page could remain stuck on "no output / detached"
+ * until a full F5 reload. Periodic HTTP-RPC reconciliation makes both stores
+ * eventually consistent without restarting WebRTC.
  */
 export default function DeviceStateReconciler() {
   useEffect(() => {
@@ -54,27 +55,39 @@ export default function DeviceStateReconciler() {
     const reconcile = async () => {
       if (cancelled) return;
 
-      try {
-        const response = await rpc("getVideoState", {});
-        if (response?.error) {
-          throw new Error(response.error.data || response.error.message || "getVideoState failed");
-        }
-        if (response?.result && !cancelled) {
+      const [videoResult, usbResult] = await Promise.allSettled([
+        rpc("getVideoState", {}),
+        rpc("getUSBState", {}),
+      ]);
+
+      if (videoResult.status === "fulfilled") {
+        const response = videoResult.value;
+        if (!response?.error && response?.result && !cancelled) {
           useVideoStore.getState().setHdmiState(
             response.result as Parameters<VideoState["setHdmiState"]>[0],
           );
+        } else if (response?.error) {
+          console.debug("[DeviceStateReconciler] video state pending", response.error);
         }
-      } catch (error) {
-        // Authentication may not be available yet while the login route is
-        // being rendered. Keep retrying quietly; once authenticated the same
-        // component will converge the state without requiring an F5 reload.
-        console.debug("[DeviceStateReconciler] video state pending", error);
+      } else {
+        console.debug("[DeviceStateReconciler] video state pending", videoResult.reason);
+      }
+
+      if (usbResult.status === "fulfilled") {
+        const response = usbResult.value;
+        if (!response?.error && typeof response?.result === "string" && !cancelled) {
+          useHidStore.getState().setUsbState(response.result as HidState["usbState"]);
+        } else if (response?.error) {
+          console.debug("[DeviceStateReconciler] USB state pending", response.error);
+        }
+      } else {
+        console.debug("[DeviceStateReconciler] USB state pending", usbResult.reason);
       }
 
       rapidAttempts += 1;
       if (!cancelled) {
-        // Fast convergence during initial page load, then inexpensive periodic
-        // reconciliation in case a notification is ever missed later.
+        // Fast convergence during login/initial WebRTC setup, then inexpensive
+        // periodic reconciliation in case a state-change notification is lost.
         const delay = rapidAttempts <= 12 ? 750 : (document.hidden ? 15000 : 5000);
         timer = window.setTimeout(reconcile, delay);
       }
