@@ -125,37 +125,90 @@ export default function MobileHome() {
 
 
   const [loadingMessage, setLoadingMessage] = useState("Connecting to device...");
-  const cleanupAndStopReconnecting = useCallback(
-    function cleanupAndStopReconnecting() {
-      console.log("Closing peer connection");
 
-      setConnectionFailed(true);
-      if (peerConnection) {
-        setPeerConnectionState(peerConnection.connectionState);
+  // Signaling must not depend on React render timing. A fast LAN answer can
+  // arrive while setupPeerConnection is still awaiting ICE configuration, so
+  // the websocket callback keeps its own synchronous PC reference and queues
+  // signaling messages until the matching PeerConnection is ready.
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const pendingRemoteAnswerRef = useRef<RTCSessionDescriptionInit | null>(null);
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const connectionWatchdogRef = useRef<number | null>(null);
+  const takeoverNoticeRef = useRef(false);
+  const setupPeerConnectionRef = useRef<() => Promise<void>>(async () => undefined);
+  const automaticSessionRetryUsedRef = useRef(
+    (() => {
+      try {
+        return window.sessionStorage.getItem("picokvm-webrtc-auto-retry") === "1";
+      } catch {
+        return false;
       }
-      connectionFailedRef.current = true;
-
-      peerConnection?.close();
-      signalingAttempts.current = 0;
-    },
-    [peerConnection, setPeerConnectionState],
+    })(),
   );
 
-  // We need to track connectionFailed in a ref to avoid stale closure issues
-  // This is necessary because syncRemoteSessionDescription is a callback that captures
-  // the connectionFailed value at creation time, but we need the latest value
-  // when the function is actually called. Without this ref, the function would use
-  // a stale value of connectionFailed in some conditions.
-  //
-  // We still need the state variable for UI rendering, so we sync the ref with the state.
-  // This pattern is a workaround for what useEvent hook would solve more elegantly
-  // (which would give us a callback that always has access to latest state without re-creation).
-  const connectionFailedRef = useRef(false);
-  useEffect(() => {
-    connectionFailedRef.current = connectionFailed;
-  }, [connectionFailed]);
+  const clearConnectionWatchdog = useCallback(() => {
+    if (connectionWatchdogRef.current === null) return;
+    window.clearTimeout(connectionWatchdogRef.current);
+    connectionWatchdogRef.current = null;
+  }, []);
 
-  const signalingAttempts = useRef(0);
+  const markConnectionHealthy = useCallback(() => {
+    clearConnectionWatchdog();
+    automaticSessionRetryUsedRef.current = false;
+    try {
+      window.sessionStorage.removeItem("picokvm-webrtc-auto-retry");
+    } catch {
+      // sessionStorage may be unavailable in hardened/private browser modes.
+    }
+    setConnectionFailed(false);
+    setLoadingMessage("Connection established");
+  }, [clearConnectionWatchdog]);
+
+  const cleanupAndStopReconnecting = useCallback(
+    function cleanupAndStopReconnecting(reason = "WebRTC connection failed") {
+      const pc = peerConnectionRef.current;
+      console.warn("[WebRTC] Closing peer connection:", reason, {
+        connectionState: pc?.connectionState,
+        iceConnectionState: pc?.iceConnectionState,
+      });
+
+      clearConnectionWatchdog();
+      if (pc) setPeerConnectionState(pc.connectionState);
+      if (pc && pc.signalingState !== "closed") pc.close();
+      if (peerConnectionRef.current === pc) peerConnectionRef.current = null;
+      setPeerConnection(null);
+
+      // A page explicitly displaced by another controller must never reload
+      // itself and fight for ownership again. For ordinary first-connect
+      // failures, perform exactly one full-page retry so the user never needs F5.
+      if (!takeoverNoticeRef.current && !automaticSessionRetryUsedRef.current) {
+        automaticSessionRetryUsedRef.current = true;
+        try {
+          window.sessionStorage.setItem("picokvm-webrtc-auto-retry", "1");
+        } catch {
+          // Best effort only; the in-memory guard still bounds this page.
+        }
+        window.location.reload();
+        return;
+      }
+
+      setConnectionFailed(true);
+    },
+    [clearConnectionWatchdog, setPeerConnection, setPeerConnectionState],
+  );
+
+  const flushPendingIceCandidates = useCallback(async (pc: RTCPeerConnection) => {
+    if (!pc.remoteDescription) return;
+    const pending = pendingIceCandidatesRef.current.splice(0);
+    for (const candidate of pending) {
+      try {
+        await pc.addIceCandidate(candidate);
+      } catch (error) {
+        console.warn("[Websocket] Failed to add queued ICE candidate", error);
+      }
+    }
+  }, []);
+
   const setRemoteSessionDescription = useCallback(
     async function setRemoteSessionDescription(
       pc: RTCPeerConnection,
@@ -165,61 +218,28 @@ export default function MobileHome() {
         console.log("[setRemoteSessionDescription] Skipping due to HTTP fallback/force mode");
         return;
       }
+      if (peerConnectionRef.current !== pc || pc.signalingState === "closed") return;
 
       setLoadingMessage("Setting remote description");
-
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(remoteDescription));
-        console.log("[setRemoteSessionDescription] Remote description set successfully");
+        await flushPendingIceCandidates(pc);
+        console.log("[setRemoteSessionDescription] Remote description set successfully", {
+          connectionState: pc.connectionState,
+          iceConnectionState: pc.iceConnectionState,
+        });
         setLoadingMessage("Establishing secure connection...");
       } catch (error) {
-        console.error(
-          "[setRemoteSessionDescription] Failed to set remote description:",
-          error,
-        );
-        cleanupAndStopReconnecting();
-        return;
+        console.error("[setRemoteSessionDescription] Failed to set remote description:", error);
+        cleanupAndStopReconnecting("failed to apply remote SDP answer");
       }
-
-      // Replace the interval-based check with a more reliable approach
-      let attempts = 0;
-      const checkInterval = setInterval(() => {
-        attempts++;
-
-        // When vivaldi has disabled "Broadcast IP for Best WebRTC Performance", this never connects
-        if (pc.sctp?.state === "connected") {
-          console.log("[setRemoteSessionDescription] Remote description set");
-          clearInterval(checkInterval);
-          setLoadingMessage("Connection established");
-        } else if (attempts >= 10) {
-          console.log(
-            "[setRemoteSessionDescription] Failed to establish connection after 10 attempts",
-            {
-              connectionState: pc.connectionState,
-              iceConnectionState: pc.iceConnectionState,
-            },
-          );
-          cleanupAndStopReconnecting();
-          clearInterval(checkInterval);
-        } else {
-          console.log("[setRemoteSessionDescription] Waiting for connection, state:", {
-            connectionState: pc.connectionState,
-            iceConnectionState: pc.iceConnectionState,
-          });
-        }
-      }, 1000);
     },
-    [cleanupAndStopReconnecting],
+    [cleanupAndStopReconnecting, flushPendingIceCandidates],
   );
-
-  const ignoreOffer = useRef(false);
-  const isSettingRemoteAnswerPending = useRef(false);
-  const makingOffer = useRef(false);
 
   const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
   const { sendMessage, getWebSocket } = useWebSocket(
-    //`${wsProtocol}//${window.location.host}/webrtc/signaling/client?id=${params.id}`,
     `${wsProtocol}//${window.location.host}/webrtc/signaling/client`,
     {
       heartbeat: true,
@@ -228,111 +248,84 @@ export default function MobileHome() {
       reconnectInterval: 1000,
       onReconnectStop: () => {
         console.log("Reconnect stopped");
-        cleanupAndStopReconnecting();
+        cleanupAndStopReconnecting("signaling websocket reconnect limit reached");
       },
-
       shouldReconnect(event) {
         console.log("[Websocket] shouldReconnect", event);
-        // TODO: Why true?
-        return true;
+        return !takeoverNoticeRef.current;
       },
-
       onClose(event) {
         console.log("[Websocket] onClose", event);
-        // We don't want to close everything down, we wait for the reconnect to stop instead
       },
-
       onError(event) {
         console.log("[Websocket] onError", event);
-        // We don't want to close everything down, we wait for the reconnect to stop instead
       },
       onOpen() {
         console.log("[Websocket] onOpen");
       },
-
-      onMessage: message => {
+      onMessage: async message => {
         if (message.data === "pong") return;
-
-        /*
-          Currently the signaling process is as follows:
-            After open, the other side will send a `device-metadata` message with the device version
-            If the device version is not set, we can assume the device is using the legacy signaling
-            Otherwise, we can assume the device is using the new signaling
-
-            If the device is using the legacy signaling, we close the websocket connection
-            and use the legacy HTTPSignaling function to get the remote session description
-
-            If the device is using the new signaling, we don't need to do anything special, but continue to use the websocket connection
-            to chat with the other peer about the connection
-        */
 
         const parsedMessage = JSON.parse(message.data);
         if (parsedMessage.type === "device-metadata") {
           const { deviceVersion } = parsedMessage.data;
           console.log("[Websocket] Received device-metadata message");
           console.log("[Websocket] Device version", deviceVersion);
-          // If the device version is not set, we can assume the device is using the legacy signaling
           if (!deviceVersion) {
             console.log("[Websocket] Device is using legacy signaling");
-
-            // Now we don't need the websocket connection anymore, as we've established that we need to use the legacy signaling
-            // which does everything over HTTP(at least from the perspective of the client)
             isLegacySignalingEnabled.current = true;
             getWebSocket()?.close();
           } else {
             console.log("[Websocket] Device is using new signaling");
             isLegacySignalingEnabled.current = false;
           }
-          setupPeerConnection();
+          void setupPeerConnectionRef.current();
+          return;
         }
 
-        if (!peerConnection) return;
         if (parsedMessage.type === "answer") {
           console.log("[Websocket] Received answer");
-          const readyForOffer =
-            // If we're making an offer, we don't want to accept an answer
-            !makingOffer &&
-            // If the peer connection is stable or we're SettingsModal the remote answer pending, we're ready for an offer
-            (peerConnection?.signalingState === "stable" ||
-              isSettingRemoteAnswerPending.current);
-
-          // If we're not ready for an offer, we don't want to accept an offer
-          ignoreOffer.current = parsedMessage.type === "offer" && !readyForOffer;
-          if (ignoreOffer.current) return;
-
-          // Set so we don't accept an answer while we're SettingsModal the remote description
-          isSettingRemoteAnswerPending.current = parsedMessage.type === "answer";
-          console.log(
-            "[Websocket] Setting remote answer pending",
-            isSettingRemoteAnswerPending.current,
-          );
-
           const sd = atob(parsedMessage.data);
-          const remoteSessionDescription = JSON.parse(sd);
+          const remoteSessionDescription = JSON.parse(sd) as RTCSessionDescriptionInit;
+          const pc = peerConnectionRef.current;
 
-          setRemoteSessionDescription(
-            peerConnection,
-            new RTCSessionDescription(remoteSessionDescription),
-          );
+          // Never drop an SDP answer just because React has not rendered the new
+          // PC yet. Keep the newest answer and apply it as soon as the local offer
+          // exists.
+          if (!pc || !pc.localDescription) {
+            pendingRemoteAnswerRef.current = remoteSessionDescription;
+            console.log("[Websocket] Queued answer until PeerConnection/local offer is ready");
+            return;
+          }
+          if (pc.signalingState !== "have-local-offer") {
+            console.warn("[Websocket] Ignoring duplicate/out-of-state answer", pc.signalingState);
+            return;
+          }
+          await setRemoteSessionDescription(pc, remoteSessionDescription);
+          return;
+        }
 
-          // Reset the remote answer pending flag
-          isSettingRemoteAnswerPending.current = false;
-        } else if (parsedMessage.type === "new-ice-candidate") {
-          console.log("[Websocket] Received new-ice-candidate");
-          const candidate = parsedMessage.data;
-          peerConnection.addIceCandidate(candidate);
+        if (parsedMessage.type === "new-ice-candidate") {
+          const candidate = parsedMessage.data as RTCIceCandidateInit;
+          const pc = peerConnectionRef.current;
+          if (!pc || !pc.remoteDescription) {
+            pendingIceCandidatesRef.current.push(candidate);
+            console.log("[Websocket] Queued ICE candidate until remote description is ready");
+            return;
+          }
+          try {
+            await pc.addIceCandidate(candidate);
+          } catch (error) {
+            console.warn("[Websocket] Failed to add ICE candidate", error);
+          }
         }
       },
     },
-
-    // Don't even retry once we declare failure
     !connectionFailed && isLegacySignalingEnabled.current === false,
   );
 
   const sendWebRTCSignal = useCallback(
     (type: string, data: unknown) => {
-      // Second argument tells the library not to queue the message, and send it once the connection is established again.
-      // We have event handlers that handle the connection set up, so we don't need to queue the message.
       sendMessage(JSON.stringify({ type, data }), false);
     },
     [sendMessage],
@@ -344,13 +337,19 @@ export default function MobileHome() {
       return;
     }
 
-    console.log("[setupPeerConnection] Setting up peer connection");
+    takeoverNoticeRef.current = false;
     setConnectionFailed(false);
     setLoadingMessage("Connecting to device...");
+    clearConnectionWatchdog();
+
+    const previousPc = peerConnectionRef.current;
+    if (previousPc && previousPc.signalingState !== "closed") previousPc.close();
+    peerConnectionRef.current = null;
+    pendingRemoteAnswerRef.current = null;
+    pendingIceCandidatesRef.current = [];
 
     let pc: RTCPeerConnection;
     try {
-      console.log("[setupPeerConnection] Creating peer connection");
       setLoadingMessage("Creating peer connection...");
       let fetchedIceServers: RTCIceServer[] = [];
       if (!iceConfig?.iceServers) {
@@ -358,84 +357,91 @@ export default function MobileHome() {
           const res = await api.GET("/api/ice-servers");
           const data = await res.json();
           fetchedIceServers = data.iceServers ?? [];
-        } catch (e) {
-          console.error("failed to fetch ICE servers, fallback", e);
+        } catch (error) {
+          console.error("failed to fetch ICE servers, fallback", error);
           fetchedIceServers = [{ urls: ["stun:stun.l.google.com:19302"] }];
         }
       }
 
       pc = new RTCPeerConnection({
-        // We only use STUN or TURN servers if we're in the cloud
-        //...(isInCloud && iceConfig?.iceServers
-        //  ? { iceServers: [iceConfig?.iceServers] }
-        //  : {}),
         ...(iceConfig?.iceServers
-          ? { iceServers: [iceConfig?.iceServers] }
+          ? { iceServers: [iceConfig.iceServers] }
           : { iceServers: fetchedIceServers }),
       });
 
+      // Publish synchronously before transceivers/data channels can trigger
+      // negotiationneeded. Signaling callbacks use this ref, not React state.
+      peerConnectionRef.current = pc;
+      setPeerConnection(pc);
       setPeerConnectionState(pc.connectionState);
-      console.log("[setupPeerConnection] Peer connection created", pc);
       setLoadingMessage("Setting up connection to device...");
-    } catch (e) {
-      console.error(`[setupPeerConnection] Error creating peer connection: ${e}`);
-      setTimeout(() => {
-        cleanupAndStopReconnecting();
-      }, 1000);
+    } catch (error) {
+      console.error("[setupPeerConnection] Error creating peer connection", error);
+      cleanupAndStopReconnecting("failed to create PeerConnection");
       return;
     }
 
-    // Set up event listeners and data channels
     pc.onconnectionstatechange = () => {
+      if (peerConnectionRef.current !== pc) return;
       console.log("[setupPeerConnection] Connection state changed", pc.connectionState);
       setPeerConnectionState(pc.connectionState);
+      if (pc.connectionState === "connected") {
+        markConnectionHealthy();
+      } else if (pc.connectionState === "failed") {
+        cleanupAndStopReconnecting("RTCPeerConnection entered failed state");
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      if (peerConnectionRef.current !== pc) return;
+      console.log("[setupPeerConnection] ICE state changed", pc.iceConnectionState);
+      if (["connected", "completed"].includes(pc.iceConnectionState)) {
+        markConnectionHealthy();
+      } else if (pc.iceConnectionState === "failed") {
+        cleanupAndStopReconnecting("ICE connection entered failed state");
+      }
     };
 
     pc.onnegotiationneeded = async () => {
+      if (peerConnectionRef.current !== pc) return;
       try {
-        console.log("[setupPeerConnection] Creating offer");
-        makingOffer.current = true;
-
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         const sd = btoa(JSON.stringify(pc.localDescription));
-        const isNewSignalingEnabled = isLegacySignalingEnabled.current === false;
-        if (isNewSignalingEnabled) {
-          sendWebRTCSignal("offer", { sd: sd });
+        if (isLegacySignalingEnabled.current === false) {
+          sendWebRTCSignal("offer", { sd });
         } else {
-          console.log("Legacy signanling. Waiting for ICE Gathering to complete...");
+          console.log("Legacy signaling. Waiting for ICE gathering to complete...");
         }
-      } catch (e) {
-        console.error(
-          `[setupPeerConnection] Error creating offer: ${e}`,
-          new Date().toISOString(),
-        );
-        cleanupAndStopReconnecting();
-      } finally {
-        makingOffer.current = false;
+
+        const pendingAnswer = pendingRemoteAnswerRef.current;
+        if (pendingAnswer && pc.signalingState === "have-local-offer") {
+          pendingRemoteAnswerRef.current = null;
+          await setRemoteSessionDescription(pc, pendingAnswer);
+        }
+      } catch (error) {
+        console.error("[setupPeerConnection] Error creating offer", error);
+        cleanupAndStopReconnecting("failed to create/send local SDP offer");
       }
     };
 
     pc.onicecandidate = async ({ candidate }) => {
-      if (!candidate) return;
-      if (candidate.candidate === "") return;
+      if (!candidate || candidate.candidate === "" || peerConnectionRef.current !== pc) return;
       sendWebRTCSignal("new-ice-candidate", candidate);
     };
 
     pc.onicegatheringstatechange = event => {
-      const pc = event.currentTarget as RTCPeerConnection;
-      if (pc.iceGatheringState === "complete") {
-        console.log("ICE Gathering completed");
+      const activePc = event.currentTarget as RTCPeerConnection;
+      if (peerConnectionRef.current !== activePc) return;
+      if (activePc.iceGatheringState === "complete") {
         setLoadingMessage("ICE Gathering completed");
-
-      } else if (pc.iceGatheringState === "gathering") {
-        console.log("ICE Gathering Started");
+      } else if (activePc.iceGatheringState === "gathering") {
         setLoadingMessage("Gathering ICE candidates...");
       }
     };
 
-    pc.ontrack = function (event) {
-      setMediaMediaStream(event.streams[0]);
+    pc.ontrack = event => {
+      if (peerConnectionRef.current === pc) setMediaMediaStream(event.streams[0]);
     };
 
     setTransceiver(pc.addTransceiver("video", { direction: "recvonly" }));
@@ -443,33 +449,48 @@ export default function MobileHome() {
 
     const rpcDataChannel = pc.createDataChannel("rpc");
     rpcDataChannel.onopen = () => {
-      setRpcDataChannel(rpcDataChannel);
+      if (peerConnectionRef.current === pc) setRpcDataChannel(rpcDataChannel);
     };
 
     const diskDataChannel = pc.createDataChannel("disk");
     diskDataChannel.onopen = () => {
-      setDiskChannel(diskDataChannel);
+      if (peerConnectionRef.current === pc) setDiskChannel(diskDataChannel);
     };
 
-    setPeerConnection(pc);
+    // Do not equate a slow SCTP channel with total WebRTC failure. Media/ICE
+    // state is authoritative; after a bounded grace period a genuinely dead
+    // first session gets exactly one automatic full-page retry.
+    connectionWatchdogRef.current = window.setTimeout(() => {
+      if (peerConnectionRef.current !== pc) return;
+      const healthy =
+        pc.connectionState === "connected" ||
+        ["connected", "completed"].includes(pc.iceConnectionState);
+      if (!healthy) cleanupAndStopReconnecting("connection watchdog expired");
+    }, 15000);
   }, [
-    forceHttp,
     cleanupAndStopReconnecting,
+    clearConnectionWatchdog,
     iceConfig?.iceServers,
+    markConnectionHealthy,
     sendWebRTCSignal,
+    setAudioTransceiver,
     setDiskChannel,
     setMediaMediaStream,
     setPeerConnection,
     setPeerConnectionState,
+    setRemoteSessionDescription,
     setRpcDataChannel,
     setTransceiver,
-    setAudioTransceiver,
   ]);
 
+  // The websocket callback is created before this callback in render order.
+  // Keep the latest implementation in a ref so device-metadata never calls a
+  // stale setup function.
+  setupPeerConnectionRef.current = setupPeerConnection;
+
   useEffect(() => {
-    if (peerConnectionState === "failed") {
-      console.log("Connection failed, closing peer connection");
-      cleanupAndStopReconnecting();
+    if (peerConnectionState === "failed" && peerConnectionRef.current) {
+      cleanupAndStopReconnecting("RTC store reported failed state");
     }
   }, [peerConnectionState, cleanupAndStopReconnecting]);
 
@@ -539,11 +560,12 @@ export default function MobileHome() {
 
   function onJsonRpcRequest(resp: JsonRpcRequest) {
     if (resp.method === "otherSessionConnected") {
-      //navigateTo("/other-session");
+      takeoverNoticeRef.current = true;
       setOtherSession(true);
     }
 
     if (resp.method === "sessionInvalidated") {
+      takeoverNoticeRef.current = true;
       resetHttpSessionId();
       setSessionInvalidated(true);
       return;
@@ -855,16 +877,7 @@ useEffect(() => {
 
 
           <div className="relative flex h-full w-full overflow-hidden">
-            <Desktop isFullscreen={isFullscreen} />
-            <div
-              style={{ animationDuration: "500ms" }}
-              className={`animate-slideUpFade pointer-events-none absolute inset-0 flex items-center justify-center ${isMobile ?"":"p-4"}`}
-            >
-              <div className={`relative h-full  w-full ${isMobile ?"": "max-h-[720px] max-w-[1280px]"} rounded-md`}>
-                {/*<ConnectionFailedOverlay show={true} setupPeerConnection={setupPeerConnection} />*/}
-                {!!ConnectionStatusElement && ConnectionStatusElement}
-              </div>
-            </div>
+            <Desktop isFullscreen={isFullscreen} connectionOverlay={ConnectionStatusElement} />
 
             {isDesktop&&<SidebarContainer sidebarView={sidebarView} />}
           </div>

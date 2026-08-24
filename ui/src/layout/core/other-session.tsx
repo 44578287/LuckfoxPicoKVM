@@ -1,11 +1,12 @@
+import { useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import { isMobile } from "react-device-detect";
 
 import { GridCard } from "@components/Card";
 import { Button } from "@components/Button";
 import LogoLuckfox from "@/assets/logo-luckfox.png";
-import { useSettingsStore, useUiStore } from "@/hooks/stores";
-import { useJsonRpc } from "@/hooks/useJsonRpc";
+import { useRTCStore, useSettingsStore, useUiStore } from "@/hooks/stores";
+import { resumeHttpSessionAfterTakeover, useJsonRpc } from "@/hooks/useJsonRpc";
 
 interface ContextType {
   setupPeerConnection: () => Promise<void>;
@@ -17,20 +18,56 @@ export default function OtherSessionRoute() {
   const navigate = useNavigate();
   const setOtherSession = useUiStore(state => state.setOtherSession);
   const forceHttp = useSettingsStore(state => state.forceHttp);
+  const peerConnection = useRTCStore(state => state.peerConnection);
+  const rpcDataChannel = useRTCStore(state => state.rpcDataChannel);
   const [send] = useJsonRpc();
-  // Function to handle closing the modal
+  const [takingOver, setTakingOver] = useState(false);
+
   const handleClose = () => {
+    if (takingOver) return;
+    setTakingOver(true);
+
+    // The displaced page intentionally suspended automatic HTTP fallback when
+    // it received otherSessionConnected. Only an explicit human click here may
+    // give this tab a fresh fallback identity and allow it to reclaim control.
+    resumeHttpSessionAfterTakeover();
 
     if (forceHttp) {
-      send("confirmOtherSession", {}, () => undefined);
+      send("confirmOtherSession", {}, resp => {
+        if ("error" in resp) {
+          setTakingOver(false);
+          return;
+        }
+        if (isMobile) setOtherSession(false);
+        navigate("..");
+      });
+      return;
     }
 
     if (isMobile) {
       setOtherSession(false);
-    } else {
-      outletContext?.setupPeerConnection().then(() => navigate(".."));
+      setTakingOver(false);
+      return;
     }
 
+    const hasHealthyWebRTC =
+      peerConnection?.connectionState === "connected" ||
+      rpcDataChannel?.readyState === "open";
+
+    if (hasHealthyWebRTC) {
+      // The new tab can already own a healthy media/data path by the time the
+      // delayed takeover notice is rendered. Rebuilding WebRTC here would kick
+      // our own working session and can make the dialog recur.
+      navigate("..");
+      return;
+    }
+
+    // Only create a replacement session when this tab genuinely has no healthy
+    // WebRTC path. setupPeerConnection closes a stale local PC before creating
+    // exactly one replacement session.
+    outletContext?.setupPeerConnection()
+      .then(() => navigate(".."))
+      .catch(() => setTakingOver(false));
   };
 
   return (
@@ -51,7 +88,13 @@ export default function OtherSessionRoute() {
               this session?
             </p>
             <div className="flex items-center justify-start space-x-4">
-              <Button size="SM" theme="primary" text="Use Here" onClick={handleClose} />
+              <Button
+                size="SM"
+                theme="primary"
+                text={takingOver ? "Taking Over..." : "Use Here"}
+                loading={takingOver}
+                onClick={handleClose}
+              />
             </div>
           </div>
         </div>

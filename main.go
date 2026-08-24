@@ -100,18 +100,21 @@ func Main() {
 	// Initialize native video socket server
 	StartVideoDataSocketServer()
 
-	// Set up callbacks for HTTP video stream subscribers
-	// When first HTTP subscriber connects and there's no WebRTC session, start video
+	// Set up callbacks for all encoded-video fan-out subscribers (raw HTTP,
+	// read-only WebRTC viewers and future RTSP/RTP sinks). The native encoder is
+	// started once for the first fan-out consumer when the normal KVM WebRTC
+	// control session is not already keeping it alive.
 	videoBroadcaster.onFirstSubscribe = func() {
 		if actionSessions == 0 {
-			logger.Info().Msg("First HTTP video subscriber connected, starting video stream")
+			logger.Info().Msg("First video fan-out subscriber connected, starting video stream")
 			_ = writeCtrlAction("start_video")
 		}
 	}
-	// When last HTTP subscriber disconnects and there's no WebRTC session, stop video
+	// Symmetrically stop native video only when neither a normal KVM WebRTC
+	// control session nor a fan-out consumer still needs it.
 	videoBroadcaster.onLastUnsubscribe = func() {
 		if actionSessions == 0 {
-			logger.Info().Msg("Last HTTP video subscriber disconnected, stopping video stream")
+			logger.Info().Msg("Last video fan-out subscriber disconnected, stopping video stream")
 			_ = writeCtrlAction("stop_video")
 		}
 	}
@@ -179,7 +182,9 @@ func Main() {
 
 	go RunWebServer()
 
-	// API and MCP services temporarily disabled for debugging
+	// Enhanced LAN automation/media services. These are independent from the
+	// normal KVM web server so experiments can be reverted without touching the
+	// vendor UI/control path.
 	go func() {
 		StartAPIServer(8080)
 	}()
@@ -187,6 +192,32 @@ func Main() {
 	go func() {
 		StartMCP(8081, false)
 	}()
+
+	go func() {
+		StartViewerServer(8082)
+	}()
+
+	// Standards-based direct WebRTC source for go2rtc/Frigate/HA relays. It
+	// reuses the same read-only viewer PeerConnection/fan-out path and therefore
+	// does not add a second video encoder or an RTSP buffering hop.
+	go func() {
+		StartWHEPServer(defaultWHEPPort)
+	}()
+
+	go func() {
+		StartRTSPServer(defaultRTSPAddress)
+	}()
+
+	// MQTT/Home Assistant is optional and keeps its own enhanced config file.
+	// Start only after network/GPIO/video state is initialized so the first HA
+	// discovery/state publication describes a usable device.
+	initEnhancedMQTT()
+
+	// The enhanced supervisor is deliberately started after the native video,
+	// GPIO, network and media services are initialized. Phase 1 only performs a
+	// bounded stop/start recovery of a genuinely stalled encoded-video pipeline;
+	// it never reboots the device automatically.
+	startEnhancedSupervisor()
 
 	go RunWebSecureServer()
 	// Web secure server is started only if TLS mode is enabled
@@ -198,6 +229,7 @@ func Main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs
+	closeEnhancedMQTT()
 	logger.Info().Msg("KVM Shutting Down")
 	//if fuseServer != nil {
 	//	err := setMassStorageImage(" ")
@@ -206,8 +238,9 @@ func Main() {
 	//	}
 	//	err = fuseServer.Unmount()
 	//	if err != nil {
-	//		logger.Infof("Failed to unmount fuse: %v", err)
+	//		logger.Infof("Failed to unmount fuse server: %v", err)
 	//	}
+	//}
 
 	// os.Exit(0)
 }

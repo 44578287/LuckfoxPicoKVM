@@ -111,16 +111,19 @@ func (u *UsbGadget) resetLogSuppressionCounter(counterName string) {
 	}
 }
 
-const hidWriteTimeout = 50 * time.Millisecond
+const hidWriteTimeout = 150 * time.Millisecond
 
 func (u *UsbGadget) writeWithTimeout(file *os.File, data []byte) (n int, err error) {
+	if file == nil {
+		return 0, fmt.Errorf("HID device is not open")
+	}
 	if err := file.SetWriteDeadline(time.Now().Add(hidWriteTimeout)); err != nil {
-		return -1, err
+		return 0, fmt.Errorf("set HID write deadline for %s: %w", file.Name(), err)
 	}
 
 	n, err = file.Write(data)
 	if err == nil {
-		return
+		return n, nil
 	}
 
 	u.log.Trace().
@@ -138,8 +141,8 @@ func (u *UsbGadget) writeWithTimeout(file *os.File, data []byte) (n int, err err
 			"write timed out: %s",
 			file.Name(),
 		)
-		err = nil
+		return n, fmt.Errorf("write %s: timed out after %s", file.Name(), hidWriteTimeout)
 	}
 
-	return
+	return n, err
 }

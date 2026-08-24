@@ -1,0 +1,59 @@
+name: Repair P0 source
+
+on:
+  push:
+    branches:
+      - enhanced/dev
+    paths:
+      - .github/scripts/repair_pc_p0.py
+      - .github/workflows/repair-p0-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout enhanced branch
+        uses: actions/checkout@v4
+        with:
+          ref: enhanced/dev
+          fetch-depth: 0
+
+      - name: Repair PC signaling and HTTP session arbitration
+        run: python3 .github/scripts/repair_pc_p0.py
+
+      - name: Validate diff
+        run: |
+          git diff --check
+          test -s ui/src/layout/index.pc.tsx
+          grep -q 'setupPeerConnectionRef.current = setupPeerConnection' ui/src/layout/index.pc.tsx
+          grep -q 'connectionOverlay={ConnectionStatusElement}' ui/src/layout/index.pc.tsx
+          grep -q 'readOnlyObserver := isReadOnlyHTTPSessionRPC(req.Method)' web.go
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Build device UI before committing repair
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build:device
+
+      - name: Commit repaired source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ui/src/layout/index.pc.tsx web.go
+          if git diff --cached --quiet; then
+            echo 'No source changes required.'
+            exit 0
+          fi
+          git commit -m 'fix: repair P0 WebRTC source and session arbitration'
+          git push origin HEAD:enhanced/dev

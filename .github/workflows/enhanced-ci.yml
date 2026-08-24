@@ -1,0 +1,166 @@
+name: Enhanced CI
+
+on:
+  push:
+    branches:
+      - enhanced/dev
+  pull_request:
+    branches:
+      - luckfox
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Apply deterministic P0 source repair
+        run: python3 .github/scripts/repair_pc_p0.py
+      - name: Apply takeover and HID reliability repair
+        run: python3 .github/scripts/repair_takeover_hid.py
+      - name: Apply refresh takeover route guard
+        run: python3 .github/scripts/repair_refresh_takeover.py
+      - name: Apply MCP 2.0 usability layer
+        run: python3 .github/scripts/repair_mcp2_usability.py
+      - name: Apply MCP 2.0 compile cleanup
+        run: python3 .github/scripts/repair_mcp2_usability_compile_fix.py
+      - name: Download Go modules
+        run: go mod download
+      - name: Verify Go module lock
+        run: |
+          cp go.mod /tmp/go.mod.before
+          cp go.sum /tmp/go.sum.before
+          go mod tidy
+          cmp -s go.mod /tmp/go.mod.before
+          cmp -s go.sum /tmp/go.sum.before
+      - name: Prepare embedded static placeholder
+        run: |
+          mkdir -p static
+          printf '<!doctype html><title>CI placeholder</title>\n' > static/index.html
+      - name: Test backend
+        run: go test ./...
+
+  ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply deterministic P0 source repair
+        working-directory: .
+        run: python3 .github/scripts/repair_pc_p0.py
+      - name: Apply takeover and HID reliability repair
+        working-directory: .
+        run: python3 .github/scripts/repair_takeover_hid.py
+      - name: Apply refresh takeover route guard
+        working-directory: .
+        run: python3 .github/scripts/repair_refresh_takeover.py
+      - name: Apply MCP 2.0 usability layer
+        working-directory: .
+        run: python3 .github/scripts/repair_mcp2_usability.py
+      - name: Apply MCP 2.0 compile cleanup
+        working-directory: .
+        run: python3 .github/scripts/repair_mcp2_usability_compile_fix.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.15.0
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install UI dependencies
+        run: npm ci
+      - name: Build device UI
+        run: npm run build:device
+
+  package:
+    runs-on: ubuntu-latest
+    needs:
+      - backend
+      - ui
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.15.0
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Apply deterministic P0 source repair
+        run: python3 .github/scripts/repair_pc_p0.py
+      - name: Apply takeover and HID reliability repair
+        run: python3 .github/scripts/repair_takeover_hid.py
+      - name: Apply refresh takeover route guard
+        run: python3 .github/scripts/repair_refresh_takeover.py
+      - name: Apply MCP 2.0 usability layer
+        run: python3 .github/scripts/repair_mcp2_usability.py
+      - name: Apply MCP 2.0 compile cleanup
+        run: python3 .github/scripts/repair_mcp2_usability_compile_fix.py
+      - name: Download Go modules
+        run: go mod download
+      - name: Build embedded device UI
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build:device
+      - name: Build PicoKVM ARMv7 application
+        run: |
+          APP_VERSION="0.1.5-enhanced.${GITHUB_RUN_NUMBER}.${GITHUB_SHA::7}"
+          echo "APP_VERSION=${APP_VERSION}" >> "$GITHUB_ENV"
+          make build_dev VERSION_DEV="${APP_VERSION}"
+      - name: Prepare test and Web OTA artifacts
+        run: |
+          mkdir -p dist/web-ota
+          cp bin/kvm_app dist/kvm_app
+          cp ENHANCED.md dist/ENHANCED.md
+          sha256sum dist/kvm_app > dist/SHA256SUMS
+
+          cat > dist/INSTALL.txt <<'EOF'
+          PicoKVM Enhanced test build
+
+          Manual target path on PicoKVM:
+            /userdata/picokvm/bin/kvm_app
+
+          Before replacing the binary manually, keep a backup of the original kvm_app.
+          The Enhanced branch does not modify System firmware, kernel, DTS or bootloader.
+
+          Preferred installation method:
+            Upload the PicoKVM-Enhanced-WebOTA-*.zip file through the PicoKVM local Web update UI.
+
+          After installing/restarting:
+            Normal PicoKVM Web: vendor port/UI
+            LAN API:             http://PICOKVM_IP:8080
+            MCP + raw video:     http://PICOKVM_IP:8081
+            Multi-client viewer: http://PICOKVM_IP:8082/
+            RTSP:                 rtsp://PICOKVM_IP:8554/live
+            Home Assistant:       Settings -> Home Assistant
+          EOF
+
+          cp bin/kvm_app dist/web-ota/kvm_app
+          printf 'AppVersion: %s\nSystemVersion: 0.1.8\n' "$APP_VERSION" > dist/web-ota/version.txt
+          (
+            cd dist/web-ota
+            zip -q -9 "../PicoKVM-Enhanced-WebOTA-${APP_VERSION}.zip" version.txt kvm_app
+          )
+          rm -rf dist/web-ota
+          sha256sum dist/PicoKVM-Enhanced-WebOTA-*.zip > dist/WEB-OTA-SHA256SUMS
+
+          unzip -Z1 dist/PicoKVM-Enhanced-WebOTA-*.zip | grep -qx 'version.txt'
+          unzip -Z1 dist/PicoKVM-Enhanced-WebOTA-*.zip | grep -qx 'kvm_app'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: picokvm-enhanced-${{ github.run_number }}-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30

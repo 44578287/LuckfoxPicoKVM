@@ -22,12 +22,13 @@ export default  function SidebarContainer(props: SidebarContainerProps) {
   const { sidebarView } = props;
   const macrosSideTitle = useMacrosSideTitleState(state => state.sideTitle);
 
-  // useConsoleLog()
-  // { "border-x-transparent": !sidebarView },
+  // Keep side panels above the WebRTC loading/connection overlay. The overlay
+  // is intentionally visible over the video canvas, but must never obscure
+  // settings/dropdowns needed to recover a failed codec/ICE negotiation.
   return (
     <div
       className={cx(
-        "flex shrink-0 border-l border-l-slate-800/20 transition-all duration-500 ease-in-out dark:border-l-slate-300/20",
+        "relative z-30 flex shrink-0 border-l border-l-slate-800/20 transition-all duration-500 ease-in-out dark:border-l-slate-300/20",
         { "border-x-transparent": !sidebarView },
 
       )}

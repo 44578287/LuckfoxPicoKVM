@@ -1,6 +1,6 @@
-import { useState , useEffect } from "react";
+import { useEffect } from "react";
 import { Select } from "antd";
-import {useReactAt} from 'i18n-auto-extractor/react'
+import { useReactAt } from 'i18n-auto-extractor/react';
 import { isMobile } from "react-device-detect";
 
 import { SettingsPageHeader } from "@components/Settings/SettingsPageheader";
@@ -13,54 +13,27 @@ import { dark_font_style } from "@/layout/theme_color";
 
 const { Option } = Select;
 
-
 export default function SettingsGeneral() {
   const { $at, setCurrentLang } = useReactAt();
-
-  // Theme and Language State
-  const [theme, setTheme] = useState<string>('light');
-  const { setThemeMode } = useTheme();
+  const { themeMode, setThemeMode } = useTheme();
   const language = useSettingsStore(state => state.language);
   const setLanguage = useSettingsStore(state => state.setLanguage);
 
-  // Language Change Handler
   const handleLanguageChange = (value: string) => {
     setLanguage(value);
     setCurrentLang(value, value === 'en' ? enJSON : zhJSON);
   };
 
-  // Initialize Language
   useEffect(() => {
     setCurrentLang(language, language === 'en' ? enJSON : zhJSON);
   }, [language, setCurrentLang]);
 
-  // Theme Change Handler
   const handleThemeChange = (value: string) => {
-    const root = document.documentElement;
-    setThemeMode(value as ThemeMode)
-    
-    localStorage.setItem('theme', value);
-    root.classList.remove('light', 'dark');
-    root.classList.add(value);
-    
-
-    setTheme(value);
+    setThemeMode(value as ThemeMode);
   };
 
-  // Initialize Theme
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    setTheme(savedTheme);
-
-    const root = document.documentElement;
-    
-    root.classList.remove('light', 'dark');
-    root.classList.add(savedTheme);
-     
-  }, [theme]);
-
   return (
-    <div className="space-y-4 pb-[50px]">
+    <div className="space-y-4 pb-[50px] text-slate-900 dark:text-slate-100">
       <SettingsPageHeader
         title={$at("General")}
         description={$at("Configure device settings and update preferences")}
@@ -73,9 +46,9 @@ export default function SettingsGeneral() {
         >
           <div className={`space-y-2 ${isMobile ? "w-full" : "w-[37%]"}`}>
             <Select
-              value={theme}
+              value={themeMode}
               onChange={handleThemeChange}
-              className={`!w-full !h-[36px]`}
+              className="!h-[36px] !w-full"
             >
               <Option value="light" className={dark_font_style}>{$at('Light')}</Option>
               <Option value="dark" className={dark_font_style}>{$at('Dark')}</Option>
@@ -94,7 +67,7 @@ export default function SettingsGeneral() {
             <Select
               value={language}
               onChange={handleLanguageChange}
-              className={`!w-full !h-[36px]`}
+              className="!h-[36px] !w-full"
             >
               <Option value="en" className={dark_font_style}>{$at('English')}</Option>
               <Option value="zh" className={dark_font_style}>{$at('中文')}</Option>
@@ -102,7 +75,6 @@ export default function SettingsGeneral() {
           </div>
         </SettingsItem>
       </div>
-
     </div>
   );
 }

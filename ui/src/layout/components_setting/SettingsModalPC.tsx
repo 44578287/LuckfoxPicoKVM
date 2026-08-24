@@ -7,6 +7,10 @@ import {
   DesktopOutlined,
   ToolOutlined,
   TagOutlined,
+  VideoCameraOutlined,
+  HomeOutlined,
+  DashboardOutlined,
+  RobotOutlined,
   RightOutlined,
 } from "@ant-design/icons";
 import { useReactAt } from "i18n-auto-extractor/react";
@@ -16,8 +20,14 @@ import SettingsGeneral from "@/layout/components_setting/general/GeneralContent"
 import SettingsNetwork from "@/layout/components_setting/network/NetworkContent";
 import SettingsHardware from "@/layout/components_setting/hardware/HardwareContent";
 import SettingsAdvanced from "@/layout/components_setting/advanced/AdvancedContent";
+import SettingsStreaming from "@/layout/components_setting/streaming/StreamingContent";
+import SettingsHomeAssistant from "@/layout/components_setting/home_assistant/HomeAssistantContent";
+import SettingsSupervisor from "@/layout/components_setting/supervisor/SupervisorContent";
+import SettingsMCPControl from "@/layout/components_setting/mcp_control/MCPControlContent";
 import SettingsVersion from "@/layout/components_setting/version/VersionContent";
 import { dark_bd_style, dark_bg2_style } from "@/layout/theme_color";
+import { useEnhancedAt } from "@/locales/enhanced";
+import { useSettingsStore } from "@/hooks/stores";
 
 interface MenuItem {
   key: string;
@@ -33,14 +43,26 @@ interface SettingsDialogProps {
 const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
   const [selectedMenu, setSelectedMenu] = useState<string>("general");
   const { $at } = useReactAt();
+  const { $eat } = useEnhancedAt();
+  const language = useSettingsStore(state => state.language);
   const menuItems: MenuItem[] = [
     { key: "general", label: "General", icon: <SettingOutlined /> },
     { key: "network", label: "Network", icon: <WifiOutlined /> },
     { key: "access", label: "Access", icon: <SafetyCertificateOutlined /> },
     { key: "hardware", label: "Hardware", icon: <DesktopOutlined /> },
+    { key: "streaming", label: "Streaming", icon: <VideoCameraOutlined /> },
+    { key: "home_assistant", label: "Home Assistant", icon: <HomeOutlined /> },
+    { key: "mcp_control", label: "MCP / AI Control", icon: <RobotOutlined /> },
+    { key: "supervisor", label: "Supervisor", icon: <DashboardOutlined /> },
     { key: "advanced", label: "Advanced", icon: <ToolOutlined /> },
     { key: "version", label: "Version", icon: <TagOutlined /> },
   ];
+
+  const menuLabel = (item: MenuItem) => {
+    if (item.key === "supervisor") return language === "zh" ? "监控与自愈" : "Supervisor";
+    if (item.key === "mcp_control") return language === "zh" ? "MCP / AI 控制" : "MCP / AI Control";
+    return ["streaming", "home_assistant"].includes(item.key) ? $eat(item.label) : $at(item.label);
+  };
 
   const handleMenuSelect: MenuProps["onClick"] = ({ key }) => {
     setSelectedMenu(key as string);
@@ -48,20 +70,17 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
 
   const renderContent = () => {
     switch (selectedMenu) {
-      case "general":
-        return <SettingsGeneral />;
-      case "network":
-        return <SettingsNetwork />;
-      case "access":
-        return <SettingsAccessIndex />;
-      case "hardware":
-        return <SettingsHardware />;
-      case "advanced":
-        return <SettingsAdvanced />;
-      case "version":
-        return <SettingsVersion />;
-      default:
-        return <SettingsGeneral />;
+      case "general": return <SettingsGeneral />;
+      case "network": return <SettingsNetwork />;
+      case "access": return <SettingsAccessIndex />;
+      case "hardware": return <SettingsHardware />;
+      case "streaming": return <SettingsStreaming />;
+      case "home_assistant": return <SettingsHomeAssistant />;
+      case "mcp_control": return <SettingsMCPControl />;
+      case "supervisor": return <SettingsSupervisor />;
+      case "advanced": return <SettingsAdvanced />;
+      case "version": return <SettingsVersion />;
+      default: return <SettingsGeneral />;
     }
   };
 
@@ -77,7 +96,7 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
       overflow: "hidden",
       boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
     }}
-    className={`${dark_bg2_style} dark:border-[0.5px] dark:border-[rgba(80,80,80,1)]`}>
+    className={`${dark_bg2_style} text-black dark:text-white dark:border-[0.5px] dark:border-[rgba(80,80,80,1)]`}>
       <div className={`border-r ${dark_bg2_style} ${dark_bd_style}`}>
         <Menu
           mode="inline"
@@ -95,24 +114,19 @@ const SettingsModalPC: React.FC<SettingsDialogProps> = ({ visible = true }) => {
                 width: "100%",
                 padding: "4px 0",
               }}>
-                <span>{$at(item.label)}</span>
-                <RightOutlined style={{
-                  fontSize: "12px",
-                  marginLeft: "8px",
-                }} />
+                <span>{menuLabel(item)}</span>
+                <RightOutlined style={{ fontSize: "12px", marginLeft: "8px" }} />
               </div>
             ),
             icon: item.icon,
           }))}
         />
       </div>
-      <Layout className={`${dark_bg2_style} hide-scrollbar`} style={{ flex: 1, padding: 24, overflow: "auto", maxHeight: "92vh", scrollbarWidth: "none", msOverflowStyle: "none" }}>
+      <Layout className={`${dark_bg2_style} hide-scrollbar text-black dark:text-white`} style={{ flex: 1, padding: 24, overflow: "auto", maxHeight: "92vh", scrollbarWidth: "none", msOverflowStyle: "none" }}>
         {renderContent()}
-
       </Layout>
     </div>
   );
 };
-
 
 export default SettingsModalPC;

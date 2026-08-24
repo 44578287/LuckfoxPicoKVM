@@ -4,12 +4,18 @@ import JMuxer from "jmuxer";
 
 import { useRTCStore, useVideoStore, useSettingsStore } from "@/hooks/stores";
 
+type LowLatencyRtpReceiver = RTCRtpReceiver & {
+  jitterBufferTarget?: number;
+  playoutDelayHint?: number | null;
+};
+
 export const useVideoStream = (
   videoElm: React.RefObject<HTMLVideoElement>,
   audioElm: React.RefObject<HTMLAudioElement>
 ) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const mediaStream = useRTCStore(state => state.mediaStream);
+  const peerConnection = useRTCStore(state => state.peerConnection);
   const peerConnectionState = useRTCStore(state => state.peerConnectionState);
   const setPeerConnectionState = useRTCStore(state => state.setPeerConnectionState);
   const forceHttp = useSettingsStore(state => state.forceHttp);
@@ -96,6 +102,38 @@ export const useVideoStream = (
     addStreamToVideoElm(mediaStream);
     addStreamToAudioElm(mediaStream);
   }, [mediaStream, addStreamToVideoElm, addStreamToAudioElm, forceHttp, videoElm, audioElm]);
+
+  useEffect(() => {
+    if (!peerConnection || forceHttp) return;
+
+    const tuneReceiversForKvm = () => {
+      for (const receiver of peerConnection.getReceivers()) {
+        const kind = receiver.track?.kind;
+        if (kind !== "video" && kind !== "audio") continue;
+
+        const lowLatencyReceiver = receiver as LowLatencyRtpReceiver;
+        try {
+          // PicoKVM is an interactive KVM, not passive media playback. Ask
+          // Chromium/Firefox to minimize their adaptive playout buffer instead
+          // of silently trading hundreds of milliseconds of latency for
+          // smoothness. Unsupported browsers simply ignore these hints.
+          if ("jitterBufferTarget" in lowLatencyReceiver) {
+            lowLatencyReceiver.jitterBufferTarget = 0;
+          }
+          if ("playoutDelayHint" in lowLatencyReceiver) {
+            lowLatencyReceiver.playoutDelayHint = 0;
+          }
+        } catch (error) {
+          console.debug("[webrtc] Low-latency receiver hint not accepted", kind, error);
+        }
+      }
+    };
+
+    tuneReceiversForKvm();
+    // Some browsers populate receiver internals just after ontrack/connected.
+    const retry = window.setTimeout(tuneReceiversForKvm, 250);
+    return () => window.clearTimeout(retry);
+  }, [peerConnection, peerConnectionState, mediaStream, forceHttp]);
 
   useEffect(() => {
     if (forceHttp && videoElm.current) {

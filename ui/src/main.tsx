@@ -11,6 +11,9 @@ import { ExclamationTriangleIcon } from "@heroicons/react/16/solid";
 
 import EmptyCard from "@components/EmptyCard";
 import NotFoundPage from "@components/NotFoundPage";
+import WebRTCCodecCompatibilityGuard from "@components/WebRTCCodecCompatibilityGuard";
+import DeviceStateReconciler from "@components/DeviceStateReconciler";
+import WebRTCReliabilityGuard, { installWebRTCFirstConnectGuard } from "@components/WebRTCReliabilityGuard";
 import { LocalDevice } from "@/layout/index.pc";
 import Card from "@components/Card";
 import LocalAuthPage, { DeviceStatus } from "@routes/login_page/index";
@@ -26,6 +29,10 @@ import Notifications from "./notifications";
 
 export const isOnDevice = true;
 export const isInCloud = !isOnDevice;
+
+// Install before the router renders PCHome/MobileHome so their selector for
+// setPeerConnection receives the synchronous first-connect wrapper.
+installWebRTCFirstConnectGuard();
 
 export async function checkDeviceAuth() {
   const res = await api
@@ -48,42 +55,44 @@ export async function checkAuth() {
   return checkDeviceAuth();
 }
 
-  const router = createBrowserRouter([
-    {
-      path: "/login-local",
-      element: <LoginLocalRoute />,
-      action: LoginLocalRoute.action,
-      loader: LoginLocalRoute.loader,
-    },
-    {
-      path: "/mode",
-      element: <LocalAuthPage />,
-      action: LocalAuthPage.action,
-    },
-    {
-      path: "/mode/password",
-      element: <PassWordPage />,
-      action: PassWordPage.action,
-    },
-    {
-      path: "/",
-      errorElement: <ErrorBoundary />,
-      element: <Home />,
-      loader: Home.loader,
-      children: [
-        {
-          path: "other-session",
-          element: <OtherSessionRoute />,
-        },
-      ]
-    },
-  ]);
+const router = createBrowserRouter([
+  {
+    path: "/login-local",
+    element: <LoginLocalRoute />,
+    action: LoginLocalRoute.action,
+    loader: LoginLocalRoute.loader,
+  },
+  {
+    path: "/mode",
+    element: <LocalAuthPage />,
+    action: LocalAuthPage.action,
+  },
+  {
+    path: "/mode/password",
+    element: <PassWordPage />,
+    action: PassWordPage.action,
+  },
+  {
+    path: "/",
+    errorElement: <ErrorBoundary />,
+    element: <Home />,
+    loader: Home.loader,
+    children: [
+      {
+        path: "other-session",
+        element: <OtherSessionRoute />,
+      },
+    ],
+  },
+]);
 
 document.addEventListener("DOMContentLoaded", () => {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <>
-
       <ThemeProvider>
+        <WebRTCCodecCompatibilityGuard />
+        <DeviceStateReconciler />
+        <WebRTCReliabilityGuard />
         <RouterProvider router={router} />
         <Notifications
           toastOptions={{
@@ -92,8 +101,6 @@ document.addEventListener("DOMContentLoaded", () => {
           }}
           max={2}
         />
-
-
       </ThemeProvider>
     </>,
   );

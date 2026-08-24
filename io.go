@@ -120,7 +120,15 @@ func setLedMode(ledConfigPath string, mode string) error {
 	return nil
 }
 
+// pulseGPIO keeps the upstream call sites intact but normalizes the legacy
+// fixed two-second host power/reset pulses to the enhanced configurable values.
 func pulseGPIO(pin int, duration time.Duration) error {
+	return pulseGPIOExact(pin, hostControlPulseDuration(pin, duration))
+}
+
+// pulseGPIOExact bypasses host-control timing normalization and is used for
+// explicit long/custom pulses.
+func pulseGPIOExact(pin int, duration time.Duration) error {
 	// First pull up
 	if err := setGPIOValue(pin, true); err != nil {
 		return err

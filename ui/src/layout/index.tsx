@@ -6,6 +6,7 @@ import api from "@/api";
 import { DEVICE_API } from "@/ui.config";
 import { DeviceStatus } from "@routes/login_page/index";
 import PCHome from "@/layout/index.pc";
+import DeviceUIPreferencesSync from "@components/DeviceUIPreferencesSync";
 
 const deviceLoader = async () => {
   const res = await api
@@ -28,10 +29,11 @@ const loader = async (_args: LoaderFunctionArgs) => {
   return deviceLoader();
 };
 export default function Home() {
-
-  if (isMobile) {
-    return <MobileHome />;
-  }
-  return <PCHome />;
+  return (
+    <>
+      <DeviceUIPreferencesSync />
+      {isMobile ? <MobileHome /> : <PCHome />}
+    </>
+  );
 }
 Home.loader = loader;

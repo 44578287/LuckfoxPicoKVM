@@ -227,6 +227,18 @@ func handleCtrlClient(conn net.Conn) {
 	scopedLogger.Debug().Msg("ctrl sock disconnected")
 }
 
+func nominalVideoFrameDuration() time.Duration {
+	fps := lastVideoState.FramePerSecond
+	if fps < 1 || fps > 240 {
+		fps = 60
+	}
+	duration := time.Duration(float64(time.Second) / fps)
+	if duration <= 0 {
+		return time.Second / 60
+	}
+	return duration
+}
+
 func handleVideoClient(conn net.Conn) {
 	defer conn.Close()
 
@@ -238,22 +250,25 @@ func handleVideoClient(conn net.Conn) {
 	scopedLogger.Info().Msg("native video socket client connected")
 
 	inboundPacket := make([]byte, maxFrameSize)
-	lastFrame := time.Now()
 	for {
 		n, err := conn.Read(inboundPacket)
 		if err != nil {
 			scopedLogger.Warn().Err(err).Msg("error during read")
 			return
 		}
-		now := time.Now()
-		sinceLastFrame := now.Sub(lastFrame)
-		lastFrame = now
 
-		// Broadcast to HTTP clients
+		// Fan-out consumers get the encoded frame immediately. The normal WebRTC
+		// controller uses a stable media clock derived from the HDMI input FPS
+		// rather than Linux/userspace packet-arrival jitter. This keeps scheduler
+		// stalls from becoming artificial pauses in the RTP timeline and lets a
+		// KVM session catch up to the newest frame instead of accumulating latency.
 		videoBroadcaster.Broadcast(inboundPacket[:n])
 
 		if currentSession != nil {
-			err := currentSession.VideoTrack.WriteSample(media.Sample{Data: inboundPacket[:n], Duration: sinceLastFrame})
+			err := currentSession.VideoTrack.WriteSample(media.Sample{
+				Data:     inboundPacket[:n],
+				Duration: nominalVideoFrameDuration(),
+			})
 			if err != nil {
 				scopedLogger.Warn().Err(err).Msg("error writing sample")
 			}

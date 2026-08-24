@@ -55,6 +55,13 @@ function getHttpSessionId() {
   }
 }
 
+/**
+ * A page that has been displaced by a newer WebRTC control session must stop
+ * all automatic HTTP fallback traffic. Otherwise DeviceStateReconciler keeps
+ * polling after the old DataChannel is closed and the backend's HTTP-session
+ * arbitration can make that dead page claim ownership again, causing an
+ * endless /other-session takeover loop between two tabs.
+ */
 export function resetHttpSessionId() {
   try {
     window.sessionStorage.removeItem("httpSessionId");
@@ -65,83 +72,105 @@ export function resetHttpSessionId() {
   httpSessionInvalidated = true;
 }
 
+/** Start a fresh HTTP fallback identity only after the human explicitly elects
+ * to take control again from the Other Session dialog. */
+export function resumeHttpSessionAfterTakeover() {
+  try {
+    window.sessionStorage.removeItem("httpSessionId");
+  } catch {
+    void 0;
+  }
+  httpSessionId = null;
+  httpSessionInvalidated = false;
+}
+
+function dispatchHttpEvent(event: JsonRpcRequest, onRequest?: (payload: JsonRpcRequest) => void) {
+  if (event.method === "refreshPage") {
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set("networkChanged", "true");
+    window.location.href = currentUrl.toString();
+    return;
+  }
+  if (event.method === "otherSessionConnected") {
+    // This tab has lost control. Freeze its HTTP fallback immediately so it
+    // cannot re-enter session arbitration after its WebRTC DataChannel closes.
+    resetHttpSessionId();
+  }
+  if (onRequest) onRequest(event);
+}
+
+function sendRpcOverHttp(
+  payload: JsonRpcRequest,
+  callback?: (resp: JsonRpcResponse) => void,
+  onRequest?: (payload: JsonRpcRequest) => void,
+) {
+  fetch("/api/rpc", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Session-ID": getHttpSessionId(),
+    },
+    body: JSON.stringify(payload),
+  })
+    .then(res => res.json())
+    .then((data: unknown) => {
+      if (data && typeof data === "object" && ("response" in data || "event" in data)) {
+        const wrapper = data as { response: JsonRpcResponse; event?: JsonRpcRequest };
+        if (wrapper.event) dispatchHttpEvent(wrapper.event, onRequest);
+        if (callback) callback(wrapper.response);
+        return;
+      }
+
+      if (data && typeof data === "object" && "method" in data) {
+        dispatchHttpEvent(data as JsonRpcRequest, onRequest);
+        return;
+      }
+
+      if (callback) callback(data as JsonRpcResponse);
+    })
+    .catch(err => {
+      console.error("RPC over HTTP failed", err);
+      if (callback) {
+        callback({
+          jsonrpc: "2.0",
+          error: { code: -32000, message: "HTTP RPC failed", data: err.toString() },
+          id: payload.id ?? 0,
+        });
+      }
+    });
+}
+
 export function useJsonRpc(onRequest?: (payload: JsonRpcRequest) => void) {
   const rpcDataChannel = useRTCStore(state => state.rpcDataChannel);
   const forceHttp = useSettingsStore(state => state.forceHttp);
 
   const send = useCallback(
     (method: string, params: unknown, callback?: (resp: JsonRpcResponse) => void) => {
-      if (forceHttp) {
+      requestCounter++;
+      const payload = { jsonrpc: "2.0", method, params, id: requestCounter } as JsonRpcRequest;
+      const dataChannelReady = rpcDataChannel?.readyState === "open";
+      const useHttpTransport = forceHttp || !dataChannelReady;
+
+      // Settings and recovery controls must remain usable even when WebRTC
+      // negotiation/video is broken. A tab explicitly kicked by another
+      // control session is the sole exception: it must not keep reclaiming the
+      // device through background HTTP reconciliation.
+      if (useHttpTransport) {
         if (httpSessionInvalidated) {
-          requestCounter++;
-          const payloadId = requestCounter;
           if (callback) {
             callback({
               jsonrpc: "2.0",
               error: { code: -32002, message: "HTTP session invalidated on client" },
-              id: payloadId,
+              id: payload.id!,
             } as JsonRpcErrorResponse);
           }
           return;
         }
-        requestCounter++;
-        const payload = { jsonrpc: "2.0", method, params, id: requestCounter };
-
-        fetch("/api/rpc", {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Session-ID': getHttpSessionId(),
-          },
-          body: JSON.stringify(payload)
-        })
-        .then(res => res.json())
-        .then((data: unknown) => {
-          const handleEvent = (event: JsonRpcRequest) => {
-            if (event.method === "refreshPage") {
-              const currentUrl = new URL(window.location.href);
-              currentUrl.searchParams.set("networkChanged", "true");
-              window.location.href = currentUrl.toString();
-              return;
-            }
-            if (onRequest) onRequest(event);
-          };
-
-          if (data && typeof data === "object" && ("response" in data || "event" in data)) {
-            const wrapper = data as { response: JsonRpcResponse; event?: JsonRpcRequest };
-            if (wrapper.event) {
-              handleEvent(wrapper.event);
-            }
-            if (callback) callback(wrapper.response);
-            return;
-          }
-
-          if (data && typeof data === "object" && "method" in data) {
-            handleEvent(data as JsonRpcRequest);
-            return;
-          }
-
-          if (callback) callback(data as JsonRpcResponse);
-        })
-        .catch(err => {
-          console.error("RPC over HTTP failed", err);
-          if (callback) {
-            callback({
-              jsonrpc: "2.0",
-              error: { code: -32000, message: "HTTP RPC failed", data: err.toString() },
-              id: payload.id
-            });
-          }
-        });
+        sendRpcOverHttp(payload, callback, onRequest);
         return;
       }
 
-      if (rpcDataChannel?.readyState !== "open") return;
-      requestCounter++;
-      const payload = { jsonrpc: "2.0", method, params, id: requestCounter };
-      // Store the callback if it exists
-      if (callback) callbackStore.set(payload.id, callback);
-
+      if (callback) callbackStore.set(payload.id!, callback);
       rpcDataChannel.send(JSON.stringify(payload));
     },
     [rpcDataChannel, forceHttp, onRequest],
@@ -149,26 +178,17 @@ export function useJsonRpc(onRequest?: (payload: JsonRpcRequest) => void) {
 
   const sendNotification = useCallback(
     (method: string, params: unknown) => {
-      const payload = { jsonrpc: "2.0", method, params };
+      const payload = { jsonrpc: "2.0", method, params } as JsonRpcRequest;
+      const dataChannelReady = rpcDataChannel?.readyState === "open";
 
-      if (forceHttp) {
-        fetch("/api/rpc", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Session-ID": getHttpSessionId(),
-          },
-          body: JSON.stringify(payload),
-        }).catch(err => {
-          console.error("RPC notification over HTTP failed", err);
-        });
+      if (forceHttp || !dataChannelReady) {
+        if (!httpSessionInvalidated) sendRpcOverHttp(payload, undefined, onRequest);
         return;
       }
 
-      if (rpcDataChannel?.readyState !== "open") return;
       rpcDataChannel.send(JSON.stringify(payload));
     },
-    [rpcDataChannel, forceHttp],
+    [rpcDataChannel, forceHttp, onRequest],
   );
 
   useEffect(() => {
@@ -177,16 +197,21 @@ export function useJsonRpc(onRequest?: (payload: JsonRpcRequest) => void) {
     const messageHandler = (e: MessageEvent) => {
       const payload = JSON.parse(e.data) as JsonRpcResponse | JsonRpcRequest;
 
-      // The "API" can also "request" data from the client
-      // If the payload has a method, it's a request
+      // The API can also request data from the client. In particular,
+      // otherSessionConnected means this tab has already lost ownership: block
+      // HTTP fallback before the backend closes its DataChannel one second later.
       if ("method" in payload) {
-        if ((payload as JsonRpcRequest).method === "refreshPage") {
+        const request = payload as JsonRpcRequest;
+        if (request.method === "refreshPage") {
           const currentUrl = new URL(window.location.href);
           currentUrl.searchParams.set("networkChanged", "true");
           window.location.href = currentUrl.toString();
           return;
         }
-        if (onRequest) onRequest(payload as JsonRpcRequest);
+        if (request.method === "otherSessionConnected") {
+          resetHttpSessionId();
+        }
+        if (onRequest) onRequest(request);
         return;
       }
 
