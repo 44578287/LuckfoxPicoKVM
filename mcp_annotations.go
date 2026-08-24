@@ -24,6 +24,7 @@ func registerEnhancedMCPAnnotationOverrides(s *server.MCPServer) {
 	s.AddTool(readOnlyMCPTool("get_ai_control_capabilities", "Describe the PicoKVM Enhanced AI-control coordinate spaces, input primitives and available recovery controls"), handleGetAIControlCapabilities)
 	s.AddTool(readOnlyMCPTool("get_diagnostics", "Get a read-only PicoKVM diagnostics snapshot including video, USB, storage, network, host IO, RTSP and MCU visibility"), handleGetEnhancedDiagnostics)
 	s.AddTool(readOnlyMCPTool("get_force_hpd", "Get HDMI force-HPD state"), handleGetForceHPDMCP)
+	s.AddTool(readOnlyMCPTool("get_hid_status", "Get read-only USB HID device/configfs endpoint diagnostics for keyboard and both mouse interfaces"), handleGetHIDStatus)
 	s.AddTool(readOnlyMCPTool("get_host_control_settings", "Get host power short-press, forced-off hold and reset pulse durations in milliseconds"), handleGetHostControlSettings)
 	s.AddTool(readOnlyMCPTool("get_host_power_state", "Read host power/HDD LED state through the PicoKVM extension-board inputs"), handleGetHostPowerState)
 	s.AddTool(readOnlyMCPTool("get_keyboard_layout", "Get the configured PicoKVM keyboard layout"), handleGetKeyboardLayoutMCP)
