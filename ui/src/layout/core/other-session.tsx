@@ -77,7 +77,7 @@ export default function OtherSessionRoute() {
                 size="SM"
                 theme="primary"
                 text={takingOver ? "Taking Over..." : "Use Here"}
-                disabled={takingOver}
+                loading={takingOver}
                 onClick={handleClose}
               />
             </div>
