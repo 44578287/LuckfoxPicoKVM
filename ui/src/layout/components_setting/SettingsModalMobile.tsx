@@ -6,6 +6,7 @@ import {
   VideoCameraOutlined,
   HomeOutlined,
   DashboardOutlined,
+  RobotOutlined,
 } from "@ant-design/icons";
 import GeneralSvg from "@assets/second/general.svg?react";
 import NetworkSvg from "@assets/second/network.svg?react";
@@ -24,6 +25,7 @@ import SettingsHardware from "@/layout/components_setting/hardware/HardwareConte
 import SettingsAdvanced from "@/layout/components_setting/advanced/AdvancedContent";
 import SettingsStreaming from "@/layout/components_setting/streaming/StreamingContent";
 import SettingsHomeAssistant from "@/layout/components_setting/home_assistant/HomeAssistantContent";
+import SettingsMCPControl from "@/layout/components_setting/mcp_control/MCPControlContent";
 import SettingsSupervisor from "@/layout/components_setting/supervisor/SupervisorContent";
 import SettingsVersion from "@/layout/components_setting/version/VersionContent";
 import { dark_bg2_style, text_color, text_primary_color } from "@/layout/theme_color";
@@ -38,7 +40,7 @@ interface MenuItem {
   icon: React.ReactNode;
 }
 
-type PageType = "menu" | "general" | "network" | "access" | "hardware" | "streaming" | "home_assistant" | "supervisor" | "advanced" | "version";
+type PageType = "menu" | "general" | "network" | "access" | "hardware" | "streaming" | "home_assistant" | "mcp_control" | "supervisor" | "advanced" | "version";
 
 interface SettingsDialogProps {
   visible?: boolean;
@@ -74,6 +76,7 @@ const SettingsModalMobile: React.FC<SettingsDialogProps> = () => {
     { key: "hardware", label: "Hardware", icon: <HardwareSvg /> },
     { key: "streaming", label: "Streaming", icon: <VideoCameraOutlined /> },
     { key: "home_assistant", label: "Home Assistant", icon: <HomeOutlined /> },
+    { key: "mcp_control", label: "MCP / AI Control", icon: <RobotOutlined /> },
     { key: "supervisor", label: "Supervisor", icon: <DashboardOutlined /> },
     { key: "advanced", label: "Advanced", icon: <AdvancedSvg /> },
     { key: "version", label: "Version", icon: <VersionSvg /> },
@@ -81,6 +84,7 @@ const SettingsModalMobile: React.FC<SettingsDialogProps> = () => {
 
   const menuLabel = (item: MenuItem) => {
     if (item.key === "supervisor") return language === "zh" ? "监控与自愈" : "Supervisor";
+    if (item.key === "mcp_control") return language === "zh" ? "MCP / AI 控制" : "MCP / AI Control";
     return ["streaming", "home_assistant"].includes(item.key) ? $eat(item.label) : $at(item.label);
   };
 
@@ -105,6 +109,7 @@ const SettingsModalMobile: React.FC<SettingsDialogProps> = () => {
       case "hardware": return <SettingsHardware />;
       case "streaming": return <SettingsStreaming />;
       case "home_assistant": return <SettingsHomeAssistant />;
+      case "mcp_control": return <SettingsMCPControl />;
       case "supervisor": return <SettingsSupervisor />;
       case "advanced": return <SettingsAdvanced />;
       case "version": return <SettingsVersion />;
