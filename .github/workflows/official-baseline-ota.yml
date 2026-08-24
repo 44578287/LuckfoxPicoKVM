@@ -1,0 +1,65 @@
+name: Official Baseline OTA
+
+on:
+  push:
+    branches:
+      - official-baseline-ota
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact official Luckfox source
+        uses: actions/checkout@v4
+        with:
+          repository: LuckfoxTECH/kvm
+          ref: 3ce34633f2a27ca7a92fcd174ca99a0b079eeee3
+          path: official
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: official/go.mod
+          cache: true
+          cache-dependency-path: official/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.15.0
+          cache: npm
+          cache-dependency-path: official/ui/package-lock.json
+
+      - name: Build exact official app source
+        working-directory: official
+        run: |
+          # Source is exact official 0.1.4. Only the embedded version is raised
+          # to 0.1.5 so a device currently running 0.1.5-enhanced can install it.
+          make build_release VERSION=0.1.5
+
+      - name: Verify no Enhanced source was used
+        working-directory: official
+        run: |
+          test "$(git rev-parse HEAD)" = "3ce34633f2a27ca7a92fcd174ca99a0b079eeee3"
+          git diff --exit-code
+
+      - name: Package Web OTA
+        run: |
+          mkdir -p dist/ota
+          cp official/bin/kvm_app dist/ota/kvm_app
+          printf 'AppVersion: 0.1.5\nSystemVersion: 0.1.8\n' > dist/ota/version.txt
+          (
+            cd dist/ota
+            zip -q -9 ../PicoKVM-Official-0.1.4-Baseline-Repacked-0.1.5-WebOTA.zip version.txt kvm_app
+          )
+          sha256sum dist/PicoKVM-Official-0.1.4-Baseline-Repacked-0.1.5-WebOTA.zip > dist/SHA256SUMS
+          printf 'Official source: LuckfoxTECH/kvm\nOfficial source commit: 3ce34633f2a27ca7a92fcd174ca99a0b079eeee3\nOfficial source app version: 0.1.4\nRepacked embedded/OTA version: 0.1.5 (upgrade-gate bypass only)\nSystemVersion: 0.1.8\nNo Enhanced/MCP/WebRTC patches included.\n' > dist/BASELINE.txt
+          unzip -Z1 dist/PicoKVM-Official-0.1.4-Baseline-Repacked-0.1.5-WebOTA.zip | grep -qx version.txt
+          unzip -Z1 dist/PicoKVM-Official-0.1.4-Baseline-Repacked-0.1.5-WebOTA.zip | grep -qx kvm_app
+          file dist/ota/kvm_app
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: picokvm-official-0.1.4-baseline-repacked-0.1.5
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
