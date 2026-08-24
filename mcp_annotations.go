@@ -35,6 +35,7 @@ func registerEnhancedMCPAnnotationOverrides(s *server.MCPServer) {
 	s.AddTool(readOnlyMCPTool("get_stream_status", "Get codec, video state, controller/viewer counts and RTP multicast state"), handleGetStreamStatus)
 	s.AddTool(readOnlyMCPTool("get_supervisor_settings", "Get Enhanced Supervisor video-stall recovery settings"), handleGetSupervisorSettings)
 	s.AddTool(readOnlyMCPTool("get_supervisor_status", "Get Enhanced Supervisor health, encoded-video heartbeat and bounded recovery counters"), handleGetSupervisorStatus)
+	s.AddTool(readOnlyMCPTool("get_text_injection_status", "Get the latest asynchronous reliable-text injection task status"), handleGetTextInjectionStatus)
 	s.AddTool(readOnlyMCPTool("get_usb_reinitialize_status", "Get the latest asynchronous USB recovery task status"), handleGetUSBReinitializeStatusV2)
 	s.AddTool(readOnlyMCPTool("get_usb_state", "Get the USB gadget connection state"), handleGetUSBState)
 	s.AddTool(readOnlyMCPTool("get_video_state", "Get screen resolution and video status"), handleGetVideoState)
