@@ -65,10 +65,11 @@ func registerEnhancedExtraMCPTools(s *server.MCPServer) {
 		mcp.WithNumber("duration_ms", mcp.Required(), mcp.Description("100-2500 ms")),
 	), handleTriggerResetFor)
 
-	// Apply collaboration policy first, then replace only the hardened tool
-	// implementations with wrappers that preserve the same lease/takeover log.
+	// Apply collaboration policy first, then replace the hardened implementations
+	// with the newest input/recovery layer.
 	registerEnhancedMCPControlPolicyTools(s)
 	registerEnhancedReliabilityOverrides(s)
+	registerEnhancedFinalReliabilityOverrides(s)
 	// Annotation metadata must be the very last pass because mcp-go stores the
 	// complete Tool object by name when a later handler overrides an earlier one.
 	registerEnhancedMCPAnnotationOverrides(s)
