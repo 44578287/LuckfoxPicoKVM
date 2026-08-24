@@ -7,6 +7,9 @@ import subprocess
 BASE_PC_COMMIT = "4919a3e88b8245d7fb3c8fb13a1bdf04526a6696"
 PC_PATH = Path("ui/src/layout/index.pc.tsx")
 MOBILE_PATH = Path("ui/src/layout/index.mobile.tsx")
+DESKTOP_PC_PATH = Path("ui/src/layout/core/desktop/DesktopPC.tsx")
+DESKTOP_MOBILE_PATH = Path("ui/src/layout/core/desktop/DesktopMobile.tsx")
+GUARD_PATH = Path("ui/src/components/WebRTCReliabilityGuard.tsx")
 WEB_PATH = Path("web.go")
 
 
@@ -21,6 +24,88 @@ def git_show(commit: str, path: str) -> str:
         ["git", "show", f"{commit}:{path}"], text=True, encoding="utf-8"
     )
 
+
+# The previous large-file transport mapped three already-created blobs to the
+# wrong paths. Recover the intended desktop PC component before replacing the
+# guard file. This component already contains the structural video-only overlay.
+desktop_pc = GUARD_PATH.read_text(encoding="utf-8")
+if "export default function PCDesktop" not in desktop_pc:
+    raise RuntimeError("expected recoverable PCDesktop source in reliability guard path")
+if "connectionOverlay?: ReactNode" not in desktop_pc:
+    raise RuntimeError("recovered PCDesktop source lacks connectionOverlay support")
+DESKTOP_PC_PATH.write_text(desktop_pc, encoding="utf-8")
+
+# Restore the mobile desktop from the complete pre-P0 source and add the same
+# video-viewport-scoped connection overlay without replacing unrelated mobile UI.
+desktop_mobile = git_show(BASE_PC_COMMIT, DESKTOP_MOBILE_PATH.as_posix())
+desktop_mobile = require_replace(
+    desktop_mobile,
+    'import React, { useEffect, useRef, useState } from "react";\n',
+    'import React, { useEffect, useRef, useState } from "react";\n'
+    'import type { ReactNode } from "react";\n',
+    "MobileDesktop ReactNode import",
+)
+desktop_mobile = require_replace(
+    desktop_mobile,
+    'export default function MobileDesktop({ isFullscreen }: { isFullscreen?: number }) {',
+    'export default function MobileDesktop({\n'
+    '  isFullscreen,\n'
+    '  connectionOverlay,\n'
+    '}: {\n'
+    '  isFullscreen?: number;\n'
+    '  connectionOverlay?: ReactNode;\n'
+    '}) {',
+    "MobileDesktop props",
+)
+mobile_ocr = '''                      <OcrOverlay
+                        videoRef={videoElm as React.RefObject<HTMLVideoElement>}
+                        containerRef={zoomContainerRef as React.RefObject<HTMLDivElement>}
+                      />
+'''
+mobile_overlay = mobile_ocr + '''
+                      {connectionOverlay && (
+                        <div
+                          style={{ animationDuration: "500ms" }}
+                          className="animate-slideUpFade absolute inset-0 z-10 flex items-center justify-center"
+                        >
+                          <div className="relative h-full w-full rounded-md">
+                            {connectionOverlay}
+                          </div>
+                        </div>
+                      )}
+'''
+desktop_mobile = require_replace(
+    desktop_mobile,
+    mobile_ocr,
+    mobile_overlay,
+    "MobileDesktop structural connection overlay",
+)
+if "export default function MobileDesktop" not in desktop_mobile:
+    raise RuntimeError("MobileDesktop restore failed")
+if "connectionOverlay?: ReactNode" not in desktop_mobile:
+    raise RuntimeError("MobileDesktop overlay prop missing")
+DESKTOP_MOBILE_PATH.write_text(desktop_mobile, encoding="utf-8")
+
+# Reliability now lives directly in PC/mobile signaling. Keep this import-stable
+# no-op shim so main.tsx can continue installing/mounting the historical guard.
+GUARD_PATH.write_text(
+    '''/**
+ * Compatibility shim retained so existing imports remain stable.
+ *
+ * First-connect reliability is now implemented directly in the PC/mobile
+ * signaling paths with a synchronous PeerConnection ref and pending SDP/ICE
+ * queues. Overlay isolation is structural in the video components.
+ */
+export function installWebRTCFirstConnectGuard() {
+  // Intentionally empty.
+}
+
+export default function WebRTCReliabilityGuard() {
+  return null;
+}
+''',
+    encoding="utf-8",
+)
 
 # Rebuild the PC layout from the last known-good complete source, then copy the
 # already-validated mobile signaling implementation. This avoids carrying the
@@ -117,9 +202,9 @@ PC_PATH.write_text(pc, encoding="utf-8")
 # state-changing HTTP RPCs still participate in session arbitration.
 web = WEB_PATH.read_text(encoding="utf-8")
 helper = '''func isReadOnlyHTTPSessionRPC(method string) bool {
-	return strings.HasPrefix(method, "get") ||
-		strings.HasPrefix(method, "list") ||
-		strings.HasPrefix(method, "download")
+\treturn strings.HasPrefix(method, "get") ||
+\t\tstrings.HasPrefix(method, "list") ||
+\t\tstrings.HasPrefix(method, "download")
 }
 
 '''
@@ -151,6 +236,16 @@ WEB_PATH.write_text(web, encoding="utf-8")
 if shutil.which("gofmt"):
     subprocess.run(["gofmt", "-w", WEB_PATH.as_posix()], check=True)
 
+# Fail fast if the earlier path mix-up ever reappears.
+if "export default function PCDesktop" not in DESKTOP_PC_PATH.read_text(encoding="utf-8"):
+    raise RuntimeError("DesktopPC path is not a PCDesktop component")
+if "export default function MobileDesktop" not in DESKTOP_MOBILE_PATH.read_text(encoding="utf-8"):
+    raise RuntimeError("DesktopMobile path is not a MobileDesktop component")
+if "export function installWebRTCFirstConnectGuard" not in GUARD_PATH.read_text(encoding="utf-8"):
+    raise RuntimeError("WebRTC reliability guard shim missing named installer export")
+
 print("P0 repair complete")
 print(f"PC bytes: {PC_PATH.stat().st_size}")
+print(f"Desktop PC bytes: {DESKTOP_PC_PATH.stat().st_size}")
+print(f"Desktop mobile bytes: {DESKTOP_MOBILE_PATH.stat().st_size}")
 print(f"Web bytes: {WEB_PATH.stat().st_size}")
