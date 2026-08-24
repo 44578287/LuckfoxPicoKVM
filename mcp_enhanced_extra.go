@@ -17,6 +17,7 @@ func registerEnhancedExtraMCPTools(s *server.MCPServer) {
 	// small and future Luckfox merges do not require rewriting the core file.
 	registerEnhancedSupervisorMCPTools(s)
 	registerEnhancedAIControlMCPTools(s)
+	registerReliableTextInjectionMCPTools(s)
 
 	s.AddTool(mcp.NewTool("get_diagnostics",
 		mcp.WithDescription("Get a read-only PicoKVM diagnostics snapshot including video, USB, storage, network, host IO, RTSP and MCU visibility"),
