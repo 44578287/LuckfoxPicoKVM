@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - official-baseline-ota
+  pull_request:
+    branches:
+      - luckfox
 
 jobs:
   build:
