@@ -73,6 +73,11 @@ func registerEnhancedExtraMCPTools(s *server.MCPServer) {
 	// Annotation metadata must be the very last pass because mcp-go stores the
 	// complete Tool object by name when a later handler overrides an earlier one.
 	registerEnhancedMCPAnnotationOverrides(s)
+
+	// Audit is middleware rather than an MCP tool: every tool call is captured
+	// to the device-side audit log, while viewing/downloading that audit remains
+	// a normal authenticated Web UI function for the local administrator.
+	s.Use(mcpAuditMiddleware)
 }
 
 func handleGetEnhancedDiagnostics(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
