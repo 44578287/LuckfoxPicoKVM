@@ -27,6 +27,8 @@ jobs:
         run: python3 .github/scripts/repair_refresh_takeover.py
       - name: Apply MCP 2.0 usability layer
         run: python3 .github/scripts/repair_mcp2_usability.py
+      - name: Apply MCP 2.0 compile cleanup
+        run: python3 .github/scripts/repair_mcp2_usability_compile_fix.py
       - name: Download Go modules
         run: go mod download
       - name: Verify Go module lock
@@ -64,6 +66,9 @@ jobs:
       - name: Apply MCP 2.0 usability layer
         working-directory: .
         run: python3 .github/scripts/repair_mcp2_usability.py
+      - name: Apply MCP 2.0 compile cleanup
+        working-directory: .
+        run: python3 .github/scripts/repair_mcp2_usability_compile_fix.py
       - uses: actions/setup-node@v4
         with:
           node-version: 22.15.0
@@ -100,6 +105,8 @@ jobs:
         run: python3 .github/scripts/repair_refresh_takeover.py
       - name: Apply MCP 2.0 usability layer
         run: python3 .github/scripts/repair_mcp2_usability.py
+      - name: Apply MCP 2.0 compile cleanup
+        run: python3 .github/scripts/repair_mcp2_usability_compile_fix.py
       - name: Download Go modules
         run: go mod download
       - name: Build embedded device UI
